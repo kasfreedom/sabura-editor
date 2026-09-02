@@ -1,0 +1,84 @@
+/**
+ * Sabura In-Place Text Editor: Floating textarea positioned over target object for inline text editing.
+ */
+
+import { FONT_FAMILIES } from '../core/types.js';
+
+export class TextEditor {
+  constructor(containerElement, onCommit) {
+    this.container = containerElement;
+    this.onCommit = onCommit; // Callback (objectId, newText)
+    this.targetObject = null;
+    this.initialText = '';
+
+    this.textarea = document.createElement('textarea');
+    this.textarea.className = 'sabura-inline-text-editor';
+    this.textarea.style.display = 'none';
+    this.container.appendChild(this.textarea);
+
+    this.onBlur = this.onBlur.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
+
+    this.textarea.addEventListener('blur', this.onBlur);
+    this.textarea.addEventListener('keydown', this.onKeyDown);
+  }
+
+  open(object, camera) {
+    this.targetObject = object;
+    this.initialText = object.text || '';
+
+    const textStyle = object.textStyle || {};
+    const fontSize = (textStyle.resolvedSize || 20) * camera.zoom;
+    const fontFamily = FONT_FAMILIES[textStyle.fontFamily] || FONT_FAMILIES.sans;
+    const fontWeight = textStyle.bold ? 'bold' : 'normal';
+    const align = textStyle.align || (object.type === 'text' ? 'left' : 'center');
+    const color = textStyle.color || object.stroke || '#1e1e1e';
+
+    const screenX = object.x * camera.zoom + camera.x;
+    const screenY = object.y * camera.zoom + camera.y;
+    const screenW = Math.max(120, object.width * camera.zoom);
+    const screenH = Math.max(40, object.height * camera.zoom);
+
+    this.textarea.style.display = 'block';
+    this.textarea.style.left = `${screenX}px`;
+    this.textarea.style.top = `${screenY}px`;
+    this.textarea.style.width = `${screenW}px`;
+    this.textarea.style.height = `${screenH}px`;
+    this.textarea.style.fontSize = `${fontSize}px`;
+    this.textarea.style.fontFamily = fontFamily;
+    this.textarea.style.fontWeight = fontWeight;
+    this.textarea.style.textAlign = align;
+    this.textarea.style.color = color;
+
+    this.textarea.value = this.initialText;
+    this.textarea.focus();
+    this.textarea.select();
+  }
+
+  close(commit = true) {
+    if (this.textarea.style.display === 'none') return;
+    const newText = this.textarea.value;
+    const objId = this.targetObject?.id;
+    this.textarea.style.display = 'none';
+
+    if (commit && objId && newText !== this.initialText) {
+      this.onCommit(objId, newText);
+    }
+    this.targetObject = null;
+  }
+
+  onBlur() {
+    this.close(true);
+  }
+
+  onKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      this.close(false); // Cancel without saving
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || this.targetObject?.type !== 'text')) {
+      // Cmd+Enter or Enter inside shapes commits
+      e.preventDefault();
+      this.close(true);
+    }
+  }
+}

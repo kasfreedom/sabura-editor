@@ -1,0 +1,5781 @@
+<!DOCTYPE html>
+<html lang="en" data-ui-theme="system">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sabura - AI-First Offline Whiteboard</title>
+  <style>
+/**
+ * Sabura Complete Styling: Modern Glassmorphism, Responsive Workspace, Radial Wheel, and Presentation.
+ */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --font-hand: "Caveat", "Comic Sans MS", "Chalkboard SE", "Segoe Print", cursive, sans-serif;
+
+  /* UI Chrome Theme - Concepts / Excalidraw Warm Default */
+  --ui-bg: rgba(252, 250, 246, 0.92);
+  --ui-bg-solid: #fcfaf6;
+  --ui-text: #212529;
+  --ui-text-muted: #6c757d;
+  --ui-border: rgba(0, 0, 0, 0.22);
+  --ui-hover: rgba(0, 0, 0, 0.05);
+  --ui-active: rgba(0, 0, 0, 0.1);
+  --ui-accent: #1971c2;
+  --ui-accent-hover: #1864ab;
+  --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --ui-wheel-bg: #fffefc;
+  --ui-wheel-hover: #fff3bf;
+  --ui-wheel-active: #d0ebff;
+  --ui-wheel-danger: #ffe3e3;
+  --ui-wheel-text: #1e1e1e;
+  --ui-wheel-stroke: #1e1e1e;
+}
+
+[data-ui-theme="dark"] {
+  --ui-bg: rgba(26, 27, 38, 0.92);
+  --ui-bg-solid: #1a1b26;
+  --ui-text: #c0caf5;
+  --ui-text-muted: #7982a9;
+  --ui-border: rgba(255, 255, 255, 0.18);
+  --ui-hover: rgba(255, 255, 255, 0.08);
+  --ui-active: rgba(255, 255, 255, 0.15);
+  --ui-accent: #7aa2f7;
+  --ui-accent-hover: #89b4fa;
+  --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --ui-wheel-bg: #1e202e;
+  --ui-wheel-hover: #2e344e;
+  --ui-wheel-active: #3b4261;
+  --ui-wheel-danger: #442b36;
+  --ui-wheel-text: #c0caf5;
+  --ui-wheel-stroke: #c0caf5;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ui-theme="system"] {
+    --ui-bg: rgba(26, 27, 38, 0.92);
+    --ui-bg-solid: #1a1b26;
+    --ui-text: #c0caf5;
+    --ui-text-muted: #7982a9;
+    --ui-border: rgba(255, 255, 255, 0.18);
+    --ui-hover: rgba(255, 255, 255, 0.08);
+    --ui-active: rgba(255, 255, 255, 0.15);
+    --ui-accent: #7aa2f7;
+    --ui-accent-hover: #89b4fa;
+    --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --ui-wheel-bg: #1e202e;
+    --ui-wheel-hover: #2e344e;
+    --ui-wheel-active: #3b4261;
+    --ui-wheel-danger: #442b36;
+    --ui-wheel-text: #c0caf5;
+    --ui-wheel-stroke: #c0caf5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background: #fdfbf7;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Canvas SVG container */
+#canvas-container {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+#canvas-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Top Bar - Excalidraw Sketchy Island Style */
+.sabura-topbar {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: var(--ui-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 2px solid var(--ui-border);
+  border-radius: 255px 25px 225px 25px/25px 225px 25px 255px;
+  box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.08);
+  z-index: 50;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.topbar-left, .topbar-center, .topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-name {
+  font-family: var(--font-hand);
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--ui-accent);
+  letter-spacing: -0.5px;
+}
+
+.doc-title {
+  font-family: var(--font-hand);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ui-text);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: var(--ui-hover);
+  border: 1.5px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.control-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.grid-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-select {
+  padding: 4px 10px;
+  background: var(--ui-bg-solid);
+  color: var(--ui-text);
+  border: 1.6px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.topbar-select:hover {
+  border-color: var(--ui-accent);
+  background: #fff3bf;
+}
+
+.topbar-btn {
+  padding: 5px 14px;
+  background: var(--ui-bg-solid);
+  color: var(--ui-text);
+  border: 1.8px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.08);
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.12s ease;
+}
+
+.topbar-btn:hover {
+  background: #fff3bf;
+  transform: translateY(-1px);
+  box-shadow: 1px 3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.topbar-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+.topbar-btn.active {
+  background: #d0ebff;
+  color: #1971c2;
+  border-color: #1971c2;
+}
+
+.topbar-btn.primary {
+  background: #d0ebff;
+  color: #1864ab;
+  border-color: #1971c2;
+  border-width: 2px;
+}
+
+.topbar-btn.primary:hover {
+  background: #a5d8ff;
+}
+
+.topbar-btn.save-btn {
+  background: #d3f9d8;
+  color: #2b8a3e;
+  border-color: #2f9e44;
+  border-width: 2px;
+}
+
+.topbar-btn.save-btn:hover {
+  background: #b2f2bb;
+}
+
+.topbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--ui-border);
+}
+
+/* Accessible on-screen Wheel Trigger Button - Excalidraw Sketchy FAB */
+.wheel-trigger-fab {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  padding: 8px 16px;
+  background: var(--ui-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.1);
+  color: var(--ui-text);
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.wheel-trigger-fab:hover {
+  background: #fff3bf;
+  transform: translateY(-2px);
+}
+
+.wheel-trigger-fab .fab-key {
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* Circular Tool Wheel - Excalidraw Sketchy Compass Dial */
+.sabura-wheel {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.22));
+  pointer-events: auto;
+}
+
+.sabura-wheel-svg {
+  display: block;
+}
+
+.wheel-bezel-rim {
+  fill: none;
+  stroke: var(--ui-wheel-stroke, #1e1e1e);
+  stroke-width: 1.2px;
+  opacity: 0.35;
+  stroke-linecap: round;
+}
+
+.wheel-hub {
+  fill: var(--ui-wheel-bg, #ffffff);
+  stroke: none;
+  cursor: pointer;
+  transition: fill 0.15s ease;
+}
+
+.wheel-hub:hover {
+  fill: var(--ui-wheel-hover, #fff3bf);
+}
+
+.wheel-hub-sketch {
+  fill: none;
+  stroke: var(--ui-wheel-stroke, #1e1e1e);
+  stroke-width: 1.8px;
+  stroke-linecap: round;
+}
+
+.wheel-hub-x {
+  fill: none;
+  stroke: var(--ui-wheel-stroke, #1e1e1e);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.wheel-wedge {
+  fill: var(--ui-wheel-bg, #ffffff);
+  stroke: none;
+  cursor: pointer;
+  transition: fill 0.12s ease;
+}
+
+.wheel-wedge:hover, .wheel-wedge.active {
+  fill: var(--ui-wheel-hover, #fff3bf);
+}
+
+.wheel-wedge.danger:hover {
+  fill: var(--ui-wheel-danger, #ffe3e3);
+}
+
+.wheel-wedge-sketch {
+  fill: none;
+  stroke: var(--ui-wheel-stroke, #1e1e1e);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.12s ease, stroke-width 0.12s ease;
+}
+
+.wheel-wedge-sketch.active {
+  stroke: var(--ui-accent, #1971c2);
+  stroke-width: 2.2px;
+}
+
+.wheel-sub-wedge {
+  fill: var(--ui-wheel-bg, #ffffff);
+  stroke: none;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.wheel-sub-wedge:hover {
+  filter: brightness(0.94);
+}
+
+.wheel-icon {
+  font-size: 16px;
+  fill: var(--ui-wheel-text, #1e1e1e);
+  font-weight: 700;
+  font-family: var(--font-hand);
+}
+
+.wheel-text {
+  font-size: 13px;
+  fill: var(--ui-wheel-text, #1e1e1e);
+  font-weight: 700;
+  font-family: var(--font-hand);
+  letter-spacing: 0;
+}
+
+.wheel-sub-text {
+  font-size: 12.5px;
+  fill: var(--ui-wheel-text, #1e1e1e);
+  font-weight: 700;
+  font-family: var(--font-hand);
+  letter-spacing: 0;
+}
+
+/* In-place Text Editor - Excalidraw Handwriting Feel */
+.sabura-inline-text-editor {
+  position: absolute;
+  font-family: var(--font-hand);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px dashed var(--ui-accent);
+  border-radius: 4px;
+  line-height: 1.3;
+  overflow: hidden;
+  resize: none;
+  outline: none;
+  padding: 2px 6px;
+  z-index: 200;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Laser overlay canvas for presentation mode */
+#laser-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+}
+
+/* Presentation Mode states */
+body.in-presentation .sabura-topbar,
+body.in-presentation .wheel-trigger-fab,
+body.in-presentation .sabura-wheel {
+  display: none !important;
+}
+
+body.in-presentation #laser-canvas {
+  display: block;
+}
+
+body.in-presentation {
+  cursor: none;
+}
+
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Sabura Persisted Document Seam -->
+  <script type="application/json" id="sabura-document">
+{
+  "assets": {},
+  "groups": {},
+  "id": "board_4eey8o2nnpt",
+  "objects": {
+    "conn_1": {
+      "endArrow": true,
+      "fill": "none",
+      "from": {
+        "id": "shape_idea"
+      },
+      "groupId": null,
+      "height": 100,
+      "id": "conn_1",
+      "locked": false,
+      "opacity": 1,
+      "rotation": 0,
+      "roughness": 1,
+      "routing": "curved",
+      "seed": 307174058,
+      "startArrow": false,
+      "stroke": "#1e1e1e",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "text": "",
+      "textStyle": {
+        "align": "center",
+        "bold": false,
+        "color": "#1e1e1e",
+        "fontFamily": "hand",
+        "resolvedSize": 20,
+        "size": "m"
+      },
+      "to": {
+        "id": "shape_core"
+      },
+      "type": "connector",
+      "width": 160,
+      "x": 0,
+      "y": 0
+    },
+    "shape_core": {
+      "fill": "#b2f2bb",
+      "groupId": null,
+      "height": 120,
+      "id": "shape_core",
+      "locked": false,
+      "opacity": 1,
+      "rotation": 0,
+      "roughness": 1,
+      "seed": 627116106,
+      "stroke": "#2f9e44",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "text": "100% Offline\nSingle-File HTML",
+      "textStyle": {
+        "align": "center",
+        "bold": false,
+        "color": "#2f9e44",
+        "fontFamily": "hand",
+        "resolvedSize": 14,
+        "size": "s"
+      },
+      "type": "diamond",
+      "width": 150,
+      "x": 360,
+      "y": 235
+    },
+    "shape_idea": {
+      "fill": "#a5d8ff",
+      "groupId": null,
+      "height": 95,
+      "id": "shape_idea",
+      "locked": false,
+      "opacity": 1,
+      "rotation": 0,
+      "roughness": 1,
+      "seed": 1147379807,
+      "stroke": "#1971c2",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "text": "Press Q for\nConcepts Wheel",
+      "textStyle": {
+        "align": "center",
+        "bold": false,
+        "color": "#1971c2",
+        "fontFamily": "hand",
+        "resolvedSize": 14,
+        "size": "s"
+      },
+      "type": "ellipse",
+      "width": 150,
+      "x": 100,
+      "y": 250
+    },
+    "shape_intro": {
+      "fill": "#ffec99",
+      "groupId": null,
+      "height": 100,
+      "id": "shape_intro",
+      "locked": false,
+      "opacity": 1,
+      "rotation": 0,
+      "roughness": 1,
+      "seed": 44684333,
+      "stroke": "#1e1e1e",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "text": "Sabura Whiteboard\nExcalidraw sketch feel + Concepts precision dial",
+      "textStyle": {
+        "align": "center",
+        "bold": true,
+        "color": "#1e1e1e",
+        "fontFamily": "hand",
+        "resolvedSize": 20,
+        "size": "m"
+      },
+      "type": "rectangle",
+      "width": 340,
+      "x": 80,
+      "y": 80
+    }
+  },
+  "order": [
+    "shape_intro",
+    "shape_idea",
+    "shape_core",
+    "conn_1"
+  ],
+  "schemaVersion": "sabura/canvas/v1",
+  "theme": {
+    "background": "#fcfaf6",
+    "defaultFill": "none",
+    "defaultFontFamily": "hand",
+    "defaultFontSize": "m",
+    "defaultOpacity": 1,
+    "defaultRoughness": 1,
+    "defaultStroke": "#1e1e1e",
+    "defaultStrokeWidth": 2,
+    "gridColor": "rgba(70, 50, 20, 0.08)",
+    "id": "paper",
+    "name": "Paper",
+    "palette": [
+      "#1e1e1e",
+      "#1971c2",
+      "#2f9e44",
+      "#e03131",
+      "#f08c00",
+      "#9c36b5",
+      "#ffec99",
+      "#b2f2bb",
+      "#a5d8ff",
+      "#ffc9c9",
+      "#eebefa",
+      "#ffffff"
+    ]
+  },
+  "title": "Welcome to Sabura"
+}
+  </script>
+
+  <!-- Sabura Standalone Application Bundle -->
+  <script>
+(() => {
+'use strict';
+
+// --- Module: src/core/types.js ---
+/**
+ * Sabura Core Types, Schemas, Constants, and Theme Presets.
+ */
+
+const CANVAS_SCHEMA_VERSION = 'sabura/canvas/v1';
+const COMMANDS_SCHEMA_VERSION = 'sabura/commands/v1';
+
+const THEME_PRESETS = {
+  paper: {
+    id: 'paper',
+    name: 'Paper',
+    background: '#fcfaf6',
+    gridColor: 'rgba(70, 50, 20, 0.08)',
+    palette: [
+      '#1e1e1e', // Dark charcoal / pen ink
+      '#1971c2', // Blueprint blue
+      '#2f9e44', // Forest green
+      '#e03131', // Vermilion red
+      '#f08c00', // Amber orange
+      '#9c36b5', // Plum violet
+      '#ffec99', // Post-it yellow wash
+      '#b2f2bb', // Mint wash
+      '#a5d8ff', // Sky blue wash
+      '#ffc9c9', // Rose wash
+      '#eebefa', // Lavender wash
+      '#ffffff'  // Pure white
+    ],
+    defaultFill: 'none',
+    defaultStroke: '#1e1e1e',
+    defaultStrokeWidth: 2,
+    defaultOpacity: 1.0,
+    defaultRoughness: 1,
+    defaultFontFamily: 'hand',
+    defaultFontSize: 'm'
+  },
+  blueprint: {
+    id: 'blueprint',
+    name: 'Blueprint',
+    background: '#0c192e',
+    gridColor: 'rgba(56, 189, 248, 0.15)',
+    palette: [
+      '#ffffff', // White chalk
+      '#38bdf8', // Cyan drafting ink
+      '#facc15', // Drafting yellow
+      '#4ade80', // Mint green
+      '#fb7185', // Coral pink
+      '#c084fc', // Lilac
+      '#94a3b8', // Slate graphite
+      '#0c192e'  // Deep navy
+    ],
+    defaultFill: 'none',
+    defaultStroke: '#ffffff',
+    defaultStrokeWidth: 2,
+    defaultOpacity: 1.0,
+    defaultRoughness: 1,
+    defaultFontFamily: 'hand',
+    defaultFontSize: 'm'
+  },
+  night: {
+    id: 'night',
+    name: 'Night',
+    background: '#18181b',
+    gridColor: 'rgba(255, 255, 255, 0.07)',
+    palette: [
+      '#f4f4f5', // Crisp chalk white
+      '#7aa2f7', // Pastel sky
+      '#9ece6a', // Pastel sage
+      '#f7768e', // Pastel coral
+      '#ff9e64', // Pastel amber
+      '#bb9af7', // Pastel lavender
+      '#71717a', // Muted slate
+      '#18181b'  // Dark obsidian
+    ],
+    defaultFill: 'none',
+    defaultStroke: '#f4f4f5',
+    defaultStrokeWidth: 2,
+    defaultOpacity: 1.0,
+    defaultRoughness: 1,
+    defaultFontFamily: 'hand',
+    defaultFontSize: 'm'
+  },
+  'high-contrast': {
+    id: 'high-contrast',
+    name: 'High Contrast',
+    background: '#ffffff',
+    gridColor: 'rgba(0, 0, 0, 0.15)',
+    palette: [
+      '#000000',
+      '#0000ff',
+      '#ff0000',
+      '#008800',
+      '#ff8800',
+      '#880088',
+      '#555555',
+      '#ffffff'
+    ],
+    defaultFill: 'none',
+    defaultStroke: '#000000',
+    defaultStrokeWidth: 2,
+    defaultOpacity: 1.0,
+    defaultRoughness: 0,
+    defaultFontFamily: 'sans',
+    defaultFontSize: 'm'
+  }
+};
+
+const FONT_SIZES = {
+  s: 14,
+  m: 20,
+  l: 28,
+  xl: 40
+};
+
+const FONT_FAMILIES = {
+  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  serif: 'Georgia, Cambria, "Times New Roman", Times, serif',
+  mono: '"SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  hand: '"Caveat", "Comic Sans MS", "Chalkboard SE", "Segoe Print", cursive, sans-serif'
+};
+
+const OPACITY_PRESETS = [1.0, 0.75, 0.5, 0.25];
+const STROKE_WIDTHS = [1, 2, 4, 6];
+const STROKE_STYLES = ['solid', 'dashed', 'dotted'];
+const SHAPE_TYPES = ['rectangle', 'ellipse', 'diamond', 'triangle'];
+const OBJECT_TYPES = ['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'path'];
+const CONNECTOR_ROUTINGS = ['straight', 'elbow', 'curved'];
+const RESIZE_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const MIN_OBJECT_SIZE = 16;
+
+// --- Module: src/core/geometry.js ---
+/**
+ * Sabura Geometry Engine: Bounding boxes, Snapping, Alignment, Distribution, Intersections, and Routing.
+ */
+
+
+
+/**
+ * Gets axis-aligned bounding box of an object.
+ * @param {Object} obj 
+ * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number }}
+ */
+function getBoundingBox(obj) {
+  const x = obj.x;
+  const y = obj.y;
+  const width = obj.width;
+  const height = obj.height;
+  return {
+    x,
+    y,
+    width,
+    height,
+    cx: x + width / 2,
+    cy: y + height / 2,
+    right: x + width,
+    bottom: y + height
+  };
+}
+
+/**
+ * Gets union bounding box for multiple objects.
+ * @param {Array<Object>} objects 
+ * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
+ */
+function getUnionBoundingBox(objects) {
+  if (!objects || objects.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const obj of objects) {
+    const box = getBoundingBox(obj);
+    if (box.x < minX) minX = box.x;
+    if (box.y < minY) minY = box.y;
+    if (box.right > maxX) maxX = box.right;
+    if (box.bottom > maxY) maxY = box.bottom;
+  }
+
+  const width = Math.max(0, maxX - minX);
+  const height = Math.max(0, maxY - minY);
+  return {
+    x: minX,
+    y: minY,
+    width,
+    height,
+    cx: minX + width / 2,
+    cy: minY + height / 2,
+    right: maxX,
+    bottom: maxY
+  };
+}
+
+/**
+ * Line segment intersection. Returns intersection point if segments (p1-p2) and (p3-p4) intersect.
+ */
+function lineIntersect(p1, p2, p3, p4) {
+  const d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
+  if (Math.abs(d) < 1e-9) return null;
+
+  const u = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
+  const v = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
+
+  if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+    return {
+      x: p1.x + u * (p2.x - p1.x),
+      y: p1.y + u * (p2.y - p1.y)
+    };
+  }
+  return null;
+}
+
+/**
+ * Computes boundary intersection of a shape when connected from center towards a target point.
+ * @param {Object} shape - Sabura object
+ * @param {{ x: number, y: number }} targetPoint - Point towards which connection travels
+ * @returns {{ x: number, y: number }}
+ */
+function getShapeBoundaryPoint(shape, targetPoint) {
+  const box = getBoundingBox(shape);
+  const center = { x: box.cx, y: box.cy };
+
+  if (Math.abs(targetPoint.x - center.x) < 1e-4 && Math.abs(targetPoint.y - center.y) < 1e-4) {
+    return center;
+  }
+
+  const dx = targetPoint.x - center.x;
+  const dy = targetPoint.y - center.y;
+
+  if (shape.type === 'ellipse') {
+    // Ray from center: (dx, dy)
+    // Ellipse equation: (x/a)^2 + (y/b)^2 = 1
+    const a = box.width / 2;
+    const b = box.height / 2;
+    const angle = Math.atan2(dy, dx);
+    return {
+      x: center.x + a * Math.cos(angle),
+      y: center.y + b * Math.sin(angle)
+    };
+  }
+
+  if (shape.type === 'diamond') {
+    const top = { x: box.cx, y: box.y };
+    const right = { x: box.right, y: box.cy };
+    const bottom = { x: box.cx, y: box.bottom };
+    const left = { x: box.x, y: box.cy };
+
+    const segments = [
+      [top, right],
+      [right, bottom],
+      [bottom, left],
+      [left, top]
+    ];
+
+    for (const [p1, p2] of segments) {
+      const pt = lineIntersect(center, targetPoint, p1, p2);
+      if (pt) return pt;
+    }
+  }
+
+  if (shape.type === 'triangle') {
+    const top = { x: box.cx, y: box.y };
+    const br = { x: box.right, y: box.bottom };
+    const bl = { x: box.x, y: box.bottom };
+
+    const segments = [
+      [top, br],
+      [br, bl],
+      [bl, top]
+    ];
+
+    for (const [p1, p2] of segments) {
+      const pt = lineIntersect(center, targetPoint, p1, p2);
+      if (pt) return pt;
+    }
+  }
+
+  // Default: Rectangle & Text & other shapes
+  const segments = [
+    [{ x: box.x, y: box.y }, { x: box.right, y: box.y }], // top
+    [{ x: box.right, y: box.y }, { x: box.right, y: box.bottom }], // right
+    [{ x: box.right, y: box.bottom }, { x: box.x, y: box.bottom }], // bottom
+    [{ x: box.x, y: box.bottom }, { x: box.x, y: box.y }] // left
+  ];
+
+  for (const [p1, p2] of segments) {
+    const pt = lineIntersect(center, targetPoint, p1, p2);
+    if (pt) return pt;
+  }
+
+  return center;
+}
+
+/**
+ * Calculates start and end coordinates and routing points for a connector object.
+ * @param {Object} doc 
+ * @param {Object} connector 
+ * @returns {{ start: {x: number, y: number}, end: {x: number, y: number}, path: string, points: Array<{x: number, y: number}> }}
+ */
+function resolveConnectorGeometry(doc, connector) {
+  let fromObj = connector.from?.id ? doc.objects[connector.from.id] : null;
+  let toObj = connector.to?.id ? doc.objects[connector.to.id] : null;
+
+  let startCenter = fromObj ? { x: fromObj.x + fromObj.width / 2, y: fromObj.y + fromObj.height / 2 } : (connector.from?.point || { x: connector.x, y: connector.y });
+  let endCenter = toObj ? { x: toObj.x + toObj.width / 2, y: toObj.y + toObj.height / 2 } : (connector.to?.point || { x: connector.x + connector.width, y: connector.y + connector.height });
+
+  // Boundary attachment
+  let start = fromObj ? getShapeBoundaryPoint(fromObj, endCenter) : { ...startCenter };
+  let end = toObj ? getShapeBoundaryPoint(toObj, startCenter) : { ...endCenter };
+
+  const routing = connector.routing || 'straight';
+  let points = [];
+  let pathStr = '';
+
+  if (routing === 'elbow') {
+    // Orthogonal routing: stepped 90 deg corner
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      const midX = start.x + dx / 2;
+      points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+      pathStr = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    } else {
+      const midY = start.y + dy / 2;
+      points = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+      pathStr = `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+    }
+  } else if (routing === 'curved') {
+    // Smooth bezier curve with perpendicular offset
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dist = Math.hypot(dx, dy);
+    const normal = dist > 0 ? { x: -dy / dist, y: dx / dist } : { x: 0, y: 0 };
+    const curveAmount = Math.min(60, dist * 0.2);
+    const cpX = (start.x + end.x) / 2 + normal.x * curveAmount;
+    const cpY = (start.y + end.y) / 2 + normal.y * curveAmount;
+    points = [start, { x: cpX, y: cpY }, end];
+    pathStr = `M ${start.x} ${start.y} Q ${cpX} ${cpY} ${end.x} ${end.y}`;
+  } else {
+    // Straight
+    points = [start, end];
+    pathStr = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+  }
+
+  return { start, end, points, path: pathStr };
+}
+
+/**
+ * Computes shortest distance from point (px, py) to line segment (x1, y1)-(x2, y2).
+ */
+function distanceToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.hypot(px - projX, py - projY);
+}
+
+/**
+ * Computes shortest distance from a world point to a connector's actual path.
+ * Evaluates straight segments and samples curved beziers.
+ * 
+ * @param {{ x: number, y: number }} point 
+ * @param {Object} connector 
+ * @param {Object} doc 
+ * @returns {number} Distance in world units
+ */
+function distanceToConnector(point, connector, doc) {
+  const geom = resolveConnectorGeometry(doc, connector);
+  const routing = connector.routing || 'straight';
+
+  if (routing === 'curved' && geom.points.length === 3) {
+    // Sample quadratic bezier curve across 16 segments
+    const p0 = geom.points[0];
+    const p1 = geom.points[1];
+    const p2 = geom.points[2];
+    let minDist = Infinity;
+    let prevX = p0.x;
+    let prevY = p0.y;
+    const steps = 16;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const invT = 1 - t;
+      const curX = invT * invT * p0.x + 2 * invT * t * p1.x + t * t * p2.x;
+      const curY = invT * invT * p0.y + 2 * invT * t * p1.y + t * t * p2.y;
+      const d = distanceToSegment(point.x, point.y, prevX, prevY, curX, curY);
+      if (d < minDist) minDist = d;
+      prevX = curX;
+      prevY = curY;
+    }
+    return minDist;
+  }
+
+  // Straight or elbow polylines
+  let minDist = Infinity;
+  for (let i = 0; i < geom.points.length - 1; i++) {
+    const ptA = geom.points[i];
+    const ptB = geom.points[i + 1];
+    const d = distanceToSegment(point.x, point.y, ptA.x, ptA.y, ptB.x, ptB.y);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+/**
+ * Calculates resize transformations for 8 handles.
+ * Supports:
+ * - keepAspect (preserves aspect ratio)
+ * - fromCenter (symmetrical resize from center)
+ * - minSize enforcement
+ * 
+ * @param {string} handle - One of 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
+ * @param {{ x: number, y: number, width: number, height: number }} orig - Original bounds
+ * @param {number} dx - Pointer delta X
+ * @param {number} dy - Pointer delta Y
+ * @param {{ keepAspect?: boolean, fromCenter?: boolean, minSize?: number }} options 
+ * @returns {{ x: number, y: number, width: number, height: number }}
+ */
+function calculateResize(handle, orig, dx, dy, options = {}) {
+  const minSize = Math.max(MIN_OBJECT_SIZE, options.minSize || MIN_OBJECT_SIZE);
+  const keepAspect = Boolean(options.keepAspect);
+  const fromCenter = Boolean(options.fromCenter);
+
+  const origAspectRatio = orig.width / orig.height;
+
+  // Effective deltas if fromCenter: double the movement
+  const effDx = fromCenter ? dx * 2 : dx;
+  const effDy = fromCenter ? dy * 2 : dy;
+
+  let newX = orig.x;
+  let newY = orig.y;
+  let newWidth = orig.width;
+  let newHeight = orig.height;
+
+  // Horizontal handle component
+  if (handle.includes('e')) {
+    newWidth = orig.width + effDx;
+  } else if (handle.includes('w')) {
+    newWidth = orig.width - effDx;
+    if (!fromCenter) newX = orig.x + effDx;
+  }
+
+  // Vertical handle component
+  if (handle.includes('s')) {
+    newHeight = orig.height + effDy;
+  } else if (handle.includes('n')) {
+    newHeight = orig.height - effDy;
+    if (!fromCenter) newY = orig.y + effDy;
+  }
+
+  // Aspect ratio preservation
+  if (keepAspect) {
+    if (handle === 'n' || handle === 's') {
+      newWidth = newHeight * origAspectRatio;
+      if (!fromCenter) newX = orig.x + (orig.width - newWidth) / 2;
+    } else if (handle === 'e' || handle === 'w') {
+      newHeight = newWidth / origAspectRatio;
+      if (!fromCenter) newY = orig.y + (orig.height - newHeight) / 2;
+    } else {
+      // Corner handle: scale according to dominant displacement
+      const scaleX = newWidth / orig.width;
+      const scaleY = newHeight / orig.height;
+      const scale = Math.max(scaleX, scaleY);
+
+      newWidth = orig.width * scale;
+      newHeight = orig.height * scale;
+
+      if (handle.includes('w') && !fromCenter) {
+        newX = orig.x + orig.width - newWidth;
+      }
+      if (handle.includes('n') && !fromCenter) {
+        newY = orig.y + orig.height - newHeight;
+      }
+    }
+  }
+
+  // Enforce minSize and prevent flipping
+  if (newWidth < minSize) {
+    if (handle.includes('w') && !fromCenter) {
+      newX = orig.x + orig.width - minSize;
+    }
+    newWidth = minSize;
+    if (keepAspect) {
+      newHeight = minSize / origAspectRatio;
+    }
+  }
+
+  if (newHeight < minSize) {
+    if (handle.includes('n') && !fromCenter) {
+      newY = orig.y + orig.height - minSize;
+    }
+    newHeight = minSize;
+    if (keepAspect) {
+      newWidth = minSize * origAspectRatio;
+    }
+  }
+
+  // Adjust center position if fromCenter
+  if (fromCenter) {
+    const origCenterX = orig.x + orig.width / 2;
+    const origCenterY = orig.y + orig.height / 2;
+    newX = origCenterX - newWidth / 2;
+    newY = origCenterY - newHeight / 2;
+  }
+
+  return {
+    x: Math.round(newX),
+    y: Math.round(newY),
+    width: Math.round(newWidth),
+    height: Math.round(newHeight)
+  };
+}
+
+/**
+ * Snapping engine: Computes snapping against grid and other objects.
+ * 
+ * @param {{ x: number, y: number, width: number, height: number }} currentBox 
+ * @param {Array<Object>} otherObjects 
+ * @param {{ tolerance?: number, snapGrid?: boolean, gridSize?: number }} options 
+ * @returns {{ x: number, y: number, guides: Array<{ orientation: 'v'|'h', pos: number, from: number, to: number }> }}
+ */
+function calculateSnapping(currentBox, otherObjects, options = {}) {
+  const tolerance = options.tolerance !== undefined ? options.tolerance : 8;
+  const guides = [];
+  let snappedX = currentBox.x;
+  let snappedY = currentBox.y;
+
+  const currentCx = currentBox.x + currentBox.width / 2;
+  const currentRight = currentBox.x + currentBox.width;
+  const currentCy = currentBox.y + currentBox.height / 2;
+  const currentBottom = currentBox.y + currentBox.height;
+
+  let minDeltaX = tolerance + 1;
+  let snapXLine = null;
+
+  let minDeltaY = tolerance + 1;
+  let snapYLine = null;
+
+  // Object-to-object snapping
+  for (const other of otherObjects) {
+    const box = getBoundingBox(other);
+
+    // Vertical alignment (X axis)
+    const xPairs = [
+      { current: currentBox.x, target: box.x, adjust: 0 },
+      { current: currentBox.x, target: box.cx, adjust: 0 },
+      { current: currentBox.x, target: box.right, adjust: 0 },
+      { current: currentCx, target: box.cx, adjust: -currentBox.width / 2 },
+      { current: currentRight, target: box.x, adjust: -currentBox.width },
+      { current: currentRight, target: box.right, adjust: -currentBox.width }
+    ];
+
+    for (const pair of xPairs) {
+      const delta = Math.abs(pair.current - pair.target);
+      if (delta < minDeltaX) {
+        minDeltaX = delta;
+        snappedX = pair.target + pair.adjust;
+        snapXLine = {
+          orientation: 'v',
+          pos: pair.target,
+          from: Math.min(currentBox.y, box.y) - 20,
+          to: Math.max(currentBottom, box.bottom) + 20
+        };
+      }
+    }
+
+    // Horizontal alignment (Y axis)
+    const yPairs = [
+      { current: currentBox.y, target: box.y, adjust: 0 },
+      { current: currentBox.y, target: box.cy, adjust: 0 },
+      { current: currentBox.y, target: box.bottom, adjust: 0 },
+      { current: currentCy, target: box.cy, adjust: -currentBox.height / 2 },
+      { current: currentBottom, target: box.y, adjust: -currentBox.height },
+      { current: currentBottom, target: box.bottom, adjust: -currentBox.height }
+    ];
+
+    for (const pair of yPairs) {
+      const delta = Math.abs(pair.current - pair.target);
+      if (delta < minDeltaY) {
+        minDeltaY = delta;
+        snappedY = pair.target + pair.adjust;
+        snapYLine = {
+          orientation: 'h',
+          pos: pair.target,
+          from: Math.min(currentBox.x, box.x) - 20,
+          to: Math.max(currentRight, box.right) + 20
+        };
+      }
+    }
+  }
+
+  // Grid snapping fallback if object snapping didn't trigger
+  if (options.snapGrid && options.gridSize) {
+    const gs = options.gridSize;
+    if (minDeltaX > tolerance) {
+      const gridX = Math.round(currentBox.x / gs) * gs;
+      if (Math.abs(gridX - currentBox.x) <= tolerance) {
+        snappedX = gridX;
+      }
+    }
+    if (minDeltaY > tolerance) {
+      const gridY = Math.round(currentBox.y / gs) * gs;
+      if (Math.abs(gridY - currentBox.y) <= tolerance) {
+        snappedY = gridY;
+      }
+    }
+  }
+
+  if (snapXLine) guides.push(snapXLine);
+  if (snapYLine) guides.push(snapYLine);
+
+  return { x: snappedX, y: snappedY, guides };
+}
+
+/**
+ * Calculates alignment mutations for multiple objects.
+ * 
+ * @param {Array<Object>} objects 
+ * @param {'left'|'center'|'right'|'top'|'middle'|'bottom'} alignment 
+ * @returns {Record<string, { dx: number, dy: number }>}
+ */
+function alignObjects(objects, alignment) {
+  if (!objects || objects.length < 2) return {};
+  const union = getUnionBoundingBox(objects);
+  const deltas = {};
+
+  for (const obj of objects) {
+    let dx = 0;
+    let dy = 0;
+    switch (alignment) {
+      case 'left':
+        dx = union.x - obj.x;
+        break;
+      case 'center':
+        dx = union.cx - (obj.x + obj.width / 2);
+        break;
+      case 'right':
+        dx = union.right - (obj.x + obj.width);
+        break;
+      case 'top':
+        dy = union.y - obj.y;
+        break;
+      case 'middle':
+        dy = union.cy - (obj.y + obj.height / 2);
+        break;
+      case 'bottom':
+        dy = union.bottom - (obj.y + obj.height);
+        break;
+    }
+    deltas[obj.id] = { dx, dy };
+  }
+  return deltas;
+}
+
+/**
+ * Calculates even distribution for multiple objects.
+ * 
+ * @param {Array<Object>} objects 
+ * @param {'horizontal'|'vertical'} direction 
+ * @returns {Record<string, { dx: number, dy: number }>}
+ */
+function distributeObjects(objects, direction) {
+  if (!objects || objects.length < 3) return {};
+  const deltas = {};
+
+  if (direction === 'horizontal') {
+    const sorted = [...objects].sort((a, b) => a.x - b.x);
+    const totalObjectWidth = sorted.reduce((sum, o) => sum + o.width, 0);
+    const span = (sorted[sorted.length - 1].x + sorted[sorted.length - 1].width) - sorted[0].x;
+    const gap = (span - totalObjectWidth) / (sorted.length - 1);
+
+    let currentX = sorted[0].x;
+    for (const obj of sorted) {
+      deltas[obj.id] = { dx: currentX - obj.x, dy: 0 };
+      currentX += obj.width + gap;
+    }
+  } else {
+    const sorted = [...objects].sort((a, b) => a.y - b.y);
+    const totalObjectHeight = sorted.reduce((sum, o) => sum + o.height, 0);
+    const span = (sorted[sorted.length - 1].y + sorted[sorted.length - 1].height) - sorted[0].y;
+    const gap = (span - totalObjectHeight) / (sorted.length - 1);
+
+    let currentY = sorted[0].y;
+    for (const obj of sorted) {
+      deltas[obj.id] = { dx: 0, dy: currentY - obj.y };
+      currentY += obj.height + gap;
+    }
+  }
+
+  return deltas;
+}
+
+let _measureCanvas = null;
+let _measureCtx = null;
+
+/**
+ * Accurately measures multi-line text dimensions.
+ * Uses Canvas 2D in DOM environments with accurate font metrics,
+ * and a robust proportional fallback in headless/Node.js environments.
+ * 
+ * @param {string} text 
+ * @param {number} fontSize 
+ * @param {string} fontFamilyToken 
+ * @returns {{ width: number, height: number }}
+ */
+function measureText(text, fontSize = 20, fontFamilyToken = 'hand') {
+  const content = String(text || '');
+  if (!content) {
+    return {
+      width: Math.max(24, Math.ceil(fontSize * 1.5)),
+      height: Math.max(24, Math.ceil(fontSize * 1.3))
+    };
+  }
+
+  const lines = content.split('\n');
+  const lineHeight = fontSize * 1.3;
+
+  // DOM measurement via Canvas 2D
+  if (typeof document !== 'undefined') {
+    try {
+      if (!_measureCanvas) {
+        _measureCanvas = document.createElement('canvas');
+        _measureCtx = _measureCanvas.getContext('2d');
+      }
+      if (_measureCtx) {
+        const family = FONT_FAMILIES[fontFamilyToken] || fontFamilyToken || 'sans-serif';
+        _measureCtx.font = `${fontSize}px ${family}`;
+        let maxWidth = 0;
+        for (const line of lines) {
+          const w = _measureCtx.measureText(line).width;
+          if (w > maxWidth) maxWidth = w;
+        }
+        return {
+          width: Math.max(24, Math.ceil(maxWidth + 14)),
+          height: Math.max(24, Math.ceil(lines.length * lineHeight + 4))
+        };
+      }
+    } catch (_) {}
+  }
+
+  // Headless / Node.js proportional fallback
+  let maxChars = 0;
+  for (const line of lines) {
+    if (line.length > maxChars) maxChars = line.length;
+  }
+  const charWidth = fontSize * 0.62;
+  return {
+    width: Math.max(24, Math.ceil(maxChars * charWidth + 14)),
+    height: Math.max(24, Math.ceil(lines.length * lineHeight + 4))
+  };
+}
+
+// --- Module: src/core/document.js ---
+/**
+ * Sabura Document Management: Schema, Validation, Factory, and Canonical Serialization.
+ */
+
+
+
+
+/**
+ * Generate a random stable alphanumeric ID.
+ * @param {string} prefix 
+ * @returns {string}
+ */
+function generateId(prefix = 'obj') {
+  const rand = Math.random().toString(36).substring(2, 9);
+  const time = Date.now().toString(36).slice(-4);
+  return `${prefix}_${rand}${time}`;
+}
+
+/**
+ * Generate a deterministic 32-bit positive integer seed.
+ * @returns {number}
+ */
+function generateSeed() {
+  return Math.floor(Math.random() * 2147483647) + 1;
+}
+
+/**
+ * Creates a valid, empty Sabura document.
+ * @param {Partial<{ id: string, title: string, themeId: string }>} options 
+ * @returns {Object}
+ */
+function createDefaultDocument(options = {}) {
+  const themeId = options.themeId && THEME_PRESETS[options.themeId] ? options.themeId : 'paper';
+  const theme = JSON.parse(JSON.stringify(THEME_PRESETS[themeId]));
+
+  return {
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    id: options.id || generateId('board'),
+    title: options.title || 'Untitled Board',
+    theme,
+    objects: {},
+    order: [],
+    groups: {},
+    assets: {}
+  };
+}
+
+/**
+ * Creates a default Sabura object matching schema requirements.
+ * @param {string} type 
+ * @param {Object} overrides 
+ * @param {Object} theme 
+ * @returns {Object}
+ */
+function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) {
+  const id = overrides.id || generateId(type.slice(0, 4));
+  const seed = overrides.seed !== undefined ? overrides.seed : generateSeed();
+  const fontSizeToken = overrides.textStyle?.size || theme.defaultFontSize || 'm';
+  const resolvedSize = FONT_SIZES[fontSizeToken] || 20;
+
+  let defaultWidth = type === 'text' ? 80 : 160;
+  let defaultHeight = type === 'text' ? 32 : 100;
+  if (type === 'text' && overrides.text) {
+    const familyToken = overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'hand';
+    const m = measureText(overrides.text, resolvedSize, familyToken);
+    defaultWidth = m.width;
+    defaultHeight = m.height;
+  }
+
+  const width = Math.max(MIN_OBJECT_SIZE, overrides.width !== undefined ? overrides.width : defaultWidth);
+  const height = Math.max(MIN_OBJECT_SIZE, overrides.height !== undefined ? overrides.height : defaultHeight);
+
+  const baseObject = {
+    id,
+    type,
+    x: overrides.x !== undefined ? overrides.x : 0,
+    y: overrides.y !== undefined ? overrides.y : 0,
+    width,
+    height,
+    rotation: overrides.rotation || 0,
+    fill: overrides.fill !== undefined ? overrides.fill : theme.defaultFill,
+    stroke: overrides.stroke !== undefined ? overrides.stroke : theme.defaultStroke,
+    strokeWidth: overrides.strokeWidth !== undefined ? overrides.strokeWidth : theme.defaultStrokeWidth,
+    strokeStyle: overrides.strokeStyle || 'solid',
+    opacity: overrides.opacity !== undefined ? overrides.opacity : theme.defaultOpacity,
+    roughness: overrides.roughness !== undefined ? overrides.roughness : theme.defaultRoughness,
+    seed,
+    locked: overrides.locked || false,
+    groupId: overrides.groupId || null,
+    text: overrides.text !== undefined ? overrides.text : '',
+    textStyle: {
+      size: fontSizeToken,
+      resolvedSize,
+      fontFamily: overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'sans',
+      bold: overrides.textStyle?.bold || false,
+      align: overrides.textStyle?.align || (type === 'text' ? 'left' : 'center'),
+      color: overrides.textStyle?.color || overrides.stroke || theme.defaultStroke
+    }
+  };
+
+  if (type === 'connector') {
+    baseObject.from = overrides.from || { point: { x: baseObject.x, y: baseObject.y } };
+    baseObject.to = overrides.to || { point: { x: baseObject.x + width, y: baseObject.y + height } };
+    baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
+    baseObject.startArrow = overrides.startArrow || false;
+    baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
+  } else if (type === 'path') {
+    baseObject.points = Array.isArray(overrides.points) ? overrides.points : [];
+  }
+
+  // Preserve any additional fields for custom namespaces
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!(key in baseObject)) {
+      baseObject[key] = value;
+    }
+  }
+
+  return baseObject;
+}
+
+/**
+ * Validates a Sabura document structure against the canonical schema.
+ * @param {any} doc 
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+function validateDocument(doc) {
+  const errors = [];
+
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    return { valid: false, errors: ['Document must be an object'] };
+  }
+
+  if (doc.schemaVersion !== CANVAS_SCHEMA_VERSION) {
+    errors.push(`Invalid schemaVersion: expected "${CANVAS_SCHEMA_VERSION}", received "${doc.schemaVersion}"`);
+  }
+
+  if (typeof doc.id !== 'string' || !doc.id.trim()) {
+    errors.push('Document id must be a non-empty string');
+  }
+
+  if (typeof doc.title !== 'string') {
+    errors.push('Document title must be a string');
+  }
+
+  if (!doc.theme || typeof doc.theme !== 'object') {
+    errors.push('Document theme must be an object');
+  } else {
+    if (!doc.theme.background || typeof doc.theme.background !== 'string') {
+      errors.push('Theme background must be a valid string');
+    }
+    if (!Array.isArray(doc.theme.palette) || doc.theme.palette.length === 0) {
+      errors.push('Theme palette must be a non-empty array of color strings');
+    }
+  }
+
+  if (!doc.objects || typeof doc.objects !== 'object' || Array.isArray(doc.objects)) {
+    errors.push('Document objects must be a key-value record');
+  } else {
+    for (const [objId, obj] of Object.entries(doc.objects)) {
+      if (!obj || typeof obj !== 'object') {
+        errors.push(`Object "${objId}" must be an object`);
+        continue;
+      }
+      if (obj.id !== objId) {
+        errors.push(`Object id mismatch: key "${objId}" does not match object.id "${obj.id}"`);
+      }
+      if (typeof obj.type !== 'string' || !obj.type.trim()) {
+        errors.push(`Object "${objId}" must have a valid type string`);
+      }
+      if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
+        errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
+      }
+      if (typeof obj.width !== 'number' || isNaN(obj.width) || typeof obj.height !== 'number' || isNaN(obj.height)) {
+        errors.push(`Object "${objId}" dimensions (width, height) must be valid numbers`);
+      }
+      if (typeof obj.seed !== 'number' || isNaN(obj.seed)) {
+        errors.push(`Object "${objId}" seed must be a valid number`);
+      }
+      if (obj.type === 'connector') {
+        if (!obj.from || typeof obj.from !== 'object') {
+          errors.push(`Connector "${objId}" must have a valid "from" definition`);
+        }
+        if (!obj.to || typeof obj.to !== 'object') {
+          errors.push(`Connector "${objId}" must have a valid "to" definition`);
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(doc.order)) {
+    errors.push('Document order must be an array of object IDs');
+  } else {
+    const seen = new Set();
+    for (const id of doc.order) {
+      if (seen.has(id)) {
+        errors.push(`Duplicate ID in order list: "${id}"`);
+      }
+      seen.add(id);
+      if (doc.objects && !doc.objects[id]) {
+        errors.push(`Order contains non-existent object ID: "${id}"`);
+      }
+    }
+  }
+
+  if (!doc.groups || typeof doc.groups !== 'object' || Array.isArray(doc.groups)) {
+    errors.push('Document groups must be a key-value record');
+  }
+
+  if (!doc.assets || typeof doc.assets !== 'object' || Array.isArray(doc.assets)) {
+    errors.push('Document assets must be a key-value record');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Deep clones any JSON-compatible structure.
+ * @template T
+ * @param {T} obj 
+ * @returns {T}
+ */
+function cloneDocument(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Serializes an object canonically:
+ * - Deterministic object key sorting at all levels
+ * - Array order strictly preserved
+ * - Indented with 2 spaces
+ * - Safely escapes closing script tags to prevent HTML injection/parsing breaks.
+ * @param {any} value 
+ * @returns {string}
+ */
+function canonicalJson(value) {
+  function sortKeys(val) {
+    if (val === null || typeof val !== 'object') {
+      return val;
+    }
+    if (Array.isArray(val)) {
+      return val.map(sortKeys);
+    }
+    const sortedObj = {};
+    const keys = Object.keys(val).sort();
+    for (const key of keys) {
+      sortedObj[key] = sortKeys(val[key]);
+    }
+    return sortedObj;
+  }
+
+  const sorted = sortKeys(value);
+  const jsonStr = JSON.stringify(sorted, null, 2);
+  // Prevent breaking closing HTML script tags
+  const scriptEndRegex = new RegExp('<\\/' + 'script', 'gi');
+  return jsonStr.replace(scriptEndRegex, '<\\/script');
+}
+
+// --- Module: src/core/commands.js ---
+/**
+ * Sabura Command Engine: Atomic Reducer, Validation, and Inverse Generation.
+ */
+
+
+
+
+
+/**
+ * Validates an individual command structure.
+ * @param {any} cmd 
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+function validateCommand(cmd) {
+  const errors = [];
+  if (!cmd || typeof cmd !== 'object') {
+    return { valid: false, errors: ['Command must be an object'] };
+  }
+  if (typeof cmd.type !== 'string' || !cmd.type.trim()) {
+    errors.push('Command must have a non-empty type string');
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Applies an individual command to a Sabura document immutably, returning the updated document
+ * and the exact inverse command to undo the operation.
+ * 
+ * @param {Object} doc - Current Sabura document
+ * @param {Object} cmd - Command to apply
+ * @returns {{ doc: Object, inverseCmd: Object }}
+ */
+function applyCommand(doc, cmd) {
+  const newDoc = cloneDocument(doc);
+
+  switch (cmd.type) {
+    case 'create_object': {
+      const obj = cloneDocument(cmd.object);
+      if (!obj.id) obj.id = generateId(obj.type || 'obj');
+      if (obj.seed === undefined) obj.seed = generateSeed();
+
+      newDoc.objects[obj.id] = obj;
+      const atIndex = typeof cmd.atIndex === 'number' ? Math.max(0, Math.min(newDoc.order.length, cmd.atIndex)) : newDoc.order.length;
+      newDoc.order.splice(atIndex, 0, obj.id);
+
+      const inverseCmd = {
+        type: 'delete_objects',
+        ids: [obj.id]
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'delete_objects': {
+      const idsToDelete = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
+      if (idsToDelete.length === 0) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+
+      const savedObjects = [];
+      for (const id of idsToDelete) {
+        const index = newDoc.order.indexOf(id);
+        savedObjects.push({
+          object: cloneDocument(newDoc.objects[id]),
+          orderIndex: index
+        });
+        delete newDoc.objects[id];
+      }
+
+      newDoc.order = newDoc.order.filter(id => !idsToDelete.includes(id));
+
+      // Reconnect connectors that referenced deleted objects to static points
+      const affectedConnectors = [];
+      for (const [cId, conn] of Object.entries(newDoc.objects)) {
+        if (conn.type !== 'connector') continue;
+        let modified = false;
+        const prevFrom = cloneDocument(conn.from);
+        const prevTo = cloneDocument(conn.to);
+
+        if (conn.from && conn.from.id && idsToDelete.includes(conn.from.id)) {
+          // Disconnect from object
+          conn.from = { point: conn.from.point || { x: conn.x, y: conn.y } };
+          modified = true;
+        }
+        if (conn.to && conn.to.id && idsToDelete.includes(conn.to.id)) {
+          conn.to = { point: conn.to.point || { x: conn.x + conn.width, y: conn.y + conn.height } };
+          modified = true;
+        }
+        if (modified) {
+          affectedConnectors.push({ id: cId, prevFrom, prevTo });
+        }
+      }
+
+      const inverseCmd = {
+        type: 'batch',
+        commands: [
+          ...savedObjects.map(item => ({
+            type: 'create_object',
+            object: item.object,
+            atIndex: item.orderIndex
+          })),
+          ...affectedConnectors.map(ac => ({
+            type: 'configure_connector_endpoints',
+            id: ac.id,
+            from: ac.prevFrom,
+            to: ac.prevTo
+          }))
+        ]
+      };
+
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'duplicate_objects': {
+      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
+      const offset = cmd.offset || { x: 24, y: 24 };
+      const duplicatedIds = [];
+      const newObjects = [];
+
+      for (const id of ids) {
+        const source = newDoc.objects[id];
+        const newId = generateId(source.type || 'dup');
+        const dup = cloneDocument(source);
+        dup.id = newId;
+        dup.x += offset.x;
+        dup.y += offset.y;
+        dup.seed = generateSeed();
+        dup.locked = false; // Duplicated objects are unlocked by default
+        newDoc.objects[newId] = dup;
+        newDoc.order.push(newId);
+        duplicatedIds.push(newId);
+        newObjects.push(dup);
+      }
+
+      const inverseCmd = {
+        type: 'delete_objects',
+        ids: duplicatedIds
+      };
+      return { doc: newDoc, inverseCmd, duplicatedIds };
+    }
+
+    case 'move_objects': {
+      const dx = Number(cmd.dx) || 0;
+      const dy = Number(cmd.dy) || 0;
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+
+      for (const id of ids) {
+        const obj = newDoc.objects[id];
+        obj.x += dx;
+        obj.y += dy;
+
+        // If it's a connector with point endpoints, translate the points
+        if (obj.type === 'connector') {
+          if (obj.from && obj.from.point) {
+            obj.from.point.x += dx;
+            obj.from.point.y += dy;
+          }
+          if (obj.to && obj.to.point) {
+            obj.to.point.x += dx;
+            obj.to.point.y += dy;
+          }
+        }
+      }
+
+      const inverseCmd = {
+        type: 'move_objects',
+        ids,
+        dx: -dx,
+        dy: -dy
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'resize_object': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+
+      const prevBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+      const prevTextStyle = obj.textStyle ? cloneDocument(obj.textStyle) : null;
+
+      obj.x = cmd.bounds.x !== undefined ? cmd.bounds.x : obj.x;
+      obj.y = cmd.bounds.y !== undefined ? cmd.bounds.y : obj.y;
+      obj.width = Math.max(MIN_OBJECT_SIZE, cmd.bounds.width !== undefined ? cmd.bounds.width : obj.width);
+      obj.height = Math.max(MIN_OBJECT_SIZE, cmd.bounds.height !== undefined ? cmd.bounds.height : obj.height);
+
+      if (cmd.restoreTextStyle) {
+        obj.textStyle = cloneDocument(cmd.restoreTextStyle);
+      } else if (cmd.scaleText && obj.textStyle && prevBounds.width > 0 && prevBounds.height > 0) {
+        const scaleX = obj.width / prevBounds.width;
+        const scaleY = obj.height / prevBounds.height;
+        const scale = (scaleX + scaleY) / 2;
+        const newSize = Math.max(10, Math.min(120, Math.round((obj.textStyle.resolvedSize || 20) * scale)));
+        obj.textStyle.resolvedSize = newSize;
+
+        if (obj.type === 'text') {
+          const familyToken = obj.textStyle?.fontFamily || 'hand';
+          const m = measureText(obj.text, newSize, familyToken);
+          obj.width = m.width;
+          obj.height = m.height;
+        }
+      }
+
+      const inverseCmd = {
+        type: 'resize_object',
+        id: cmd.id,
+        bounds: prevBounds,
+        scaleText: false,
+        restoreTextStyle: prevTextStyle
+      };
+
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'align_objects': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      if (ids.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = ids.map(id => newDoc.objects[id]);
+      const deltas = alignObjects(objects, cmd.alignment);
+      const prevPositions = {};
+      for (const id of ids) {
+        const d = deltas[id] || { dx: 0, dy: 0 };
+        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
+        newDoc.objects[id].x += d.dx;
+        newDoc.objects[id].y += d.dy;
+      }
+      const inverseCmd = {
+        type: 'restore_positions',
+        positions: prevPositions
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'distribute_objects': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      if (ids.length < 3) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = ids.map(id => newDoc.objects[id]);
+      const deltas = distributeObjects(objects, cmd.direction);
+      const prevPositions = {};
+      for (const id of ids) {
+        const d = deltas[id] || { dx: 0, dy: 0 };
+        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
+        newDoc.objects[id].x += d.dx;
+        newDoc.objects[id].y += d.dy;
+      }
+      const inverseCmd = {
+        type: 'restore_positions',
+        positions: prevPositions
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'restore_positions': {
+      const prev = {};
+      for (const [id, pos] of Object.entries(cmd.positions || {})) {
+        if (!newDoc.objects[id]) continue;
+        prev[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
+        newDoc.objects[id].x = pos.x;
+        newDoc.objects[id].y = pos.y;
+      }
+      return { doc: newDoc, inverseCmd: { type: 'restore_positions', positions: prev } };
+    }
+
+    case 'set_text': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const prevText = obj.text || '';
+      const prevBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+      obj.text = String(cmd.text !== undefined ? cmd.text : '');
+
+      if (cmd.prevBounds) {
+        // Restore bounds during undo
+        obj.x = cmd.prevBounds.x;
+        obj.y = cmd.prevBounds.y;
+        obj.width = cmd.prevBounds.width;
+        obj.height = cmd.prevBounds.height;
+      } else if (obj.type === 'text') {
+        // Auto-fit bounds to text content
+        const fontSize = obj.textStyle?.resolvedSize || 20;
+        const familyToken = obj.textStyle?.fontFamily || 'hand';
+        const m = measureText(obj.text, fontSize, familyToken);
+        obj.width = m.width;
+        obj.height = m.height;
+      }
+
+      const inverseCmd = {
+        type: 'set_text',
+        id: cmd.id,
+        text: prevText,
+        prevBounds
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'set_style': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      const prevStyles = {};
+
+      for (const id of ids) {
+        const obj = newDoc.objects[id];
+        prevStyles[id] = {
+          fill: obj.fill,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          strokeStyle: obj.strokeStyle,
+          opacity: obj.opacity,
+          roughness: obj.roughness
+        };
+
+        if (cmd.updates.fill !== undefined) obj.fill = cmd.updates.fill;
+        if (cmd.updates.stroke !== undefined) obj.stroke = cmd.updates.stroke;
+        if (cmd.updates.strokeWidth !== undefined) obj.strokeWidth = cmd.updates.strokeWidth;
+        if (cmd.updates.strokeStyle !== undefined) obj.strokeStyle = cmd.updates.strokeStyle;
+        if (cmd.updates.opacity !== undefined) obj.opacity = cmd.updates.opacity;
+        if (cmd.updates.roughness !== undefined) obj.roughness = cmd.updates.roughness;
+
+        // If stroke is changed and textStyle color matches previous stroke, update text color
+        if (cmd.updates.stroke !== undefined && obj.textStyle && obj.textStyle.color === prevStyles[id].stroke) {
+          obj.textStyle.color = cmd.updates.stroke;
+        }
+      }
+
+      const inverseCmd = {
+        type: 'restore_styles',
+        styles: prevStyles
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'restore_styles': {
+      const styles = cmd.styles || {};
+      const prevStyles = {};
+      for (const [id, style] of Object.entries(styles)) {
+        const obj = newDoc.objects[id];
+        if (!obj) continue;
+        prevStyles[id] = {
+          fill: obj.fill,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          strokeStyle: obj.strokeStyle,
+          opacity: obj.opacity,
+          roughness: obj.roughness
+        };
+        Object.assign(obj, style);
+      }
+      return { doc: newDoc, inverseCmd: { type: 'restore_styles', styles: prevStyles } };
+    }
+
+    case 'set_typography': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      const prevTypography = {};
+
+      for (const id of ids) {
+        const obj = newDoc.objects[id];
+        if (!obj.textStyle) continue;
+        prevTypography[id] = cloneDocument(obj.textStyle);
+
+        if (cmd.updates.size !== undefined) {
+          obj.textStyle.size = cmd.updates.size;
+          obj.textStyle.resolvedSize = FONT_SIZES[cmd.updates.size] || obj.textStyle.resolvedSize || 20;
+        }
+        if (cmd.updates.resolvedSize !== undefined) obj.textStyle.resolvedSize = cmd.updates.resolvedSize;
+        if (cmd.updates.fontFamily !== undefined) obj.textStyle.fontFamily = cmd.updates.fontFamily;
+        if (cmd.updates.bold !== undefined) obj.textStyle.bold = cmd.updates.bold;
+        if (cmd.updates.align !== undefined) obj.textStyle.align = cmd.updates.align;
+        if (cmd.updates.color !== undefined) obj.textStyle.color = cmd.updates.color;
+      }
+
+      const inverseCmd = {
+        type: 'restore_typography',
+        typography: prevTypography
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'restore_typography': {
+      const prev = {};
+      for (const [id, style] of Object.entries(cmd.typography || {})) {
+        const obj = newDoc.objects[id];
+        if (!obj) continue;
+        prev[id] = cloneDocument(obj.textStyle);
+        obj.textStyle = cloneDocument(style);
+      }
+      return { doc: newDoc, inverseCmd: { type: 'restore_typography', typography: prev } };
+    }
+
+    case 'change_shape': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const prevType = obj.type;
+      obj.type = cmd.newType;
+
+      const inverseCmd = {
+        type: 'change_shape',
+        id: cmd.id,
+        newType: prevType
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'lock_objects': {
+      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
+      const locked = Boolean(cmd.locked);
+      for (const id of ids) {
+        newDoc.objects[id].locked = locked;
+      }
+      const inverseCmd = {
+        type: 'lock_objects',
+        ids,
+        locked: !locked
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'reorder_objects': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id]);
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+
+      const prevOrder = [...newDoc.order];
+      const action = cmd.action; // 'front' | 'back' | 'forward' | 'backward'
+
+      if (action === 'front') {
+        newDoc.order = newDoc.order.filter(id => !ids.includes(id)).concat(ids);
+      } else if (action === 'back') {
+        newDoc.order = ids.concat(newDoc.order.filter(id => !ids.includes(id)));
+      } else if (action === 'forward') {
+        // Move each target forward by 1 index from top to bottom
+        for (let i = newDoc.order.length - 2; i >= 0; i--) {
+          const curr = newDoc.order[i];
+          const next = newDoc.order[i + 1];
+          if (ids.includes(curr) && !ids.includes(next)) {
+            newDoc.order[i] = next;
+            newDoc.order[i + 1] = curr;
+          }
+        }
+      } else if (action === 'backward') {
+        // Move each target backward by 1 index from bottom to top
+        for (let i = 1; i < newDoc.order.length; i++) {
+          const curr = newDoc.order[i];
+          const prev = newDoc.order[i - 1];
+          if (ids.includes(curr) && !ids.includes(prev)) {
+            newDoc.order[i] = prev;
+            newDoc.order[i - 1] = curr;
+          }
+        }
+      }
+
+      const inverseCmd = {
+        type: 'restore_order',
+        order: prevOrder
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'restore_order': {
+      const prevOrder = [...newDoc.order];
+      newDoc.order = [...cmd.order];
+      return { doc: newDoc, inverseCmd: { type: 'restore_order', order: prevOrder } };
+    }
+
+    case 'group_objects': {
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      if (ids.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+
+      const groupId = cmd.groupId || generateId('grp');
+      const prevGroupIds = {};
+
+      for (const id of ids) {
+        prevGroupIds[id] = newDoc.objects[id].groupId;
+        newDoc.objects[id].groupId = groupId;
+      }
+      newDoc.groups[groupId] = { id: groupId, name: cmd.name || 'Group' };
+
+      const inverseCmd = {
+        type: 'restore_groups',
+        groupIds: prevGroupIds,
+        removeGroup: groupId
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'ungroup_objects': {
+      const groupIds = cmd.groupIds || [];
+      const restoredGroups = {};
+      const restoredMembers = {};
+
+      for (const gId of groupIds) {
+        if (newDoc.groups[gId]) {
+          restoredGroups[gId] = cloneDocument(newDoc.groups[gId]);
+          delete newDoc.groups[gId];
+        }
+      }
+
+      for (const [id, obj] of Object.entries(newDoc.objects)) {
+        if (obj.groupId && groupIds.includes(obj.groupId)) {
+          restoredMembers[id] = obj.groupId;
+          obj.groupId = null;
+        }
+      }
+
+      const inverseCmd = {
+        type: 'restore_ungroup',
+        groups: restoredGroups,
+        members: restoredMembers
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'restore_groups': {
+      for (const [id, gId] of Object.entries(cmd.groupIds || {})) {
+        if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
+      }
+      if (cmd.removeGroup) {
+        delete newDoc.groups[cmd.removeGroup];
+      }
+      return { doc: newDoc, inverseCmd: { type: 'noop' } };
+    }
+
+    case 'restore_ungroup': {
+      for (const [gId, gData] of Object.entries(cmd.groups || {})) {
+        newDoc.groups[gId] = gData;
+      }
+      for (const [id, gId] of Object.entries(cmd.members || {})) {
+        if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
+      }
+      return { doc: newDoc, inverseCmd: { type: 'noop' } };
+    }
+
+    case 'connect_objects': {
+      const cId = cmd.connectorId || generateId('conn');
+      const prevConnector = newDoc.objects[cId] ? cloneDocument(newDoc.objects[cId]) : null;
+
+      const connectorObj = {
+        id: cId,
+        type: 'connector',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        stroke: cmd.stroke || newDoc.theme.defaultStroke,
+        strokeWidth: cmd.strokeWidth || newDoc.theme.defaultStrokeWidth,
+        strokeStyle: cmd.strokeStyle || 'solid',
+        opacity: cmd.opacity !== undefined ? cmd.opacity : 1.0,
+        roughness: cmd.roughness !== undefined ? cmd.roughness : newDoc.theme.defaultRoughness,
+        seed: generateSeed(),
+        locked: false,
+        from: { id: cmd.fromId, side: cmd.fromSide },
+        to: { id: cmd.toId, side: cmd.toSide },
+        routing: cmd.routing || 'straight',
+        startArrow: cmd.startArrow || false,
+        endArrow: cmd.endArrow !== undefined ? cmd.endArrow : true
+      };
+
+      newDoc.objects[cId] = connectorObj;
+      if (!newDoc.order.includes(cId)) {
+        newDoc.order.push(cId);
+      }
+
+      const inverseCmd = prevConnector
+        ? { type: 'create_object', object: prevConnector }
+        : { type: 'delete_objects', ids: [cId] };
+
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'reconnect_connector': {
+      const conn = newDoc.objects[cmd.id];
+      if (!conn || conn.type !== 'connector' || conn.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const endpoint = cmd.endpoint; // 'from' | 'to'
+      const prevTarget = cloneDocument(conn[endpoint]);
+      conn[endpoint] = cloneDocument(cmd.target);
+
+      const inverseCmd = {
+        type: 'reconnect_connector',
+        id: cmd.id,
+        endpoint,
+        target: prevTarget
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'configure_connector': {
+      const conn = newDoc.objects[cmd.id];
+      if (!conn || conn.type !== 'connector' || conn.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const prevConfig = {
+        routing: conn.routing,
+        startArrow: conn.startArrow,
+        endArrow: conn.endArrow,
+        stacking: conn.stacking
+      };
+
+      if (cmd.routing !== undefined) conn.routing = cmd.routing;
+      if (cmd.startArrow !== undefined) conn.startArrow = cmd.startArrow;
+      if (cmd.endArrow !== undefined) conn.endArrow = cmd.endArrow;
+      if (cmd.stacking !== undefined) conn.stacking = cmd.stacking;
+
+      const inverseCmd = {
+        type: 'configure_connector',
+        id: cmd.id,
+        ...prevConfig
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'configure_connector_endpoints': {
+      const conn = newDoc.objects[cmd.id];
+      if (!conn || conn.type !== 'connector') {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const prevFrom = cloneDocument(conn.from);
+      const prevTo = cloneDocument(conn.to);
+      conn.from = cloneDocument(cmd.from);
+      conn.to = cloneDocument(cmd.to);
+
+      return {
+        doc: newDoc,
+        inverseCmd: {
+          type: 'configure_connector_endpoints',
+          id: cmd.id,
+          from: prevFrom,
+          to: prevTo
+        }
+      };
+    }
+
+    case 'set_board_theme': {
+      const prevTheme = cloneDocument(newDoc.theme);
+      let targetTheme = cmd.theme;
+      if (!targetTheme && cmd.themeId && THEME_PRESETS[cmd.themeId]) {
+        targetTheme = THEME_PRESETS[cmd.themeId];
+      }
+      if (!targetTheme) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      newDoc.theme = { ...newDoc.theme, ...targetTheme };
+
+      const prevObjectStyles = {};
+
+      if (cmd.restoreObjects) {
+        for (const [id, st] of Object.entries(cmd.restoreObjects)) {
+          if (newDoc.objects[id]) {
+            if (st.stroke !== undefined) newDoc.objects[id].stroke = st.stroke;
+            if (st.fill !== undefined) newDoc.objects[id].fill = st.fill;
+            if (st.textColor !== undefined && newDoc.objects[id].textStyle) {
+              newDoc.objects[id].textStyle.color = st.textColor;
+            }
+          }
+        }
+      } else {
+        // Update existing objects and connectors whose styling matches previous theme defaults
+        const oldStroke = prevTheme.defaultStroke;
+        const newStroke = newDoc.theme.defaultStroke;
+        const oldBg = prevTheme.background;
+        const newBg = newDoc.theme.background;
+
+        for (const [id, obj] of Object.entries(newDoc.objects)) {
+          const styleBackup = {};
+          if (obj.stroke === oldStroke) {
+            styleBackup.stroke = obj.stroke;
+            obj.stroke = newStroke;
+          }
+          if (obj.fill === oldBg) {
+            styleBackup.fill = obj.fill;
+            obj.fill = newBg;
+          }
+          if (obj.textStyle?.color === oldStroke) {
+            styleBackup.textColor = obj.textStyle.color;
+            obj.textStyle.color = newStroke;
+          }
+          if (Object.keys(styleBackup).length > 0) {
+            prevObjectStyles[id] = styleBackup;
+          }
+        }
+      }
+
+      const inverseCmd = {
+        type: 'set_board_theme',
+        theme: prevTheme,
+        restoreObjects: prevObjectStyles
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'batch': {
+      const commands = cmd.commands || [];
+      const inverseList = [];
+      let currentDoc = newDoc;
+      for (const subCmd of commands) {
+        const result = applyCommand(currentDoc, subCmd);
+        currentDoc = result.doc;
+        if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
+          inverseList.push(result.inverseCmd);
+        }
+      }
+      inverseList.reverse();
+      const inverseCmd = {
+        type: 'batch',
+        commands: inverseList
+      };
+      return { doc: currentDoc, inverseCmd };
+    }
+
+    case 'noop':
+    default:
+      return { doc: newDoc, inverseCmd: { type: 'noop' } };
+  }
+}
+
+/**
+ * Applies a batch of commands sequentially.
+ * @param {Object} doc 
+ * @param {Array<Object>} commands 
+ * @returns {{ doc: Object, inverseBatch: Object }}
+ */
+function applyCommandBatch(doc, commands) {
+  return applyCommand(doc, { type: 'batch', commands });
+}
+
+// --- Module: src/core/sketch.js ---
+/**
+ * Sabura Deterministic Sketch Generator.
+ * 
+ * Uses a seedable Mulberry32 PRNG to generate reproducible hand-drawn SVG paths
+ * for shapes and connectors. Never produces random jitter across renders.
+ */
+
+/**
+ * Creates a fast, seedable 32-bit PRNG (Mulberry32).
+ * @param {number} seed 
+ * @returns {() => number} Returns float in [0, 1)
+ */
+function createPRNG(seed) {
+  let s = Math.floor(Math.abs(seed)) || 1;
+  return function next() {
+    s |= 0;
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Generates a random number in range [min, max] using provided PRNG.
+ */
+function randomRange(prng, min, max) {
+  return min + prng() * (max - min);
+}
+
+/**
+ * Produces a sketchy, hand-drawn straight or slightly bowed line between two points.
+ * Generates two overlapping, slightly offset passes for sketch feel.
+ * 
+ * @param {number} x1 
+ * @param {number} y1 
+ * @param {number} x2 
+ * @param {number} y2 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @returns {string} SVG path segment string
+ */
+function sketchLine(x1, y1, x2, y2, prng, roughness = 1) {
+  if (roughness <= 0) {
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  if (length < 1e-4) return `M ${x1} ${y1}`;
+
+  const roughnessScale = Math.min(2.5, Math.max(0.4, length / 100)) * roughness;
+  const overshoot = Math.min(6, length * 0.04) * roughness;
+
+  // Unit vector and normal
+  const dx = (x2 - x1) / length;
+  const dy = (y2 - y1) / length;
+  const nx = -dy;
+  const ny = dx;
+
+  function generatePass(passIndex) {
+    const dir = passIndex === 0 ? 1 : -1;
+    const startOffset = randomRange(prng, -overshoot * 0.8, overshoot);
+    const endOffset = randomRange(prng, -overshoot * 0.8, overshoot);
+
+    const sx = x1 - dx * startOffset + nx * randomRange(prng, -roughnessScale * 0.7, roughnessScale * 0.7);
+    const sy = y1 - dy * startOffset + ny * randomRange(prng, -roughnessScale * 0.7, roughnessScale * 0.7);
+
+    const ex = x2 + dx * endOffset + nx * randomRange(prng, -roughnessScale * 0.7, roughnessScale * 0.7);
+    const ey = y2 + dy * endOffset + ny * randomRange(prng, -roughnessScale * 0.7, roughnessScale * 0.7);
+
+    // Midpoint bow with organic curvature
+    const midBow = (randomRange(prng, 0.2, 1.2) * dir) * roughnessScale;
+    const mx = (sx + ex) / 2 + nx * midBow;
+    const my = (sy + ey) / 2 + ny * midBow;
+
+    return `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
+  }
+
+  // Pass 1 and Pass 2 with complementary organic curvature
+  const p1 = generatePass(0);
+  const p2 = generatePass(1);
+  return `${p1} ${p2}`;
+}
+
+/**
+ * Generates sketchy SVG path for a polygon given its vertices.
+ * 
+ * @param {Array<[number, number]>} vertices 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @param {boolean} closePath 
+ * @returns {string}
+ */
+function sketchPolygon(vertices, prng, roughness = 1, closePath = true) {
+  if (!vertices || vertices.length < 2) return '';
+  if (roughness <= 0) {
+    let path = `M ${vertices[0][0]} ${vertices[0][1]}`;
+    for (let i = 1; i < vertices.length; i++) {
+      path += ` L ${vertices[i][0]} ${vertices[i][1]}`;
+    }
+    if (closePath) path += ' Z';
+    return path;
+  }
+
+  let paths = [];
+  const n = vertices.length;
+  const count = closePath ? n : n - 1;
+
+  for (let i = 0; i < count; i++) {
+    const v1 = vertices[i];
+    const v2 = vertices[(i + 1) % n];
+    paths.push(sketchLine(v1[0], v1[1], v2[0], v2[1], prng, roughness));
+  }
+
+  return paths.join(' ');
+}
+
+/**
+ * Generates sketchy SVG path for an ellipse.
+ * Uses two slightly offset 4-point cubic bezier loops.
+ * 
+ * @param {number} cx 
+ * @param {number} cy 
+ * @param {number} rx 
+ * @param {number} ry 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @returns {string}
+ */
+function sketchEllipse(cx, cy, rx, ry, prng, roughness = 1) {
+  if (roughness <= 0) {
+    return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z`;
+  }
+
+  const k = 0.5522847498; // Cubic bezier constant for circular arcs
+  const paths = [];
+
+  for (let pass = 0; pass < 2; pass++) {
+    const wobble = Math.min(3, Math.max(0.5, (rx + ry) / 100)) * roughness;
+    const wrx = rx + randomRange(prng, -wobble, wobble);
+    const wry = ry + randomRange(prng, -wobble, wobble);
+    const wcx = cx + randomRange(prng, -wobble * 0.5, wobble * 0.5);
+    const wcy = cy + randomRange(prng, -wobble * 0.5, wobble * 0.5);
+
+    const ox = wrx * k;
+    const oy = wry * k;
+
+    // 4 cardinal points with slight wobble
+    const pTop = [wcx, wcy - wry];
+    const pRight = [wcx + wrx, wcy];
+    const pBottom = [wcx, wcy + wry];
+    const pLeft = [wcx - wrx, wcy];
+
+    const d = [
+      `M ${pTop[0].toFixed(1)} ${pTop[1].toFixed(1)}`,
+      `C ${(wcx + ox).toFixed(1)} ${pTop[1].toFixed(1)}, ${pRight[0].toFixed(1)} ${(wcy - oy).toFixed(1)}, ${pRight[0].toFixed(1)} ${pRight[1].toFixed(1)}`,
+      `C ${pRight[0].toFixed(1)} ${(wcy + oy).toFixed(1)}, ${(wcx + ox).toFixed(1)} ${pBottom[1].toFixed(1)}, ${pBottom[0].toFixed(1)} ${pBottom[1].toFixed(1)}`,
+      `C ${(wcx - ox).toFixed(1)} ${pBottom[1].toFixed(1)}, ${pLeft[0].toFixed(1)} ${(wcy + oy).toFixed(1)}, ${pLeft[0].toFixed(1)} ${pLeft[1].toFixed(1)}`,
+      `C ${pLeft[0].toFixed(1)} ${(wcy - oy).toFixed(1)}, ${(wcx - ox).toFixed(1)} ${pTop[1].toFixed(1)}, ${pTop[0].toFixed(1)} ${pTop[1].toFixed(1)}`
+    ].join(' ');
+
+    paths.push(d);
+  }
+
+  return paths.join(' ');
+}
+
+/**
+ * Master sketch path generator for any Sabura object.
+ * Returns pure SVG path `d` string.
+ * Strictly deterministic: identical inputs yield identical output.
+ * 
+ * @param {Object} obj - Sabura object
+ * @returns {string} SVG path 'd' attribute
+ */
+function generateSketchPath(obj) {
+  const prng = createPRNG(obj.seed || 12345);
+  const roughness = obj.roughness !== undefined ? obj.roughness : 1;
+
+  switch (obj.type) {
+    case 'rectangle': {
+      const vertices = [
+        [obj.x, obj.y],
+        [obj.x + obj.width, obj.y],
+        [obj.x + obj.width, obj.y + obj.height],
+        [obj.x, obj.y + obj.height]
+      ];
+      return sketchPolygon(vertices, prng, roughness, true);
+    }
+
+    case 'diamond': {
+      const cx = obj.x + obj.width / 2;
+      const cy = obj.y + obj.height / 2;
+      const vertices = [
+        [cx, obj.y],
+        [obj.x + obj.width, cy],
+        [cx, obj.y + obj.height],
+        [obj.x, cy]
+      ];
+      return sketchPolygon(vertices, prng, roughness, true);
+    }
+
+    case 'triangle': {
+      const cx = obj.x + obj.width / 2;
+      const vertices = [
+        [cx, obj.y],
+        [obj.x + obj.width, obj.y + obj.height],
+        [obj.x, obj.y + obj.height]
+      ];
+      return sketchPolygon(vertices, prng, roughness, true);
+    }
+
+    case 'ellipse': {
+      const rx = obj.width / 2;
+      const ry = obj.height / 2;
+      const cx = obj.x + rx;
+      const cy = obj.y + ry;
+      return sketchEllipse(cx, cy, rx, ry, prng, roughness);
+    }
+
+    case 'path': {
+      if (!obj.points || obj.points.length === 0) return '';
+      const vertices = obj.points.map(([px, py]) => [obj.x + px, obj.y + py]);
+      return sketchPolygon(vertices, prng, roughness, false);
+    }
+
+    default:
+      return '';
+  }
+}
+
+/**
+ * Generates a closed SVG path suitable for organic watercolor/marker fills.
+ * When roughness > 0, connects vertices with subtle natural curves.
+ * 
+ * @param {Object} obj - Sabura object
+ * @returns {string} SVG path 'd' attribute
+ */
+function generateClosedFillPath(obj) {
+  const prng = createPRNG((obj.seed || 12345) + 77);
+  const roughness = obj.roughness !== undefined ? obj.roughness : 1;
+
+  if (obj.type === 'ellipse') {
+    const rx = obj.width / 2;
+    const ry = obj.height / 2;
+    const cx = obj.x + rx;
+    const cy = obj.y + ry;
+    if (roughness <= 0) {
+      return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z`;
+    }
+    const wobble = Math.min(2, Math.max(0.3, (rx + ry) / 120)) * roughness;
+    const wrx = rx + randomRange(prng, -wobble, wobble);
+    const wry = ry + randomRange(prng, -wobble, wobble);
+    return `M ${cx - wrx} ${cy} A ${wrx} ${wry} 0 1 0 ${cx + wrx} ${cy} A ${wrx} ${wry} 0 1 0 ${cx - wrx} ${cy} Z`;
+  }
+
+  let vertices = [];
+  if (obj.type === 'rectangle') {
+    vertices = [
+      [obj.x, obj.y],
+      [obj.x + obj.width, obj.y],
+      [obj.x + obj.width, obj.y + obj.height],
+      [obj.x, obj.y + obj.height]
+    ];
+  } else if (obj.type === 'diamond') {
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+    vertices = [
+      [cx, obj.y],
+      [obj.x + obj.width, cy],
+      [cx, obj.y + obj.height],
+      [obj.x, cy]
+    ];
+  } else if (obj.type === 'triangle') {
+    const cx = obj.x + obj.width / 2;
+    vertices = [
+      [cx, obj.y],
+      [obj.x + obj.width, obj.y + obj.height],
+      [obj.x, obj.y + obj.height]
+    ];
+  } else if (obj.type === 'path') {
+    if (!obj.points || obj.points.length < 3) return '';
+    vertices = obj.points.map(([px, py]) => [obj.x + px, obj.y + py]);
+  } else {
+    return '';
+  }
+
+  if (roughness <= 0) {
+    return `M ${vertices[0][0]} ${vertices[0][1]} ` + vertices.slice(1).map(v => `L ${v[0]} ${v[1]}`).join(' ') + ' Z';
+  }
+
+  // Organic closed path with gentle midpoint curves
+  let d = `M ${vertices[0][0].toFixed(1)} ${vertices[0][1].toFixed(1)}`;
+  const n = vertices.length;
+  for (let i = 0; i < n; i++) {
+    const v1 = vertices[i];
+    const v2 = vertices[(i + 1) % n];
+    const len = Math.hypot(v2[0] - v1[0], v2[1] - v1[1]);
+    const nx = -(v2[1] - v1[1]) / (len || 1);
+    const ny = (v2[0] - v1[0]) / (len || 1);
+    const bow = randomRange(prng, -0.8, 0.8) * Math.min(2, len * 0.02) * roughness;
+    const mx = (v1[0] + v2[0]) / 2 + nx * bow;
+    const my = (v1[1] + v2[1]) / 2 + ny * bow;
+    d += ` Q ${mx.toFixed(1)} ${my.toFixed(1)} ${v2[0].toFixed(1)} ${v2[1].toFixed(1)}`;
+  }
+  d += ' Z';
+  return d;
+}
+
+/**
+ * Sketches a hand-drawn circular arc from startAngle to endAngle at radius r.
+ * 
+ * @param {number} cx 
+ * @param {number} cy 
+ * @param {number} r 
+ * @param {number} startAngle 
+ * @param {number} endAngle 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @returns {string} SVG path segment string
+ */
+function sketchArc(cx, cy, r, startAngle, endAngle, prng, roughness = 1) {
+  const span = Math.abs(endAngle - startAngle);
+  if (span < 1e-4) return '';
+
+  if (roughness <= 0) {
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const largeArc = span > Math.PI ? 1 : 0;
+    const sweep = endAngle > startAngle ? 1 : 0;
+    return `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${largeArc} ${sweep} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  }
+
+  const steps = Math.max(2, Math.ceil(span / 0.35));
+  const stepAngle = (endAngle - startAngle) / steps;
+  const paths = [];
+
+  for (let pass = 0; pass < 2; pass++) {
+    let d = '';
+    const dir = pass === 0 ? 1 : -1;
+    const rOffset = dir * (0.3 + prng() * 0.6) * roughness;
+    for (let i = 0; i < steps; i++) {
+      const sa1 = startAngle + i * stepAngle;
+      const sa2 = sa1 + stepAngle;
+      const p1x = cx + (r + rOffset) * Math.cos(sa1);
+      const p1y = cy + (r + rOffset) * Math.sin(sa1);
+      const p2x = cx + (r + rOffset) * Math.cos(sa2);
+      const p2y = cy + (r + rOffset) * Math.sin(sa2);
+      const midA = (sa1 + sa2) / 2;
+      const bow = (prng() - 0.5) * 1.5 * roughness;
+      const pmx = cx + (r + rOffset + bow) * Math.cos(midA);
+      const pmy = cy + (r + rOffset + bow) * Math.sin(midA);
+
+      if (i === 0) d += `M ${p1x.toFixed(1)} ${p1y.toFixed(1)}`;
+      d += ` Q ${pmx.toFixed(1)} ${pmy.toFixed(1)} ${p2x.toFixed(1)} ${p2y.toFixed(1)}`;
+    }
+    paths.push(d);
+  }
+  return paths.join(' ');
+}
+
+/**
+ * Sketches a hand-drawn outline for a wheel wedge with natural pen lines and arcs.
+ * 
+ * @param {number} cx 
+ * @param {number} cy 
+ * @param {number} rInner 
+ * @param {number} rOuter 
+ * @param {number} startAngle 
+ * @param {number} endAngle 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @param {number} gapAngle 
+ * @returns {string} SVG path string
+ */
+function sketchWedge(cx, cy, rInner, rOuter, startAngle, endAngle, prng, roughness = 1, gapAngle = 0.025) {
+  const span = endAngle - startAngle;
+  const actualGap = Math.min(gapAngle, span * 0.25);
+  const actualStart = startAngle + actualGap / 2;
+  const actualEnd = endAngle - actualGap / 2;
+
+  const x1 = cx + rOuter * Math.cos(actualStart);
+  const y1 = cy + rOuter * Math.sin(actualStart);
+  const x2 = cx + rOuter * Math.cos(actualEnd);
+  const y2 = cy + rOuter * Math.sin(actualEnd);
+
+  const x3 = cx + rInner * Math.cos(actualEnd);
+  const y3 = cy + rInner * Math.sin(actualEnd);
+  const x4 = cx + rInner * Math.cos(actualStart);
+  const y4 = cy + rInner * Math.sin(actualStart);
+
+  if (roughness <= 0) {
+    const largeArc = actualEnd - actualStart > Math.PI ? 1 : 0;
+    return `M ${x4.toFixed(1)} ${y4.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+  }
+
+  // Double-pass hand-drawn outer arc, radial dividers, and inner arc
+  const l1 = sketchLine(x4, y4, x1, y1, prng, roughness);
+  const arcOuter = sketchArc(cx, cy, rOuter, actualStart, actualEnd, prng, roughness);
+  const l2 = sketchLine(x2, y2, x3, y3, prng, roughness);
+  const arcInner = sketchArc(cx, cy, rInner, actualEnd, actualStart, prng, roughness);
+
+  return `${l1} ${arcOuter} ${l2} ${arcInner}`;
+}
+
+// --- Module: src/storage/file-packer.js ---
+/**
+ * Sabura File Packer: Single-file HTML packaging, canonical seam embedding, and save/download coordinator.
+ */
+
+
+
+const DOCUMENT_SEAM_ID = 'sabura-document';
+const DOCUMENT_SCRIPT_REGEX = new RegExp('<script\\s+type=["\']application\\/json["\']\\s+id=["\']sabura-document["\']>([\\s\\S]*?)<\\/' + 'script>', 'i');
+
+/**
+ * Extracts and validates the embedded Sabura document from an HTML string.
+ * @param {string} htmlContent 
+ * @returns {{ valid: boolean, document: Object | null, errors: string[] }}
+ */
+function extractDocumentFromHtml(htmlContent) {
+  if (typeof htmlContent !== 'string') {
+    return { valid: false, document: null, errors: ['HTML content must be a string'] };
+  }
+
+  const match = htmlContent.match(DOCUMENT_SCRIPT_REGEX);
+  if (!match) {
+    return { valid: false, document: null, errors: ['No <script id="sabura-document"> tag found in HTML'] };
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch (err) {
+    return { valid: false, document: null, errors: [`JSON parse error in document seam: ${err.message}`] };
+  }
+
+  const validation = validateDocument(parsed);
+  if (!validation.valid) {
+    return { valid: false, document: parsed, errors: validation.errors };
+  }
+
+  return { valid: true, document: parsed, errors: [] };
+}
+
+/**
+ * Packages a document into an HTML shell by replacing ONLY the canonical document seam.
+ * 
+ * @param {string} htmlShell - The full HTML template or current document HTML
+ * @param {Object} doc - The validated Sabura document
+ * @returns {{ success: boolean, html: string, error?: string }}
+ */
+function packageHtmlWithDocument(htmlShell, doc) {
+  const validation = validateDocument(doc);
+  if (!validation.valid) {
+    return {
+      success: false,
+      html: '',
+      error: `Cannot package invalid document: ${validation.errors.join(', ')}`
+    };
+  }
+
+  const serialized = canonicalJson(doc);
+  const seamReplacement = '<script type="application/json" id="' + DOCUMENT_SEAM_ID + '">\n' + serialized + '\n<' + '/script>';
+
+  if (!DOCUMENT_SCRIPT_REGEX.test(htmlShell)) {
+    return {
+      success: false,
+      html: '',
+      error: 'Base HTML template missing sabura-document seam'
+    };
+  }
+
+  const updatedHtml = htmlShell.replace(DOCUMENT_SCRIPT_REGEX, seamReplacement);
+  return {
+    success: true,
+    html: updatedHtml
+  };
+}
+
+/**
+ * Initiates a browser download for a self-contained HTML file.
+ * 
+ * @param {string} filename 
+ * @param {string} htmlContent 
+ */
+function triggerFileDownload(filename, htmlContent) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('triggerFileDownload can only be called in a browser environment');
+  }
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 200);
+}
+
+// --- Module: src/renderer/laser.js ---
+/**
+ * Sabura Laser Pointer: Canvas-based temporary laser pointer with glowing fading trail for Presentation mode.
+ */
+
+class LaserPointer {
+  constructor(canvasElement) {
+    this.canvas = canvasElement;
+    this.ctx = this.canvas.getContext('2d');
+    this.points = [];
+    this.active = false;
+    this.animId = null;
+    this.decayMs = 600;
+
+    this.render = this.render.bind(this);
+  }
+
+  start() {
+    this.active = true;
+    this.points = [];
+    this.resize();
+    this.render();
+  }
+
+  stop() {
+    this.active = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.points = [];
+  }
+
+  resize() {
+    if (!this.canvas) return;
+    this.canvas.width = window.innerWidth * (window.devicePixelRatio || 1);
+    this.canvas.height = window.innerHeight * (window.devicePixelRatio || 1);
+    this.ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+  }
+
+  addPoint(x, y) {
+    if (!this.active) return;
+    const now = performance.now();
+    this.points.push({ x, y, time: now });
+  }
+
+  render() {
+    if (!this.active) return;
+    const now = performance.now();
+    const ctx = this.ctx;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Filter out expired points
+    this.points = this.points.filter(p => now - p.time < this.decayMs);
+
+    if (this.points.length > 1) {
+      for (let i = 1; i < this.points.length; i++) {
+        const p1 = this.points[i - 1];
+        const p2 = this.points[i];
+        const age = now - p2.time;
+        const progress = Math.max(0, 1 - age / this.decayMs);
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = `rgba(255, 59, 48, ${progress * 0.7})`;
+        ctx.lineWidth = 4 * progress;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Inner glowing core
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${progress * 0.9})`;
+        ctx.lineWidth = 1.5 * progress;
+        ctx.stroke();
+      }
+
+      // Tip dot
+      const tip = this.points[this.points.length - 1];
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 59, 48, 0.9)';
+      ctx.shadowColor = '#ff3b30';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    }
+
+    this.animId = requestAnimationFrame(this.render);
+  }
+}
+
+// --- Module: src/renderer/svg-renderer.js ---
+/**
+ * Sabura SVG Renderer: Pure SVG rendering of canvas background, shapes, connectors, text,
+ * and runtime interaction overlays (selection, handles, guides).
+ */
+
+
+
+
+
+/**
+ * Calculates perceived luminance of a hex color.
+ */
+function hexToLuminance(hex) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return 0.5;
+  let c = hex.slice(1);
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return 0.5;
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Ensures text or stroke remains legible across dark/light theme transitions.
+ */
+function resolveContrastColor(color, background, fallbackLight = '#ffffff', fallbackDark = '#1e1e1e') {
+  if (!color || color === 'none') return color;
+  const bgLum = hexToLuminance(background);
+  const colLum = hexToLuminance(color);
+  if (bgLum < 0.25 && colLum < 0.22) {
+    return fallbackLight;
+  }
+  if (bgLum > 0.75 && colLum > 0.78) {
+    return fallbackDark;
+  }
+  return color;
+}
+
+/**
+ * Escapes XML/HTML text.
+ */
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Renders an SVG arrowhead marker with natural Excalidraw stroke character.
+ */
+function renderArrowhead(tipX, tipY, fromX, fromY, size = 14, stroke = '#1e1e1e', strokeWidth = 2, isSketch = true) {
+  const angle = Math.atan2(tipY - fromY, tipX - fromX);
+  const leftAngle = angle + Math.PI * 0.84;
+  const rightAngle = angle - Math.PI * 0.84;
+
+  const lx = tipX + Math.cos(leftAngle) * size;
+  const ly = tipY + Math.sin(leftAngle) * size;
+  const rx = tipX + Math.cos(rightAngle) * size;
+  const ry = tipY + Math.sin(rightAngle) * size;
+
+  if (!isSketch) {
+    return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} L ${tipX.toFixed(1)} ${tipY.toFixed(1)} L ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+  }
+
+  // Hand-drawn sketchy arrowhead wings with subtle curve
+  const mxL = (lx + tipX) / 2 + Math.sin(angle) * 1.5;
+  const myL = (ly + tipY) / 2 - Math.cos(angle) * 1.5;
+  const mxR = (rx + tipX) / 2 - Math.sin(angle) * 1.5;
+  const myR = (ry + tipY) / 2 + Math.cos(angle) * 1.5;
+
+  return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} Q ${mxL.toFixed(1)} ${myL.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)} Q ${mxR.toFixed(1)} ${myR.toFixed(1)} ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+}
+
+/**
+ * Wraps text into lines based on approximate character width.
+ */
+function wrapText(text, maxWidth, fontSize) {
+  if (!text) return [];
+  const approxCharWidth = fontSize * 0.55;
+  const maxChars = Math.max(1, Math.floor(maxWidth / approxCharWidth));
+  const rawLines = text.split('\n');
+  const wrapped = [];
+
+  for (const raw of rawLines) {
+    if (raw.length <= maxChars) {
+      wrapped.push(raw);
+    } else {
+      const words = raw.split(' ');
+      let current = '';
+      for (const w of words) {
+        if (!current) {
+          current = w;
+        } else if ((current + ' ' + w).length <= maxChars) {
+          current += ' ' + w;
+        } else {
+          wrapped.push(current);
+          current = w;
+        }
+      }
+      if (current) wrapped.push(current);
+    }
+  }
+  return wrapped;
+}
+
+/**
+ * Renders the entire SVG scene string.
+ * 
+ * @param {Object} doc - Sabura document
+ * @param {Object} runtime - Ephemeral runtime state (camera, selection, marquee, snapLines, hoverHandle)
+ * @returns {string} Inner SVG content
+ */
+function renderSvgScene(doc, runtime) {
+  const { camera, selectedIds = [], marquee = null, snapGuides = [], connectorDraft = null } = runtime;
+  const theme = doc.theme;
+
+  let out = [];
+  out.push('<svg id="canvas-svg" width="100%" height="100%" style="display: block; width: 100%; height: 100%;">');
+
+  // Defs for filters / patterns
+  out.push('<defs>');
+  if (theme.id === 'blueprint') {
+    out.push(`
+      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+        patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
+        <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${theme.gridColor || 'rgba(56, 189, 248, 0.15)'}" stroke-width="0.8" />
+      </pattern>
+    `);
+  } else {
+    out.push(`
+      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+        patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
+        <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
+      </pattern>
+    `);
+  }
+  out.push('</defs>');
+
+  // Background rect with grid pattern
+  out.push(`<rect width="100%" height="100%" fill="${theme.background}" />`);
+  if (runtime.showGrid !== false) {
+    out.push('<rect width="100%" height="100%" fill="url(#canvas-grid)" pointer-events="none" />');
+  }
+
+  // World transform group
+  out.push(`<g id="world-layer" transform="translate(${camera.x}, ${camera.y}) scale(${camera.zoom})">`);
+
+  // Determine effective rendering order:
+  // Non-connectors follow doc.order.
+  // Connectors follow explicit stacking ('front' or 'back') or naturally follow the visual level of connected objects.
+  const baseOrder = [...doc.order];
+  const orderIndices = new Map(baseOrder.map((id, idx) => [id, idx]));
+
+  const sortedOrder = [...baseOrder].sort((aId, bId) => {
+    const aObj = doc.objects[aId];
+    const bObj = doc.objects[bId];
+    const aBase = orderIndices.get(aId) ?? 0;
+    const bBase = orderIndices.get(bId) ?? 0;
+
+    const getEffectiveKey = (obj, baseIdx) => {
+      if (!obj || obj.type !== 'connector') return baseIdx * 10;
+      if (obj.stacking === 'back') return -1000 + baseIdx;
+      if (obj.stacking === 'front') return 1000000 + baseIdx;
+
+      // Natural visual level: if connected to objects, sit at or above max connected object
+      const fromIdx = obj.from?.id ? orderIndices.get(obj.from.id) : undefined;
+      const toIdx = obj.to?.id ? orderIndices.get(obj.to.id) : undefined;
+      if (fromIdx !== undefined || toIdx !== undefined) {
+        const maxConnected = Math.max(fromIdx ?? -1, toIdx ?? -1);
+        const naturalIdx = Math.max(baseIdx, maxConnected);
+        return naturalIdx * 10 + 1;
+      }
+      return baseIdx * 10;
+    };
+
+    return getEffectiveKey(aObj, aBase) - getEffectiveKey(bObj, bBase);
+  });
+
+  // Render objects according to sorted order
+  for (const objId of sortedOrder) {
+    const obj = doc.objects[objId];
+    if (!obj) continue;
+
+    out.push(renderObject(doc, obj, selectedIds.includes(objId)));
+  }
+
+  // Render connector draft if in progress
+  if (connectorDraft) {
+    out.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${theme.defaultStroke}" stroke-width="2" stroke-dasharray="4,4" />`);
+  }
+
+  // Render runtime snap guides
+  for (const guide of snapGuides) {
+    if (guide.orientation === 'v') {
+      out.push(`<line x1="${guide.pos}" y1="${guide.from}" x2="${guide.pos}" y2="${guide.to}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+    } else {
+      out.push(`<line x1="${guide.from}" y1="${guide.pos}" x2="${guide.to}" y2="${guide.pos}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+    }
+  }
+
+  // Render selection boxes and handles
+  if (selectedIds.length > 0) {
+    out.push(renderSelectionOverlay(doc, selectedIds));
+  }
+
+  // Render marquee selection box
+  if (marquee) {
+    const mx = Math.min(marquee.startX, marquee.currentX);
+    const my = Math.min(marquee.startY, marquee.currentY);
+    const mw = Math.abs(marquee.currentX - marquee.startX);
+    const mh = Math.abs(marquee.currentY - marquee.startY);
+    out.push(`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="rgba(25, 113, 194, 0.1)" stroke="#1971c2" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" />`);
+  }
+
+  out.push('</g>'); // end world-layer
+  out.push('</svg>');
+  return out.join('\n');
+}
+
+/**
+ * Renders an individual object to SVG.
+ */
+function renderObject(doc, obj, isSelected = false) {
+  const isSketch = (obj.roughness !== undefined ? obj.roughness : 1) > 0;
+  const strokeWidth = obj.strokeWidth || 2;
+  const baseStroke = obj.stroke || '#1e1e1e';
+  const stroke = resolveContrastColor(baseStroke, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+  const fill = obj.fill || 'none';
+  const opacity = obj.opacity !== undefined ? obj.opacity : 1.0;
+  const strokeDash = obj.strokeStyle === 'dashed' ? '8,6' : (obj.strokeStyle === 'dotted' ? '3,4' : 'none');
+
+  let markup = [];
+  markup.push(`<g id="elem-${obj.id}" data-id="${obj.id}" opacity="${opacity}">`);
+
+  if (obj.type === 'connector') {
+    const geom = resolveConnectorGeometry(doc, obj);
+    let pathD = geom.path;
+
+    markup.push(`<path d="${pathD}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+
+    // Arrowheads
+    if (obj.endArrow && geom.points.length >= 2) {
+      const tip = geom.points[geom.points.length - 1];
+      const prev = geom.points[geom.points.length - 2];
+      markup.push(renderArrowhead(tip.x, tip.y, prev.x, prev.y, 14, stroke, strokeWidth, isSketch));
+    }
+    if (obj.startArrow && geom.points.length >= 2) {
+      const tip = geom.points[0];
+      const next = geom.points[1];
+      markup.push(renderArrowhead(tip.x, tip.y, next.x, next.y, 14, stroke, strokeWidth, isSketch));
+    }
+  } else if (obj.type === 'text') {
+    // Standalone text
+    const textStyle = obj.textStyle || {};
+    const fontSize = textStyle.resolvedSize || 20;
+    const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
+    const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
+    const fontWeight = textStyle.bold ? 'bold' : 'normal';
+    const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
+    const fillCol = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+    const lines = obj.text ? obj.text.split('\n') : [];
+    if (lines.length > 0) {
+      let textAnchor = 'start';
+      let textX = obj.x + 6;
+      if (textStyle.align === 'center') {
+        textAnchor = 'middle';
+        textX = obj.x + obj.width / 2;
+      } else if (textStyle.align === 'right') {
+        textAnchor = 'end';
+        textX = obj.x + obj.width - 6;
+      }
+
+      const lineHeight = fontSize * 1.3;
+      const totalHeight = (lines.length - 1) * lineHeight + fontSize;
+      const startY = obj.y + Math.max(0, (obj.height - totalHeight) / 2) + fontSize * 0.85;
+
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${fillCol}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      for (let i = 0; i < lines.length; i++) {
+        markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
+      }
+      markup.push('</text>');
+    }
+  } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'path'].includes(obj.type)) {
+    // Shape base background for fill (organic marker wash in sketch mode)
+    if (fill !== 'none') {
+      const fillPath = generateClosedFillPath(obj);
+      if (fillPath) {
+        const isWhite = fill.toLowerCase() === '#ffffff' || fill.toLowerCase() === '#fff' || fill.toLowerCase() === '#18181b';
+        const fillOpacity = isSketch ? (isWhite ? 0.95 : 0.42) : 1.0;
+        markup.push(`<path d="${fillPath}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="none" />`);
+      }
+    }
+
+    // Stroke path (sketchy or clean)
+    const strokePath = generateSketchPath(obj);
+    if (strokePath) {
+      markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+    }
+
+    // Text inside shape
+    if (obj.text && obj.text.trim()) {
+      const textStyle = obj.textStyle || {};
+      const fontSize = textStyle.resolvedSize || 20;
+      const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
+      const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
+      const fontWeight = textStyle.bold ? 'bold' : 'normal';
+      const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
+      const textColor = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+
+      const lines = wrapText(obj.text, obj.width - 16, fontSize);
+      const lineHeight = fontSize * 1.25;
+      const totalTextHeight = lines.length * lineHeight;
+      const startY = obj.y + (obj.height - totalTextHeight) / 2 + fontSize * 0.85;
+
+      let textAnchor = 'middle';
+      let textX = obj.x + obj.width / 2;
+      if (textStyle.align === 'left') {
+        textAnchor = 'start';
+        textX = obj.x + 12;
+      } else if (textStyle.align === 'right') {
+        textAnchor = 'end';
+        textX = obj.x + obj.width - 12;
+      }
+
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      for (let i = 0; i < lines.length; i++) {
+        markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
+      }
+      markup.push('</text>');
+    }
+  } else {
+    // Custom namespaced unknown object placeholder
+    markup.push(`<rect x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" fill="#f1f3f5" stroke="#868e96" stroke-width="1.5" stroke-dasharray="4,4" />`);
+    markup.push(`<text x="${obj.x + 8}" y="${obj.y + 20}" font-size="12" fill="#495057" font-family="sans-serif">[Inert: ${escapeXml(obj.type)}]</text>`);
+  }
+
+  // Lock indicator icon if locked
+  if (obj.locked) {
+    const box = getBoundingBox(obj);
+    markup.push(`<g transform="translate(${box.right - 18}, ${box.y + 4})">
+      <rect x="0" y="4" width="12" height="9" rx="2" fill="#868e96" />
+      <path d="M 2 4 V 2 A 4 4 0 0 1 10 2 V 4" stroke="#868e96" stroke-width="1.5" fill="none" />
+    </g>`);
+  }
+
+  markup.push('</g>');
+  return markup.join('\n');
+}
+
+/**
+ * Renders selection bounding box, group boundaries, and 8 resize handles.
+ */
+function renderSelectionOverlay(doc, selectedIds) {
+  const selectedObjects = selectedIds.map(id => doc.objects[id]).filter(Boolean);
+  if (selectedObjects.length === 0) return '';
+
+  const markup = [];
+
+  // If single connector selected, render endpoint handles
+  if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
+    const conn = selectedObjects[0];
+    const geom = resolveConnectorGeometry(doc, conn);
+    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    return markup.join('\n');
+  }
+
+  const unionBox = getUnionBoundingBox(selectedObjects);
+  if (!unionBox) return '';
+
+  const pad = 4;
+  const bx = unionBox.x - pad;
+  const by = unionBox.y - pad;
+  const bw = unionBox.width + pad * 2;
+  const bh = unionBox.height + pad * 2;
+
+  // Bounding rect: Concepts precision hairline dash with subtle accent wash
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(25, 113, 194, 0.03)" stroke="#1971c2" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+
+  // Only render 8 resize handles if single unlocked object or non-group selection
+  const isSingle = selectedObjects.length === 1;
+  const isLocked = selectedObjects.some(o => o.locked);
+
+  if (!isLocked) {
+    const handles = [
+      { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
+      { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },
+      { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
+      { id: 'e', x: bx + bw, y: by + bh / 2, cursor: 'ew-resize' },
+      { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
+      { id: 's', x: bx + bw / 2, y: by + bh, cursor: 'ns-resize' },
+      { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' },
+      { id: 'w', x: bx, y: by + bh / 2, cursor: 'ew-resize' }
+    ];
+
+    for (const h of handles) {
+      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="#ffffff" stroke="#1971c2" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+    }
+  }
+
+  return markup.join('\n');
+}
+
+// --- Module: src/ui/wheel.js ---
+/**
+ * Creates SVG path for an annular sector (pie wedge).
+ * 
+ * @param {number} cx - Center X
+ * @param {number} cy - Center Y
+ * @param {number} rInner - Inner radius
+ * @param {number} rOuter - Outer radius
+ * @param {number} startAngle - Start angle in radians
+ * @param {number} endAngle - End angle in radians
+ * @returns {string} SVG path 'd' attribute
+ */
+function createWedgePath(cx, cy, rInner, rOuter, startAngle, endAngle, gapAngle = 0.025) {
+  const span = endAngle - startAngle;
+  const actualGap = Math.min(gapAngle, span * 0.25);
+  const actualStart = startAngle + actualGap / 2;
+  const actualEnd = endAngle - actualGap / 2;
+
+  const x1 = cx + rOuter * Math.cos(actualStart);
+  const y1 = cy + rOuter * Math.sin(actualStart);
+  const x2 = cx + rOuter * Math.cos(actualEnd);
+  const y2 = cy + rOuter * Math.sin(actualEnd);
+
+  const x3 = cx + rInner * Math.cos(actualEnd);
+  const y3 = cy + rInner * Math.sin(actualEnd);
+  const x4 = cx + rInner * Math.cos(actualStart);
+  const y4 = cy + rInner * Math.sin(actualStart);
+
+  const largeArc = actualEnd - actualStart > Math.PI ? 1 : 0;
+
+  if (rInner <= 0) {
+    return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+  }
+
+  return `M ${x4.toFixed(2)} ${y4.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`;
+}
+
+class ToolWheel {
+  constructor(containerElement, onAction) {
+    this.container = containerElement;
+    this.onAction = onAction; // Callback (actionName, payload)
+    this.isOpen = false;
+    this.pos = { x: 0, y: 0 };
+    this.context = 'canvas'; // 'canvas' | 'object'
+    this.selectedObject = null;
+    this.hoveredItem = null;
+    this.activeSubMenu = null;
+    this.themePalette = [];
+
+    this.wheelEl = document.createElement('div');
+    this.wheelEl.className = 'sabura-wheel';
+    this.wheelEl.style.display = 'none';
+    this.container.appendChild(this.wheelEl);
+
+    this.onPointerDownOutside = this.onPointerDownOutside.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
+  }
+
+  setThemePalette(palette) {
+    this.themePalette = palette || [];
+  }
+
+  open(x, y, context = 'canvas', selectedObject = null, palette = [], selectedCount = 1) {
+    if (palette && palette.length) this.themePalette = palette;
+    this.context = context;
+    this.selectedObject = selectedObject;
+    this.selectedCount = selectedCount;
+    this.activeSubMenu = null;
+    this.hoveredItem = null;
+
+    // Clamp wheel position within viewport
+    const pad = 160; // Max radius with outer ring
+    const clampedX = Math.max(pad, Math.min(window.innerWidth - pad, x));
+    const clampedY = Math.max(pad, Math.min(window.innerHeight - pad, y));
+    this.pos = { x: clampedX, y: clampedY };
+
+    this.isOpen = true;
+    this.wheelEl.style.display = 'block';
+    this.wheelEl.style.left = `${this.pos.x}px`;
+    this.wheelEl.style.top = `${this.pos.y}px`;
+
+    this.render();
+
+    window.addEventListener('pointerdown', this.onPointerDownOutside, true);
+    window.addEventListener('keydown', this.onKeyDown, true);
+  }
+
+  close() {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.wheelEl.style.display = 'none';
+    this.activeSubMenu = null;
+    this.hoveredItem = null;
+    window.removeEventListener('pointerdown', this.onPointerDownOutside, true);
+    window.removeEventListener('keydown', this.onKeyDown, true);
+  }
+
+  onPointerDownOutside(e) {
+    if (!this.wheelEl.contains(e.target)) {
+      this.close();
+    }
+  }
+
+  onKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      this.close();
+    }
+  }
+
+  getItems() {
+    if (this.context === 'canvas') {
+      return [
+        { id: 'tool_select', label: 'Select', icon: '↖' },
+        {
+          id: 'shapes',
+          label: 'Shapes',
+          icon: '▢',
+          subItems: [
+            { id: 'shape_rectangle', label: 'Rectangle', icon: '▭' },
+            { id: 'shape_ellipse', label: 'Ellipse', icon: '◯' },
+            { id: 'shape_diamond', label: 'Diamond', icon: '◇' },
+            { id: 'shape_triangle', label: 'Triangle', icon: '△' }
+          ]
+        },
+        { id: 'tool_text', label: 'Text', icon: 'T' },
+        {
+          id: 'connector',
+          label: 'Connect',
+          icon: '➔',
+          subItems: [
+            { id: 'conn_straight', label: 'Straight', icon: '—' },
+            { id: 'conn_elbow', label: 'Elbow', icon: '⌐' },
+            { id: 'conn_curved', label: 'Curved', icon: '~' }
+          ]
+        },
+        { id: 'tool_draw', label: 'Draw', icon: '✎' },
+        { id: 'tool_hand', label: 'Hand/Pan', icon: '✋' },
+        { id: 'action_undo', label: 'Undo', icon: '↶' },
+        { id: 'action_redo', label: 'Redo', icon: '↷' }
+      ];
+    }
+
+    // Selected object context
+    const isLocked = this.selectedObject?.locked;
+    const isGrouped = Boolean(this.selectedObject?.groupId);
+    const isConnector = this.selectedObject?.type === 'connector';
+    const isMulti = this.selectedCount > 1;
+
+    const items = [];
+
+    // Context: Multiple objects
+    if (isMulti) {
+      // Shared styling
+      const fillSub = [
+        { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
+        ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
+      ];
+      items.push({ id: 'menu_fill', label: 'Fill', icon: '▨', subItems: fillSub });
+
+      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+      items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
+
+      items.push({
+        id: 'menu_opacity',
+        label: 'Opacity',
+        icon: '◐',
+        subItems: [
+          { id: 'opacity_100', label: '100%', value: 1.0 },
+          { id: 'opacity_75', label: '75%', value: 0.75 },
+          { id: 'opacity_50', label: '50%', value: 0.5 },
+          { id: 'opacity_25', label: '25%', value: 0.25 }
+        ]
+      });
+
+      items.push({
+        id: 'menu_style',
+        label: 'Style',
+        icon: '✎',
+        subItems: [
+          { id: 'style_sketch', label: 'Sketch', icon: '✎' },
+          { id: 'style_clean', label: 'Clean', icon: '◻' },
+          { id: 'stroke_solid', label: 'Solid', icon: '—' },
+          { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
+          { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+        ]
+      });
+
+      // Grouping
+      items.push({
+        id: isGrouped ? 'action_ungroup' : 'action_group',
+        label: isGrouped ? 'Ungroup' : 'Group',
+        icon: '⧉'
+      });
+
+      // Alignment & Distribution
+      items.push({
+        id: 'menu_align',
+        label: 'Align',
+        icon: '⫿',
+        subItems: [
+          { id: 'align_left', label: 'Left', icon: '⇤' },
+          { id: 'align_center', label: 'Center', icon: '⫿' },
+          { id: 'align_right', label: 'Right', icon: '⇥' },
+          { id: 'align_top', label: 'Top', icon: '⤒' },
+          { id: 'align_middle', label: 'Middle', icon: '⁼' },
+          { id: 'align_bottom', label: 'Bottom', icon: '⤓' },
+          { id: 'dist_h', label: 'Dist H', icon: '↔' },
+          { id: 'dist_v', label: 'Dist V', icon: '↕' }
+        ]
+      });
+
+      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
+      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+      return items;
+    }
+
+    // Context: Connector
+    if (isConnector) {
+      // 1. Route
+      items.push({
+        id: 'menu_route',
+        label: 'Route',
+        icon: '↝',
+        subItems: [
+          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight' },
+          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow' },
+          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved' }
+        ]
+      });
+
+      // 2. Arrow ends
+      items.push({
+        id: 'menu_arrows',
+        label: 'Arrows',
+        icon: '↔',
+        subItems: [
+          { id: 'conn_arrows_none', label: 'None', icon: '—', startArrow: false, endArrow: false },
+          { id: 'conn_arrows_start', label: 'Start', icon: '←', startArrow: true, endArrow: false },
+          { id: 'conn_arrows_end', label: 'End', icon: '→', startArrow: false, endArrow: true },
+          { id: 'conn_arrows_both', label: 'Both', icon: '↔', startArrow: true, endArrow: true }
+        ]
+      });
+
+      // 3. Style
+      items.push({
+        id: 'menu_style',
+        label: 'Style',
+        icon: '✎',
+        subItems: [
+          { id: 'style_sketch', label: 'Sketch', icon: '✎' },
+          { id: 'style_clean', label: 'Clean', icon: '◻' },
+          { id: 'stroke_solid', label: 'Solid', icon: '—' },
+          { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
+          { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+        ]
+      });
+
+      // 4. Stacking / Order
+      items.push({
+        id: 'menu_order',
+        label: 'Stacking',
+        icon: '≡',
+        subItems: [
+          { id: 'order_front', label: 'Front', icon: '⇈' },
+          { id: 'order_forward', label: 'Forward', icon: '↑' },
+          { id: 'order_backward', label: 'Backward', icon: '↓' },
+          { id: 'order_back', label: 'Back', icon: '⇊' }
+        ]
+      });
+
+      // 5. Reconnection
+      items.push({ id: 'action_reconnect', label: 'Reconnect', icon: '↺' });
+
+      // 6. Ink & Opacity
+      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+      items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
+
+      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
+      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+      return items;
+    }
+
+    // Context: Single Shape
+    const fillSub = [
+      { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
+      ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
+    ];
+    items.push({ id: 'menu_fill', label: 'Fill', icon: '▨', subItems: fillSub });
+
+    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+    items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
+
+    items.push({
+      id: 'menu_opacity',
+      label: 'Opacity',
+      icon: '◐',
+      subItems: [
+        { id: 'opacity_100', label: '100%', value: 1.0 },
+        { id: 'opacity_75', label: '75%', value: 0.75 },
+        { id: 'opacity_50', label: '50%', value: 0.5 },
+        { id: 'opacity_25', label: '25%', value: 0.25 }
+      ]
+    });
+
+    items.push({
+      id: 'menu_type',
+      label: 'Type',
+      icon: 'A',
+      subItems: [
+        { id: 'type_s', label: 'S', size: 's' },
+        { id: 'type_m', label: 'M', size: 'm' },
+        { id: 'type_l', label: 'L', size: 'l' },
+        { id: 'type_xl', label: 'XL', size: 'xl' },
+        { id: 'font_hand', label: 'Hand', fontFamily: 'hand' },
+        { id: 'font_sans', label: 'Sans', fontFamily: 'sans' },
+        { id: 'font_serif', label: 'Serif', fontFamily: 'serif' },
+        { id: 'font_mono', label: 'Mono', fontFamily: 'mono' },
+        { id: 'type_bold', label: 'Bold', toggleBold: true },
+        { id: 'type_align', label: 'Align', cycleAlign: true }
+      ]
+    });
+
+    items.push({
+      id: 'menu_shape',
+      label: 'Shape',
+      icon: '◇',
+      subItems: [
+        { id: 'to_rectangle', label: 'Rectangle', icon: '▭' },
+        { id: 'to_ellipse', label: 'Ellipse', icon: '◯' },
+        { id: 'to_diamond', label: 'Diamond', icon: '◇' },
+        { id: 'to_triangle', label: 'Triangle', icon: '△' },
+        { id: 'to_equal_sides', label: 'Equal sides', icon: '⊞' }
+      ]
+    });
+
+    items.push({
+      id: 'menu_style',
+      label: 'Style',
+      icon: '✎',
+      subItems: [
+        { id: 'style_sketch', label: 'Sketch', icon: '✎' },
+        { id: 'style_clean', label: 'Clean', icon: '◻' },
+        { id: 'stroke_solid', label: 'Solid', icon: '—' },
+        { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
+        { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+      ]
+    });
+
+    items.push({
+      id: 'menu_order',
+      label: 'Order',
+      icon: '≡',
+      subItems: [
+        { id: 'order_front', label: 'Front', icon: '⇈' },
+        { id: 'order_forward', label: 'Forward', icon: '↑' },
+        { id: 'order_backward', label: 'Backward', icon: '↓' },
+        { id: 'order_back', label: 'Back', icon: '⇊' }
+      ]
+    });
+
+    items.push({ id: 'action_connect', label: 'Connect', icon: '➔' });
+    items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
+    items.push({
+      id: isLocked ? 'action_unlock' : 'action_lock',
+      label: isLocked ? 'Unlock' : 'Lock',
+      icon: isLocked ? '🔓' : '🔒'
+    });
+    items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+
+    return items;
+  }
+
+  handleItemClick(item) {
+    if (item.subItems && item.subItems.length > 0) {
+      this.activeSubMenu = this.activeSubMenu === item.id ? null : item.id;
+      this.render();
+      return;
+    }
+
+    this.onAction(item.id, item);
+    this.close();
+  }
+
+  render() {
+    const items = this.getItems();
+    const count = items.length;
+    const rInner = 36;
+    const rOuter = 100;
+    const rSubOuter = 160;
+
+    let svgParts = [];
+    const size = (rSubOuter + 10) * 2;
+    const center = size / 2;
+
+    svgParts.push(`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="sabura-wheel-svg">`);
+
+    const prng = createPRNG(4242);
+
+    // Bezel guide outer rims: hand-drawn sketchy compass circles
+    const rimSketch = sketchEllipse(center, center, rOuter + 2, rOuter + 2, prng, 1);
+    svgParts.push(`<path d="${rimSketch}" class="wheel-bezel-rim" pointer-events="none" />`);
+
+    if (this.activeSubMenu) {
+      const subRimSketch = sketchEllipse(center, center, rSubOuter + 2, rSubOuter + 2, prng, 1);
+      svgParts.push(`<path d="${subRimSketch}" class="wheel-bezel-rim sub" pointer-events="none" />`);
+    }
+
+    // Center hub: underlying clickable disc
+    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" />`);
+    // Sketchy hand-drawn circle for center hub
+    const hubSketch = sketchEllipse(center, center, rInner - 3, rInner - 3, prng, 1);
+    svgParts.push(`<path d="${hubSketch}" class="wheel-hub-sketch" pointer-events="none" />`);
+    // Close icon: sketchy X strokes
+    const x1 = sketchLine(center - 5, center - 5, center + 5, center + 5, prng, 1);
+    const x2 = sketchLine(center + 5, center - 5, center - 5, center + 5, prng, 1);
+    svgParts.push(`<path d="${x1} ${x2}" class="wheel-hub-x" pointer-events="none" />`);
+
+    const angleStep = (Math.PI * 2) / count;
+    // Offset slightly so top slice is centered vertically
+    const angleOffset = -Math.PI / 2 - angleStep / 2;
+
+    let subMenuToRender = null;
+    let subMenuStartAngle = 0;
+    let subMenuEndAngle = 0;
+
+    for (let i = 0; i < count; i++) {
+      const item = items[i];
+      const startAngle = angleOffset + i * angleStep;
+      const endAngle = startAngle + angleStep;
+      const midAngle = (startAngle + endAngle) / 2;
+
+      const pathD = createWedgePath(center, center, rInner, rOuter, startAngle, endAngle);
+      const isSubActive = this.activeSubMenu === item.id;
+      const wedgeClass = `wheel-wedge ${isSubActive ? 'active' : ''} ${item.id.includes('delete') ? 'danger' : ''}`;
+
+      // Solid wedge fill layer for hit testing and hover
+      svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" />`);
+
+      // Excalidraw hand-drawn sketchy wedge outline
+      const sketchD = sketchWedge(center, center, rInner, rOuter, startAngle, endAngle, prng, 1);
+      svgParts.push(`<path d="${sketchD}" class="wheel-wedge-sketch ${isSubActive ? 'active' : ''}" pointer-events="none" />`);
+
+      // Label & Icon
+      const textR = (rInner + rOuter) / 2;
+      const iconX = center + textR * Math.cos(midAngle);
+      const iconY = center + textR * Math.sin(midAngle);
+
+      svgParts.push(`<g class="wheel-label-group" pointer-events="none">
+        <text x="${iconX}" y="${iconY - 2}" text-anchor="middle" class="wheel-icon">${item.icon || ''}</text>
+        <text x="${iconX}" y="${iconY + 11}" text-anchor="middle" class="wheel-text">${item.label}</text>
+      </g>`);
+
+      if (isSubActive && item.subItems) {
+        subMenuToRender = item.subItems;
+        subMenuStartAngle = startAngle - 0.2;
+        subMenuEndAngle = endAngle + 0.2;
+      }
+    }
+
+    // Render outer sub-menu ring if an item with subItems is active
+    if (subMenuToRender && subMenuToRender.length > 0) {
+      const subCount = subMenuToRender.length;
+      const spanPerItem = 0.28;
+      const totalSpan = Math.min(Math.PI * 1.15, Math.max(0.45, subCount * spanPerItem));
+      const midParent = (subMenuStartAngle + subMenuEndAngle) / 2;
+      const subStartBase = midParent - totalSpan / 2;
+      const subStep = totalSpan / subCount;
+
+      for (let j = 0; j < subCount; j++) {
+        const sub = subMenuToRender[j];
+        const sStart = subStartBase + j * subStep;
+        const sEnd = sStart + subStep;
+        const sMid = (sStart + sEnd) / 2;
+
+        const subPath = createWedgePath(center, center, rOuter + 4, rSubOuter, sStart, sEnd);
+        const colorStyle = sub.color ? `fill: ${sub.color}; stroke: #dee2e6;` : '';
+
+        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge" data-sub-id="${sub.id}" style="${colorStyle}" />`);
+        const subSketchD = sketchWedge(center, center, rOuter + 4, rSubOuter, sStart, sEnd, prng, 1);
+        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch" pointer-events="none" />`);
+
+        const sTextR = (rOuter + 4 + rSubOuter) / 2;
+        const sX = center + sTextR * Math.cos(sMid);
+        const sY = center + sTextR * Math.sin(sMid);
+
+        svgParts.push(`<g class="wheel-label-group" pointer-events="none">
+          <text x="${sX}" y="${sY - 2}" text-anchor="middle" class="wheel-icon">${sub.icon || ''}</text>
+          <text x="${sX}" y="${sY + 10}" text-anchor="middle" class="wheel-sub-text">${sub.label}</text>
+        </g>`);
+      }
+    }
+
+    svgParts.push('</svg>');
+    this.wheelEl.innerHTML = svgParts.join('\n');
+
+    // Attach click listeners to wedges
+    const allWedges = this.wheelEl.querySelectorAll('.wheel-wedge');
+    allWedges.forEach(w => {
+      const id = w.getAttribute('data-item-id');
+      const item = items.find(it => it.id === id);
+      if (!item) return;
+
+      // Mouseenter triggers sub-ring naturally
+      w.addEventListener('mouseenter', () => {
+        if (item.subItems && item.subItems.length > 0 && this.activeSubMenu !== item.id) {
+          this.activeSubMenu = item.id;
+          this.render();
+        }
+      });
+
+      w.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleItemClick(item);
+      });
+    });
+
+    const subWedges = this.wheelEl.querySelectorAll('.wheel-sub-wedge');
+    subWedges.forEach(sw => {
+      const subId = sw.getAttribute('data-sub-id');
+      const subItem = subMenuToRender?.find(s => s.id === subId);
+      if (!subItem) return;
+
+      sw.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.onAction(subItem.id, subItem);
+        this.close();
+      });
+    });
+
+    const hub = this.wheelEl.querySelector('.wheel-hub');
+    if (hub) {
+      hub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.close();
+      });
+    }
+  }
+}
+
+// --- Module: src/ui/text-editor.js ---
+/**
+ * Sabura In-Place Text Editor: Floating textarea positioned over target object for inline text editing.
+ */
+
+
+
+class TextEditor {
+  constructor(containerElement, onCommit) {
+    this.container = containerElement;
+    this.onCommit = onCommit; // Callback (objectId, newText)
+    this.targetObject = null;
+    this.initialText = '';
+
+    this.textarea = document.createElement('textarea');
+    this.textarea.className = 'sabura-inline-text-editor';
+    this.textarea.style.display = 'none';
+    this.container.appendChild(this.textarea);
+
+    this.onBlur = this.onBlur.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
+
+    this.textarea.addEventListener('blur', this.onBlur);
+    this.textarea.addEventListener('keydown', this.onKeyDown);
+  }
+
+  open(object, camera) {
+    this.targetObject = object;
+    this.initialText = object.text || '';
+
+    const textStyle = object.textStyle || {};
+    const fontSize = (textStyle.resolvedSize || 20) * camera.zoom;
+    const fontFamily = FONT_FAMILIES[textStyle.fontFamily] || FONT_FAMILIES.sans;
+    const fontWeight = textStyle.bold ? 'bold' : 'normal';
+    const align = textStyle.align || (object.type === 'text' ? 'left' : 'center');
+    const color = textStyle.color || object.stroke || '#1e1e1e';
+
+    const screenX = object.x * camera.zoom + camera.x;
+    const screenY = object.y * camera.zoom + camera.y;
+    const screenW = Math.max(120, object.width * camera.zoom);
+    const screenH = Math.max(40, object.height * camera.zoom);
+
+    this.textarea.style.display = 'block';
+    this.textarea.style.left = `${screenX}px`;
+    this.textarea.style.top = `${screenY}px`;
+    this.textarea.style.width = `${screenW}px`;
+    this.textarea.style.height = `${screenH}px`;
+    this.textarea.style.fontSize = `${fontSize}px`;
+    this.textarea.style.fontFamily = fontFamily;
+    this.textarea.style.fontWeight = fontWeight;
+    this.textarea.style.textAlign = align;
+    this.textarea.style.color = color;
+
+    this.textarea.value = this.initialText;
+    this.textarea.focus();
+    this.textarea.select();
+  }
+
+  close(commit = true) {
+    if (this.textarea.style.display === 'none') return;
+    const newText = this.textarea.value;
+    const objId = this.targetObject?.id;
+    this.textarea.style.display = 'none';
+
+    if (commit && objId && newText !== this.initialText) {
+      this.onCommit(objId, newText);
+    }
+    this.targetObject = null;
+  }
+
+  onBlur() {
+    this.close(true);
+  }
+
+  onKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      this.close(false); // Cancel without saving
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || this.targetObject?.type !== 'text')) {
+      // Cmd+Enter or Enter inside shapes commits
+      e.preventDefault();
+      this.close(true);
+    }
+  }
+}
+
+// --- Module: src/ui/topbar.js ---
+/**
+ * Sabura Top Bar: Board-level and file-level controls only.
+ * Appearance, Interface theme, Grid, Present, Undo/Redo, Status, and Save Copy.
+ */
+
+
+
+class TopBar {
+  constructor(containerElement, callbacks) {
+    this.container = containerElement;
+    this.callbacks = callbacks;
+    // callbacks: { onSetBoardTheme, onSetInterfaceTheme, onToggleGrid, onPresent, onUndo, onRedo, onSaveCopy }
+
+    this.barEl = document.createElement('header');
+    this.barEl.className = 'sabura-topbar';
+    this.container.appendChild(this.barEl);
+
+    this.render();
+  }
+
+  update(doc, status = 'Saved', interfaceTheme = 'system', snapGrid = true, showGrid = true) {
+    this.doc = doc;
+    this.status = status;
+    this.interfaceTheme = interfaceTheme;
+    this.snapGrid = snapGrid;
+    this.showGrid = showGrid;
+    this.render();
+  }
+
+  render() {
+    const docThemeId = this.doc?.theme?.id || 'paper';
+    const ifaceTheme = this.interfaceTheme || 'system';
+    const status = this.status || 'Clean';
+    const snapGrid = Boolean(this.snapGrid);
+    const showGrid = this.showGrid !== false;
+
+    let statusColor = '#2f9e44'; // Clean green
+    if (status === 'Changed') statusColor = '#f08c00'; // Amber
+    else if (status === 'Error') statusColor = '#e03131'; // Red
+    else if (status.includes('copy') || status.includes('Copy')) statusColor = '#1971c2'; // Blue
+
+    this.barEl.innerHTML = `
+      <div class="topbar-left">
+        <div class="brand-title">
+          <span class="brand-name">Sabura</span>
+          <span class="doc-title" title="Board Title">${this.doc?.title || 'Untitled'}</span>
+        </div>
+        <div class="status-badge" title="Document State: ${status}">
+          <span class="status-dot" style="background-color: ${statusColor};"></span>
+          <span class="status-text">${status}</span>
+        </div>
+      </div>
+
+      <div class="topbar-center">
+        <!-- Board Theme -->
+        <label class="control-label" title="Board Theme (persisted with document)">
+          <span>Board:</span>
+          <select id="select-board-theme" class="topbar-select">
+            <option value="paper" ${docThemeId === 'paper' ? 'selected' : ''}>Paper</option>
+            <option value="blueprint" ${docThemeId === 'blueprint' ? 'selected' : ''}>Blueprint</option>
+            <option value="night" ${docThemeId === 'night' ? 'selected' : ''}>Night</option>
+            <option value="high-contrast" ${docThemeId === 'high-contrast' ? 'selected' : ''}>High Contrast</option>
+          </select>
+        </label>
+
+        <!-- Interface Appearance -->
+        <label class="control-label" title="Interface Appearance (local preference, never dirties board)">
+          <span>UI:</span>
+          <select id="select-ui-theme" class="topbar-select">
+            <option value="system" ${ifaceTheme === 'system' ? 'selected' : ''}>System</option>
+            <option value="light" ${ifaceTheme === 'light' ? 'selected' : ''}>Light</option>
+            <option value="dark" ${ifaceTheme === 'dark' ? 'selected' : ''}>Dark</option>
+          </select>
+        </label>
+
+        <!-- Grid visibility and snapping (explicit controls) -->
+        <div class="grid-controls-group">
+          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility">
+            Grid: ${showGrid ? 'Show' : 'Hide'}
+          </button>
+          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping">
+            Snap: ${snapGrid ? 'On' : 'Off'}
+          </button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Undo / Redo -->
+        <button id="btn-undo" class="topbar-btn" title="Undo (Cmd+Z)">↶</button>
+        <button id="btn-redo" class="topbar-btn" title="Redo (Cmd+Shift+Z)">↷</button>
+
+        <div class="topbar-divider"></div>
+
+        <!-- Fullscreen Editing -->
+        <button id="btn-fullscreen" class="topbar-btn" title="Toggle Full-Screen Editing (retraining controls)">
+          ⛶ Fullscreen
+        </button>
+
+        <!-- Present -->
+        <button id="btn-present" class="topbar-btn primary" title="Enter Presentation Mode (Laser pointer)">
+          ▶ Present
+        </button>
+
+        <!-- Save Copy -->
+        <button id="btn-save" class="topbar-btn save-btn" title="Download self-contained offline HTML copy">
+          ↓ Save Copy
+        </button>
+      </div>
+    `;
+
+    // Event listeners
+    this.barEl.querySelector('#select-board-theme')?.addEventListener('change', (e) => {
+      this.callbacks.onSetBoardTheme(e.target.value);
+    });
+
+    this.barEl.querySelector('#select-ui-theme')?.addEventListener('change', (e) => {
+      this.callbacks.onSetInterfaceTheme(e.target.value);
+    });
+
+    this.barEl.querySelector('#btn-grid-visible')?.addEventListener('click', () => {
+      this.callbacks.onToggleGridVisible();
+    });
+
+    this.barEl.querySelector('#btn-grid-snap')?.addEventListener('click', () => {
+      this.callbacks.onToggleGridSnap();
+    });
+
+    this.barEl.querySelector('#btn-undo')?.addEventListener('click', () => {
+      this.callbacks.onUndo();
+    });
+
+    this.barEl.querySelector('#btn-redo')?.addEventListener('click', () => {
+      this.callbacks.onRedo();
+    });
+
+    this.barEl.querySelector('#btn-fullscreen')?.addEventListener('click', () => {
+      this.callbacks.onToggleFullscreen();
+    });
+
+    this.barEl.querySelector('#btn-present')?.addEventListener('click', () => {
+      this.callbacks.onPresent();
+    });
+
+    this.barEl.querySelector('#btn-save')?.addEventListener('click', () => {
+      this.callbacks.onSaveCopy();
+    });
+  }
+}
+
+// --- Module: src/ui/shortcuts.js ---
+/**
+ * Sabura Keyboard Shortcuts Coordinator.
+ */
+
+class ShortcutsCoordinator {
+  constructor(handlers) {
+    this.handlers = handlers;
+    this.isSpacePressed = false;
+    this.lastPointerPos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+
+    this.onKeyDown = this.onKeyDown.bind(this);
+    this.onKeyUp = this.onKeyUp.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
+
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('pointermove', this.onPointerMove);
+  }
+
+  destroy() {
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('pointermove', this.onPointerMove);
+  }
+
+  onPointerMove(e) {
+    this.lastPointerPos = { x: e.clientX, y: e.clientY };
+  }
+
+  onKeyDown(e) {
+    // Ignore shortcuts when user is typing in input or textarea
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      return;
+    }
+
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+
+    if (e.key === ' ' && !this.isSpacePressed) {
+      this.isSpacePressed = true;
+      this.handlers.onSpaceHold?.(true);
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'q' && !mod) {
+      e.preventDefault();
+      this.handlers.onTriggerWheel?.(this.lastPointerPos.x, this.lastPointerPos.y);
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'h' && !mod) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('hand');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'v' && !mod) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('select');
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        this.handlers.onRedo?.();
+      } else {
+        this.handlers.onUndo?.();
+      }
+      return;
+    }
+
+    if (mod && (e.key.toLowerCase() === 'y')) {
+      e.preventDefault();
+      this.handlers.onRedo?.();
+      return;
+    }
+
+    if ((e.key === 'Enter' || e.key === 'F2') && !mod) {
+      e.preventDefault();
+      this.handlers.onEditText?.();
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'd' && !mod) {
+      this.handlers.onDHold?.(true);
+    }
+
+    if (mod && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      this.handlers.onDuplicate?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      this.handlers.onSelectAll?.();
+      return;
+    }
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      this.handlers.onDelete?.();
+      return;
+    }
+
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      let dx = 0;
+      let dy = 0;
+      if (e.key === 'ArrowLeft') dx = -step;
+      if (e.key === 'ArrowRight') dx = step;
+      if (e.key === 'ArrowUp') dy = -step;
+      if (e.key === 'ArrowDown') dy = step;
+      this.handlers.onNudge?.(dx, dy);
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      this.handlers.onEscape?.();
+      return;
+    }
+  }
+
+  onKeyUp(e) {
+    if (e.key === ' ' && this.isSpacePressed) {
+      this.isSpacePressed = false;
+      this.handlers.onSpaceHold?.(false);
+    }
+
+    if (e.key.toLowerCase() === 'd') {
+      this.handlers.onDHold?.(false);
+    }
+  }
+}
+
+// --- Module: src/ui/workspace.js ---
+/**
+ * Sabura Workspace: Viewport coordinate transforms, camera navigation, pointer gestures,
+ * snapping coordinator, and tool state machine.
+ */
+
+
+
+
+
+class Workspace {
+  constructor(svgContainer, callbacks) {
+    this.container = svgContainer;
+    this.callbacks = callbacks;
+    // callbacks: { onCommand, onCommandBatch, onOpenWheel, onDoubleClickedObject }
+
+    this.camera = { x: 0, y: 0, zoom: 1.0 };
+    this.activeTool = 'hand'; // Default tool: Hand/Pan!
+    this.previousTool = 'select';
+    this.selectedIds = [];
+    this.snapGrid = true;
+    this.showGrid = true;
+    this.gridSize = 20;
+
+    // Interaction state
+    this.isPanning = false;
+    this.isDraggingSelection = false;
+    this.isDHeld = false;
+    this.hasDuplicatedForDDrag = false;
+    this.isResizing = false;
+    this.isCreating = false;
+    this.isReconnecting = false;
+    this.isMarquee = false;
+    this.spaceHeld = false;
+
+    this.dragStart = { x: 0, y: 0 };
+    this.pointerStartScreen = { x: 0, y: 0 };
+    this.activeHandle = null;
+    this.resizeOriginalBounds = null;
+    this.snapGuides = [];
+    this.marquee = null;
+    this.draftObject = null;
+    this.reconnectingData = null;
+
+    // Long press detection
+    this.longPressTimer = null;
+
+    this.bindEvents();
+  }
+
+  setTool(tool) {
+    this.activeTool = tool;
+    this.updateCursor();
+    this.render();
+  }
+
+  setSnapGrid(enabled) {
+    this.snapGrid = enabled;
+  }
+
+  updateCursor() {
+    if (this.spaceHeld || this.activeTool === 'hand') {
+      this.container.style.cursor = this.isPanning ? 'grabbing' : 'grab';
+    } else if (this.activeTool === 'select') {
+      this.container.style.cursor = 'default';
+    } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'draw'].includes(this.activeTool)) {
+      this.container.style.cursor = 'crosshair';
+    } else {
+      this.container.style.cursor = 'default';
+    }
+  }
+
+  /**
+   * Transforms screen (viewport) coordinates to world (canvas) coordinates.
+   */
+  screenToWorld(screenX, screenY) {
+    return {
+      x: (screenX - this.camera.x) / this.camera.zoom,
+      y: (screenY - this.camera.y) / this.camera.zoom
+    };
+  }
+
+  /**
+   * Transforms world coordinates to screen coordinates.
+   */
+  worldToScreen(worldX, worldY) {
+    return {
+      x: worldX * this.camera.zoom + this.camera.x,
+      y: worldY * this.camera.zoom + this.camera.y
+    };
+  }
+
+  zoomAt(screenX, screenY, deltaFactor) {
+    const minZoom = 0.1;
+    const maxZoom = 5.0;
+    const oldZoom = this.camera.zoom;
+    const newZoom = Math.max(minZoom, Math.min(maxZoom, oldZoom * deltaFactor));
+
+    // Keep point under cursor invariant
+    this.camera.x = screenX - (screenX - this.camera.x) * (newZoom / oldZoom);
+    this.camera.y = screenY - (screenY - this.camera.y) * (newZoom / oldZoom);
+    this.camera.zoom = newZoom;
+
+    this.render();
+  }
+
+  fitToContent(padding = 60) {
+    const doc = this.callbacks.getDocument();
+    const allObjects = Object.values(doc.objects || {});
+    if (allObjects.length === 0) {
+      this.camera = { x: 0, y: 0, zoom: 1.0 };
+      this.render();
+      return;
+    }
+
+    const union = getUnionBoundingBox(allObjects);
+    if (!union) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const scaleX = (w - padding * 2) / union.width;
+    const scaleY = (h - padding * 2) / union.height;
+    const targetZoom = Math.max(0.2, Math.min(2.0, Math.min(scaleX, scaleY)));
+
+    this.camera.zoom = targetZoom;
+    this.camera.x = (w - union.width * targetZoom) / 2 - union.x * targetZoom;
+    this.camera.y = (h - union.height * targetZoom) / 2 - union.y * targetZoom;
+    this.render();
+  }
+
+  bindEvents() {
+    this.onPointerDown = this.onPointerDown.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
+    this.onPointerUp = this.onPointerUp.bind(this);
+    this.onWheel = this.onWheel.bind(this);
+    this.onContextMenu = this.onContextMenu.bind(this);
+    this.onDblClick = this.onDblClick.bind(this);
+
+    this.onPointerCancel = this.onPointerCancel.bind(this);
+
+    this.container.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerCancel);
+    this.container.addEventListener('wheel', this.onWheel, { passive: false });
+    this.container.addEventListener('contextmenu', this.onContextMenu);
+    this.container.addEventListener('dblclick', this.onDblClick);
+  }
+
+  destroy() {
+    this.container.removeEventListener('pointerdown', this.onPointerDown);
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerCancel);
+    this.container.removeEventListener('wheel', this.onWheel);
+    this.container.removeEventListener('contextmenu', this.onContextMenu);
+    this.container.removeEventListener('dblclick', this.onDblClick);
+  }
+
+  onPointerCancel(e) {
+    this.cancelGesture();
+  }
+
+  cancelGesture() {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+
+    const doc = this.callbacks.getDocument();
+
+    if (this.isDraggingSelection && this.dragInitialPositions) {
+      for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
+        const obj = doc.objects[id];
+        if (obj) {
+          obj.x = pos.x;
+          obj.y = pos.y;
+          if (obj.type === 'connector') {
+            if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
+            if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
+          }
+        }
+      }
+    }
+
+    if (this.isResizing && this.resizeOriginalBounds && this.selectedIds.length > 0) {
+      const obj = doc.objects[this.selectedIds[0]];
+      if (obj) {
+        obj.x = this.resizeOriginalBounds.x;
+        obj.y = this.resizeOriginalBounds.y;
+        obj.width = this.resizeOriginalBounds.width;
+        obj.height = this.resizeOriginalBounds.height;
+      }
+    }
+
+    if (this.isReconnecting && this.reconnectingData && this.reconnectOriginalTarget) {
+      const conn = doc.objects[this.reconnectingData.connectorId];
+      if (conn) {
+        conn[this.reconnectingData.endpoint] = JSON.parse(JSON.stringify(this.reconnectOriginalTarget));
+      }
+    }
+
+    this.isPanning = false;
+    this.isDraggingSelection = false;
+    this.isResizing = false;
+    this.isCreating = false;
+    this.isReconnecting = false;
+    this.isMarquee = false;
+    this.activeHandle = null;
+    this.resizeOriginalBounds = null;
+    this.latestResizeBounds = null;
+    this.reconnectOriginalTarget = null;
+    this.latestReconnectTarget = null;
+    this.dragInitialPositions = null;
+    this.dragAccumulatedDelta = null;
+    this.snapGuides = [];
+    this.marquee = null;
+    this.draftObject = null;
+    this.setTool('select');
+    this.updateCursor();
+    this.render();
+  }
+
+  findObjectAt(worldPoint) {
+    const doc = this.callbacks.getDocument();
+    // Search backwards from topmost (end of doc.order) to bottom
+    for (let i = doc.order.length - 1; i >= 0; i--) {
+      const objId = doc.order[i];
+      const obj = doc.objects[objId];
+      if (!obj) continue;
+
+      if (obj.type === 'connector') {
+        // Precision hit test: close to the actual line rather than broad bounding box
+        const dist = distanceToConnector(worldPoint, obj, doc);
+        if (dist <= 10) {
+          return obj;
+        }
+      } else {
+        const box = getBoundingBox(obj);
+        if (worldPoint.x >= box.x && worldPoint.x <= box.right &&
+            worldPoint.y >= box.y && worldPoint.y <= box.bottom) {
+          return obj;
+        }
+      }
+    }
+    return null;
+  }
+
+  onContextMenu(e) {
+    e.preventDefault();
+    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+    const hitObj = this.findObjectAt(worldPt);
+
+    if (hitObj) {
+      if (!this.selectedIds.includes(hitObj.id)) {
+        this.selectedIds = [hitObj.id];
+      }
+      this.callbacks.onOpenWheel(e.clientX, e.clientY, 'object', hitObj);
+    } else {
+      this.callbacks.onOpenWheel(e.clientX, e.clientY, 'canvas', null);
+    }
+  }
+
+  onDblClick(e) {
+    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+    const hitObj = this.findObjectAt(worldPt);
+    if (hitObj) {
+      this.callbacks.onDoubleClickedObject(hitObj);
+    }
+  }
+
+  onPointerDown(e) {
+    // If middle click or space held or activeTool === 'hand', start panning
+    if (e.button === 1 || this.spaceHeld || this.activeTool === 'hand') {
+      this.isPanning = true;
+      this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
+      this.updateCursor();
+      return;
+    }
+
+    if (e.button !== 0) return; // Only primary left click beyond here
+
+    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+    this.pointerStartScreen = { x: e.clientX, y: e.clientY };
+
+    // Setup long-press timer (500ms) for opening circular wheel on touch / static click
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTimer = null;
+      const hit = this.findObjectAt(worldPt);
+      this.callbacks.onOpenWheel(e.clientX, e.clientY, hit ? 'object' : 'canvas', hit);
+    }, 500);
+
+    // Check if clicked a resize or connector handle
+    const handleEl = e.target?.closest?.('[data-handle]');
+    if (handleEl) {
+      clearTimeout(this.longPressTimer);
+      const handleId = handleEl.getAttribute('data-handle');
+      if (handleId.startsWith('conn-')) {
+        this.isReconnecting = true;
+        this.reconnectingData = {
+          connectorId: this.selectedIds[0],
+          endpoint: handleId === 'conn-from' ? 'from' : 'to'
+        };
+        const doc = this.callbacks.getDocument();
+        const conn = doc.objects[this.selectedIds[0]];
+        this.reconnectOriginalTarget = conn ? JSON.parse(JSON.stringify(conn[this.reconnectingData.endpoint])) : null;
+        this.latestReconnectTarget = null;
+      } else {
+        this.isResizing = true;
+        this.activeHandle = handleId;
+        const doc = this.callbacks.getDocument();
+        const obj = doc.objects[this.selectedIds[0]];
+        this.resizeOriginalBounds = {
+          x: obj.x,
+          y: obj.y,
+          width: obj.width,
+          height: obj.height,
+          resolvedSize: obj.textStyle?.resolvedSize || 20
+        };
+        this.latestResizeBounds = null;
+        this.dragStart = { ...worldPt };
+      }
+      return;
+    }
+
+    // Check if clicked an object
+    const hitObj = this.findObjectAt(worldPt);
+
+    if (this.activeTool === 'select') {
+      if (hitObj) {
+        clearTimeout(this.longPressTimer);
+        let targetId = hitObj.id;
+        // Group selection logic: if part of group, select all group members
+        const doc = this.callbacks.getDocument();
+        if (hitObj.groupId) {
+          const groupMembers = Object.values(doc.objects).filter(o => o.groupId === hitObj.groupId).map(o => o.id);
+          if (e.shiftKey) {
+            this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
+          } else if (!this.selectedIds.includes(targetId)) {
+            this.selectedIds = groupMembers;
+          }
+        } else {
+          if (e.shiftKey) {
+            if (this.selectedIds.includes(targetId)) {
+              this.selectedIds = this.selectedIds.filter(id => id !== targetId);
+            } else {
+              this.selectedIds.push(targetId);
+            }
+          } else if (!this.selectedIds.includes(targetId)) {
+            this.selectedIds = [targetId];
+          }
+        }
+
+        this.isDraggingSelection = true;
+        this.dragStart = { ...worldPt };
+        this.dragInitialPositions = {};
+        this.dragAccumulatedDelta = { dx: 0, dy: 0 };
+        for (const id of this.selectedIds) {
+          const o = doc.objects[id];
+          if (o) {
+            this.dragInitialPositions[id] = {
+              x: o.x,
+              y: o.y,
+              fromPoint: o.type === 'connector' && o.from?.point ? { ...o.from.point } : null,
+              toPoint: o.type === 'connector' && o.to?.point ? { ...o.to.point } : null
+            };
+          }
+        }
+        this.render();
+      } else {
+        // Clicked empty space
+        if (!e.shiftKey) {
+          this.selectedIds = [];
+        }
+        this.isMarquee = true;
+        this.marquee = { startX: worldPt.x, startY: worldPt.y, currentX: worldPt.x, currentY: worldPt.y };
+        this.render();
+      }
+      return;
+    }
+
+    // Creation tools
+    if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'draw'].includes(this.activeTool)) {
+      clearTimeout(this.longPressTimer);
+      this.isCreating = true;
+      this.dragStart = { ...worldPt };
+
+      const doc = this.callbacks.getDocument();
+      const type = this.activeTool === 'draw' ? 'path' : this.activeTool;
+
+      this.draftObject = createDefaultObject(type, {
+        x: worldPt.x,
+        y: worldPt.y,
+        width: 1,
+        height: 1
+      }, doc.theme);
+
+      if (type === 'path') {
+        this.draftObject.points = [[0, 0]];
+      } else if (type === 'connector') {
+        const startHit = this.findObjectAt(worldPt);
+        this.draftObject.from = startHit ? { id: startHit.id } : { point: { ...worldPt } };
+        this.draftObject.to = { point: { ...worldPt } };
+      }
+    }
+  }
+
+  onPointerMove(e) {
+    // If pointer moved more than 5px, cancel long-press timer
+    if (this.longPressTimer) {
+      const dist = Math.hypot(e.clientX - this.pointerStartScreen.x, e.clientY - this.pointerStartScreen.y);
+      if (dist > 6) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+    }
+
+    if (this.isPanning) {
+      this.camera.x = e.clientX - this.dragStart.x;
+      this.camera.y = e.clientY - this.dragStart.y;
+      this.render();
+      return;
+    }
+
+    const worldPt = this.screenToWorld(e.clientX, e.clientY);
+
+    if (this.isMarquee) {
+      this.marquee.currentX = worldPt.x;
+      this.marquee.currentY = worldPt.y;
+
+      // Update selection based on marquee intersection
+      const mx = Math.min(this.marquee.startX, this.marquee.currentX);
+      const my = Math.min(this.marquee.startY, this.marquee.currentY);
+      const mr = Math.max(this.marquee.startX, this.marquee.currentX);
+      const mb = Math.max(this.marquee.startY, this.marquee.currentY);
+
+      const doc = this.callbacks.getDocument();
+      const hits = [];
+      for (const obj of Object.values(doc.objects)) {
+        const b = getBoundingBox(obj);
+        if (b.x < mr && b.right > mx && b.y < mb && b.bottom > my) {
+          hits.push(obj.id);
+        }
+      }
+      this.selectedIds = hits;
+      this.render();
+      return;
+    }
+
+    if (this.isDraggingSelection && this.selectedIds.length > 0 && this.dragInitialPositions) {
+      const doc = this.callbacks.getDocument();
+
+      // Holding plain D while dragging: drag out a copy!
+      if (this.isDHeld && !this.hasDuplicatedForDDrag) {
+        this.hasDuplicatedForDDrag = true;
+        // 1. Restore originals to pristine initial positions
+        for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
+          const orig = doc.objects[id];
+          if (orig) {
+            orig.x = pos.x;
+            orig.y = pos.y;
+            if (orig.type === 'connector') {
+              if (pos.fromPoint && orig.from) orig.from.point = { ...pos.fromPoint };
+              if (pos.toPoint && orig.to) orig.to.point = { ...pos.toPoint };
+            }
+          }
+        }
+        // 2. Dispatch duplicate command
+        this.callbacks.onCommand({
+          type: 'duplicate_objects',
+          ids: [...this.selectedIds]
+        });
+        // 3. The duplicates are now selected
+        const count = this.selectedIds.length;
+        const newIds = doc.order.slice(-count);
+        this.selectedIds = newIds;
+        this.dragInitialPositions = {};
+        for (const id of newIds) {
+          const o = doc.objects[id];
+          if (o) {
+            this.dragInitialPositions[id] = {
+              x: o.x,
+              y: o.y,
+              fromPoint: o.from?.point ? { ...o.from.point } : null,
+              toPoint: o.to?.point ? { ...o.to.point } : null
+            };
+          }
+        }
+      }
+
+      const selectedObjects = this.selectedIds.map(id => doc.objects[id]).filter(Boolean);
+      const union = getUnionBoundingBox(selectedObjects);
+      if (!union) return;
+
+      let dx = worldPt.x - this.dragStart.x;
+      let dy = worldPt.y - this.dragStart.y;
+
+      // Snapping against non-selected objects & grid (unless Alt/Option is held)
+      if (!e.altKey && !e.metaKey) {
+        const otherObjects = Object.values(doc.objects).filter(o => !this.selectedIds.includes(o.id));
+        const testBox = {
+          x: union.x + dx,
+          y: union.y + dy,
+          width: union.width,
+          height: union.height
+        };
+        const snap = calculateSnapping(testBox, otherObjects, {
+          tolerance: 8 / this.camera.zoom,
+          snapGrid: this.snapGrid,
+          gridSize: this.gridSize
+        });
+
+        dx += (snap.x - testBox.x);
+        dy += (snap.y - testBox.y);
+        this.snapGuides = snap.guides;
+      } else {
+        this.snapGuides = [];
+      }
+
+      this.dragAccumulatedDelta = { dx, dy };
+
+      for (const id of this.selectedIds) {
+        const obj = doc.objects[id];
+        const initial = this.dragInitialPositions[id];
+        if (obj && initial) {
+          obj.x = initial.x + dx;
+          obj.y = initial.y + dy;
+          if (obj.type === 'connector') {
+            if (initial.fromPoint && obj.from) obj.from.point = { x: initial.fromPoint.x + dx, y: initial.fromPoint.y + dy };
+            if (initial.toPoint && obj.to) obj.to.point = { x: initial.toPoint.x + dx, y: initial.toPoint.y + dy };
+          }
+        }
+      }
+      this.render();
+      return;
+    }
+
+    if (this.isResizing && this.selectedIds.length === 1 && this.resizeOriginalBounds) {
+      const dx = worldPt.x - this.dragStart.x;
+      const dy = worldPt.y - this.dragStart.y;
+      const keepAspect = e.shiftKey;
+      const fromCenter = e.altKey;
+
+      const newBounds = calculateResize(this.activeHandle, this.resizeOriginalBounds, dx, dy, {
+        keepAspect,
+        fromCenter
+      });
+
+      const doc = this.callbacks.getDocument();
+      const obj = doc.objects[this.selectedIds[0]];
+      if (obj) {
+        obj.x = newBounds.x;
+        obj.y = newBounds.y;
+        obj.width = newBounds.width;
+        obj.height = newBounds.height;
+        if (obj.textStyle && this.resizeOriginalBounds.width > 0 && this.resizeOriginalBounds.height > 0) {
+          const scale = (newBounds.width / this.resizeOriginalBounds.width + newBounds.height / this.resizeOriginalBounds.height) / 2;
+          obj.textStyle.resolvedSize = Math.max(10, Math.min(120, Math.round((this.resizeOriginalBounds.resolvedSize || 20) * scale)));
+        }
+        this.latestResizeBounds = newBounds;
+        this.render();
+      }
+      return;
+    }
+
+    if (this.isReconnecting && this.reconnectingData) {
+      const hit = this.findObjectAt(worldPt);
+      const target = hit && hit.id !== this.reconnectingData.connectorId ? { id: hit.id } : { point: { ...worldPt } };
+      const doc = this.callbacks.getDocument();
+      const conn = doc.objects[this.reconnectingData.connectorId];
+      if (conn) {
+        conn[this.reconnectingData.endpoint] = target;
+        this.latestReconnectTarget = target;
+        this.render();
+      }
+      return;
+    }
+
+    if (this.isCreating && this.draftObject) {
+      if (this.draftObject.type === 'path') {
+        const relX = worldPt.x - this.draftObject.x;
+        const relY = worldPt.y - this.draftObject.y;
+        this.draftObject.points.push([relX, relY]);
+        this.render();
+      } else if (this.draftObject.type === 'connector') {
+        const hit = this.findObjectAt(worldPt);
+        this.draftObject.to = hit ? { id: hit.id } : { point: { ...worldPt } };
+        this.render();
+      } else {
+        // Shapes: Rect, Ellipse, Diamond, Triangle
+        let w = worldPt.x - this.dragStart.x;
+        let h = worldPt.y - this.dragStart.y;
+
+        if (e.shiftKey) {
+          // Constrain to equal sides (square / circle)
+          const side = Math.max(Math.abs(w), Math.abs(h));
+          w = w < 0 ? -side : side;
+          h = h < 0 ? -side : side;
+        }
+
+        this.draftObject.x = Math.min(this.dragStart.x, this.dragStart.x + w);
+        this.draftObject.y = Math.min(this.dragStart.y, this.dragStart.y + h);
+        this.draftObject.width = Math.abs(w);
+        this.draftObject.height = Math.abs(h);
+        this.render();
+      }
+    }
+  }
+
+  onPointerUp(e) {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+
+    if (this.isPanning) {
+      this.isPanning = false;
+      this.updateCursor();
+    }
+
+    if (this.isMarquee) {
+      this.isMarquee = false;
+      this.marquee = null;
+      this.render();
+    }
+
+    if (this.isDraggingSelection) {
+      this.isDraggingSelection = false;
+      this.hasDuplicatedForDDrag = false;
+      this.snapGuides = [];
+      const doc = this.callbacks.getDocument();
+
+      // Restore initial positions first so dispatchCommand applies clean delta
+      if (this.dragInitialPositions) {
+        for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
+          const obj = doc.objects[id];
+          if (obj) {
+            obj.x = pos.x;
+            obj.y = pos.y;
+            if (obj.type === 'connector') {
+              if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
+              if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
+            }
+          }
+        }
+      }
+
+      if (this.dragAccumulatedDelta && (this.dragAccumulatedDelta.dx !== 0 || this.dragAccumulatedDelta.dy !== 0)) {
+        this.callbacks.onCommand({
+          type: 'move_objects',
+          ids: this.selectedIds,
+          dx: this.dragAccumulatedDelta.dx,
+          dy: this.dragAccumulatedDelta.dy
+        });
+      }
+
+      this.dragInitialPositions = null;
+      this.dragAccumulatedDelta = null;
+      this.render();
+    }
+
+    if (this.isResizing) {
+      this.isResizing = false;
+      const doc = this.callbacks.getDocument();
+
+      if (this.resizeOriginalBounds && this.selectedIds.length > 0) {
+        const obj = doc.objects[this.selectedIds[0]];
+        if (obj) {
+          obj.x = this.resizeOriginalBounds.x;
+          obj.y = this.resizeOriginalBounds.y;
+          obj.width = this.resizeOriginalBounds.width;
+          obj.height = this.resizeOriginalBounds.height;
+        }
+      }
+
+      if (this.latestResizeBounds && this.selectedIds.length > 0) {
+        this.callbacks.onCommand({
+          type: 'resize_object',
+          id: this.selectedIds[0],
+          bounds: this.latestResizeBounds,
+          scaleText: true
+        });
+      }
+
+      this.activeHandle = null;
+      this.resizeOriginalBounds = null;
+      this.latestResizeBounds = null;
+      this.render();
+    }
+
+    if (this.isReconnecting) {
+      this.isReconnecting = false;
+      const doc = this.callbacks.getDocument();
+
+      if (this.reconnectOriginalTarget && this.reconnectingData) {
+        const conn = doc.objects[this.reconnectingData.connectorId];
+        if (conn) {
+          conn[this.reconnectingData.endpoint] = JSON.parse(JSON.stringify(this.reconnectOriginalTarget));
+        }
+      }
+
+      if (this.latestReconnectTarget && this.reconnectingData) {
+        this.callbacks.onCommand({
+          type: 'reconnect_connector',
+          id: this.reconnectingData.connectorId,
+          endpoint: this.reconnectingData.endpoint,
+          target: this.latestReconnectTarget
+        });
+      }
+
+      this.reconnectingData = null;
+      this.reconnectOriginalTarget = null;
+      this.latestReconnectTarget = null;
+      this.render();
+    }
+
+    if (this.isCreating && this.draftObject) {
+      this.isCreating = false;
+      const obj = this.draftObject;
+      this.draftObject = null;
+
+      const worldPt = this.screenToWorld(e.clientX, e.clientY);
+
+      if (obj.type === 'path') {
+        if (obj.points && obj.points.length > 1) {
+          this.callbacks.onCommand({
+            type: 'create_object',
+            object: obj
+          });
+          this.selectedIds = [obj.id];
+        }
+      } else if (obj.type === 'connector') {
+        const hit = this.findObjectAt(worldPt);
+        if (hit && (!obj.from.id || hit.id !== obj.from.id)) {
+          obj.to = { id: hit.id };
+        } else {
+          const dist = Math.hypot((obj.to?.point?.x || worldPt.x) - obj.x, (obj.to?.point?.y || worldPt.y) - obj.y);
+          if (dist < 15) {
+            obj.to = { point: { x: obj.x + 140, y: obj.y + 70 } };
+          }
+        }
+        this.callbacks.onCommand({
+          type: 'create_object',
+          object: obj
+        });
+        this.selectedIds = [obj.id];
+      } else {
+        // Shapes: Rectangle, Ellipse, Diamond, Triangle, Text
+        // If clicked or barely dragged (<= 25px), spawn comfortable default size centered at click
+        if (obj.width <= 25 && obj.height <= 25) {
+          if (obj.type === 'text') {
+            obj.width = 80;
+            obj.height = 32;
+            obj.x = Math.round(worldPt.x);
+            obj.y = Math.round(worldPt.y - 16);
+          } else {
+            obj.width = 140;
+            obj.height = 80;
+            obj.x = Math.round(worldPt.x - 70);
+            obj.y = Math.round(worldPt.y - 40);
+          }
+        }
+
+        this.callbacks.onCommand({
+          type: 'create_object',
+          object: obj
+        });
+        this.selectedIds = [obj.id];
+
+        // If text tool, immediately open inline editor
+        if (obj.type === 'text') {
+          setTimeout(() => {
+            this.callbacks.onDoubleClickedObject(obj);
+          }, 50);
+        }
+      }
+
+      // Revert tool back to select
+      this.setTool('select');
+      this.render();
+    }
+  }
+
+  onWheel(e) {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      // Pinch to zoom or ctrl-wheel
+      const zoomFactor = Math.pow(0.992, e.deltaY);
+      this.zoomAt(e.clientX, e.clientY, zoomFactor);
+    } else {
+      // Two finger pan or standard wheel
+      this.camera.x -= e.deltaX;
+      this.camera.y -= e.deltaY;
+      this.render();
+    }
+  }
+
+  render() {
+    const doc = this.callbacks.getDocument();
+    const runtime = {
+      camera: this.camera,
+      selectedIds: this.selectedIds,
+      marquee: this.marquee,
+      snapGuides: this.snapGuides,
+      showGrid: this.showGrid !== false,
+      connectorDraft: this.draftObject?.type === 'connector' ? {
+        start: this.draftObject.from?.point || { x: this.draftObject.x, y: this.draftObject.y },
+        end: this.draftObject.to?.point || { x: this.draftObject.x + this.draftObject.width, y: this.draftObject.y + this.draftObject.height }
+      } : null
+    };
+
+    let sceneSvg = renderSvgScene(doc, runtime);
+
+    // If a non-connector creation draft is in progress, insert it before world-layer closing
+    if (this.draftObject && this.draftObject.type !== 'connector') {
+      const draftSvg = renderObject(doc, this.draftObject, false);
+      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
+      if (worldCloseIndex !== -1) {
+        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + draftSvg + '\n' + sceneSvg.slice(worldCloseIndex);
+      }
+    }
+
+    this.container.innerHTML = sceneSvg;
+  }
+
+  setSnapGrid(enabled) {
+    this.snapGrid = Boolean(enabled);
+  }
+
+  setShowGrid(visible) {
+    this.showGrid = Boolean(visible);
+    this.render();
+  }
+
+  setDHold(held) {
+    this.isDHeld = Boolean(held);
+  }
+}
+
+// --- Module: src/main.js ---
+/**
+ * Sabura Main Application Entrypoint.
+ * 
+ * Coordinates the functional core, SVG renderer, contextual circular tool wheel,
+ * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+class SaburaApp {
+  constructor() {
+    this.doc = null;
+    this.status = 'Clean'; // 'Clean' | 'Changed' | 'Preparing copy' | 'Copy requested' | 'Error'
+    this.interfaceTheme = localStorage.getItem('sabura_ui_theme') || 'system';
+    this.undoStack = [];
+    this.redoStack = [];
+    this.subscribers = new Set();
+    this.inPresentation = false;
+
+    this.initDocument();
+    this.initDOM();
+    this.initServices();
+    this.applyInterfaceTheme(this.interfaceTheme);
+    this.exposeApi();
+  }
+
+  initDocument() {
+    const seamScript = document.getElementById('sabura-document');
+    if (seamScript && seamScript.textContent.trim()) {
+      try {
+        const parsed = JSON.parse(seamScript.textContent);
+        const val = validateDocument(parsed);
+        if (val.valid) {
+          this.doc = parsed;
+          return;
+        }
+        console.warn('Embedded document validation failed:', val.errors);
+      } catch (err) {
+        console.error('Failed to parse embedded document seam:', err);
+      }
+    }
+    // Fallback to initial default board
+    this.doc = createDefaultDocument({ title: 'Sabura Board' });
+  }
+
+  initDOM() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      <div id="canvas-container"></div>
+      <canvas id="laser-canvas"></canvas>
+      <button class="wheel-trigger-fab" id="btn-wheel-fab" title="Open Tool Wheel (Shortcut: Q or Right-Click)">
+        <span>Wheel</span>
+        <span class="fab-key">Q</span>
+      </button>
+    `;
+
+    this.canvasContainer = document.getElementById('canvas-container');
+    this.laserCanvas = document.getElementById('laser-canvas');
+    this.wheelFab = document.getElementById('btn-wheel-fab');
+  }
+
+  initServices() {
+    // Laser pointer
+    this.laser = new LaserPointer(this.laserCanvas);
+
+    // Workspace
+    this.workspace = new Workspace(this.canvasContainer, {
+      getDocument: () => this.doc,
+      onCommand: (cmd) => this.dispatchCommand(cmd),
+      onCommandBatch: (cmds) => this.dispatchCommandBatch(cmds),
+      onOpenWheel: (x, y, context, selectedObj) => {
+        this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length);
+      },
+      onDoubleClickedObject: (obj) => {
+        if (!obj.locked && obj.type !== 'connector') {
+          this.textEditor.open(obj, this.workspace.camera);
+        }
+      }
+    });
+
+    // In-place text editor
+    this.textEditor = new TextEditor(document.getElementById('app'), (objId, newText) => {
+      const obj = this.doc.objects[objId];
+      if (!newText || !newText.trim()) {
+        if (obj && obj.type === 'text') {
+          this.dispatchCommand({
+            type: 'delete_objects',
+            ids: [objId]
+          });
+          this.workspace.selectedIds = [];
+          this.workspace.render();
+          return;
+        }
+      }
+      this.dispatchCommand({
+        type: 'set_text',
+        id: objId,
+        text: newText
+      });
+    });
+
+    // Contextual circular tool wheel
+    this.wheel = new ToolWheel(document.getElementById('app'), (actionId, payload) => {
+      this.handleWheelAction(actionId, payload);
+    });
+
+    // Top Bar
+    this.topbar = new TopBar(document.getElementById('app'), {
+      onSetBoardTheme: (themeId) => this.setBoardTheme(themeId),
+      onSetInterfaceTheme: (uiTheme) => this.setInterfaceTheme(uiTheme),
+      onToggleGridVisible: () => this.toggleGridVisible(),
+      onToggleGridSnap: () => this.toggleGridSnap(),
+      onToggleFullscreen: () => this.toggleFullscreen(),
+      onPresent: () => this.enterPresentation(),
+      onUndo: () => this.undo(),
+      onRedo: () => this.redo(),
+      onSaveCopy: () => this.saveCopy()
+    });
+
+    // Shortcuts coordinator
+    this.shortcuts = new ShortcutsCoordinator({
+      onTriggerWheel: (x, y) => {
+        const worldPt = this.workspace.screenToWorld(x, y);
+        const hit = this.workspace.findObjectAt(worldPt);
+        this.wheel.open(x, y, hit ? 'object' : 'canvas', hit, this.doc.theme.palette, this.workspace.selectedIds.length);
+      },
+      onSelectTool: (tool) => this.workspace.setTool(tool),
+      onSpaceHold: (held) => {
+        this.workspace.spaceHeld = held;
+        this.workspace.updateCursor();
+      },
+      onEditText: () => {
+        if (this.workspace.selectedIds.length === 1) {
+          const obj = this.doc.objects[this.workspace.selectedIds[0]];
+          if (obj && !obj.locked && obj.type !== 'connector') {
+            this.textEditor.open(obj, this.workspace.camera);
+          }
+        }
+      },
+      onDHold: (held) => {
+        this.workspace.setDHold(held);
+      },
+      onUndo: () => this.undo(),
+      onRedo: () => this.redo(),
+      onDuplicate: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({
+            type: 'duplicate_objects',
+            ids: this.workspace.selectedIds
+          });
+        }
+      },
+      onDelete: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({
+            type: 'delete_objects',
+            ids: this.workspace.selectedIds
+          });
+          this.workspace.selectedIds = [];
+        }
+      },
+      onSelectAll: () => {
+        this.workspace.selectedIds = Object.keys(this.doc.objects);
+        this.workspace.render();
+      },
+      onNudge: (dx, dy) => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({
+            type: 'move_objects',
+            ids: this.workspace.selectedIds,
+            dx,
+            dy
+          });
+        }
+      },
+      onEscape: () => {
+        if (this.inPresentation) {
+          this.exitPresentation();
+        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
+          this.workspace.cancelGesture();
+        } else if (this.wheel.isOpen) {
+          this.wheel.close();
+        } else if (this.workspace.selectedIds.length > 0) {
+          this.workspace.selectedIds = [];
+          this.workspace.render();
+        }
+      }
+    });
+
+    // FAB trigger
+    this.wheelFab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, 'canvas', null, this.doc.theme.palette, this.workspace.selectedIds.length);
+    });
+
+    // Track presentation laser pointer
+    window.addEventListener('pointermove', (e) => {
+      if (this.inPresentation) {
+        this.laser.addPoint(e.clientX, e.clientY);
+      }
+    });
+
+    // Fullscreen change listener to sync presentation exit
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && this.inPresentation) {
+        this.exitPresentation();
+      }
+    });
+
+    // Unsaved changes warning
+    window.addEventListener('beforeunload', (e) => {
+      if (this.status === 'Changed') {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved whiteboard changes. Download a copy to save them.';
+        return e.returnValue;
+      }
+    });
+
+    // Initial render
+    this.updateUI();
+  }
+
+  dispatchCommand(cmd) {
+    const { doc: newDoc, inverseCmd } = applyCommand(this.doc, cmd);
+    this.doc = newDoc;
+    if (inverseCmd && inverseCmd.type !== 'noop') {
+      this.undoStack.push(inverseCmd);
+      this.redoStack = []; // Clear redo on new action
+    }
+    this.status = 'Changed';
+    this.updateUI();
+    this.notifySubscribers();
+  }
+
+  dispatchCommandBatch(cmds) {
+    const { doc: newDoc, inverseCmd } = applyCommandBatch(this.doc, cmds);
+    this.doc = newDoc;
+    if (inverseCmd && inverseCmd.type !== 'noop') {
+      this.undoStack.push(inverseCmd);
+      this.redoStack = [];
+    }
+    this.status = 'Changed';
+    this.updateUI();
+    this.notifySubscribers();
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return false;
+    const inv = this.undoStack.pop();
+    const { doc: newDoc, inverseCmd: redoCmd } = applyCommand(this.doc, inv);
+    this.doc = newDoc;
+    if (redoCmd && redoCmd.type !== 'noop') {
+      this.redoStack.push(redoCmd);
+    }
+    this.status = 'Changed';
+    this.updateUI();
+    this.notifySubscribers();
+    return true;
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return false;
+    const redoCmd = this.redoStack.pop();
+    const { doc: newDoc, inverseCmd: undoCmd } = applyCommand(this.doc, redoCmd);
+    this.doc = newDoc;
+    if (undoCmd && undoCmd.type !== 'noop') {
+      this.undoStack.push(undoCmd);
+    }
+    this.status = 'Changed';
+    this.updateUI();
+    this.notifySubscribers();
+    return true;
+  }
+
+  handleWheelAction(actionId, payload) {
+    const selectedIds = this.workspace.selectedIds;
+
+    // Creation & Mode Tools
+    if (actionId === 'tool_select') this.workspace.setTool('select');
+    else if (actionId === 'tool_hand') this.workspace.setTool('hand');
+    else if (actionId === 'tool_draw') this.workspace.setTool('draw');
+    else if (actionId === 'tool_text') this.workspace.setTool('text');
+    else if (actionId.startsWith('shape_')) {
+      const type = actionId.replace('shape_', '');
+      this.workspace.setTool(type);
+    } else if (actionId.startsWith('conn_')) {
+      this.workspace.setTool('connector');
+    } else if (actionId === 'action_undo') {
+      this.undo();
+    } else if (actionId === 'action_redo') {
+      this.redo();
+    } else if (actionId === 'action_delete') {
+      if (selectedIds.length > 0) {
+        this.dispatchCommand({ type: 'delete_objects', ids: selectedIds });
+        this.workspace.selectedIds = [];
+      }
+    } else if (actionId === 'action_duplicate') {
+      if (selectedIds.length > 0) {
+        this.dispatchCommand({ type: 'duplicate_objects', ids: selectedIds });
+      }
+    } else if (actionId === 'action_lock' || actionId === 'action_unlock') {
+      const lock = actionId === 'action_lock';
+      this.dispatchCommand({ type: 'lock_objects', ids: selectedIds, locked: lock });
+    } else if (actionId === 'action_group') {
+      this.dispatchCommand({ type: 'group_objects', ids: selectedIds });
+    } else if (actionId === 'action_ungroup') {
+      const groupIds = Array.from(new Set(selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
+      this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+    } else if (actionId === 'action_connect') {
+      this.workspace.setTool('connector');
+    } else if (actionId.startsWith('order_')) {
+      const action = actionId.replace('order_', ''); // 'forward'|'backward'|'front'|'back'
+      this.dispatchCommand({ type: 'reorder_objects', ids: selectedIds, action });
+    } else if (actionId.startsWith('fill_')) {
+      const col = payload.color;
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { fill: col } });
+    } else if (actionId.startsWith('ink_')) {
+      const col = payload.color;
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { stroke: col } });
+    } else if (actionId.startsWith('opacity_')) {
+      const val = payload.value;
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { opacity: val } });
+    } else if (actionId.startsWith('type_')) {
+      if (payload.size) {
+        this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { size: payload.size } });
+      } else if (payload.toggleBold) {
+        const anyBold = selectedIds.some(id => this.doc.objects[id]?.textStyle?.bold);
+        this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { bold: !anyBold } });
+      } else if (payload.cycleAlign) {
+        const firstAlign = this.doc.objects[selectedIds[0]]?.textStyle?.align || 'center';
+        const nextAlign = firstAlign === 'left' ? 'center' : (firstAlign === 'center' ? 'right' : 'left');
+        this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { align: nextAlign } });
+      }
+    } else if (actionId.startsWith('font_')) {
+      const family = payload.fontFamily || actionId.replace('font_', '');
+      this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { fontFamily: family } });
+    } else if (actionId.startsWith('conn_route_')) {
+      const routing = payload.routing || actionId.replace('conn_route_', '');
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, routing });
+      }
+    } else if (actionId.startsWith('conn_arrows_')) {
+      for (const id of selectedIds) {
+        this.dispatchCommand({
+          type: 'configure_connector',
+          id,
+          startArrow: payload.startArrow,
+          endArrow: payload.endArrow
+        });
+      }
+    } else if (actionId === 'action_reconnect') {
+      if (selectedIds.length === 1 && this.doc.objects[selectedIds[0]]?.type === 'connector') {
+        this.workspace.render();
+      }
+    } else if (actionId.startsWith('to_')) {
+      if (actionId === 'to_equal_sides') {
+        for (const id of selectedIds) {
+          const obj = this.doc.objects[id];
+          if (!obj) continue;
+          const maxDim = Math.max(obj.width, obj.height);
+          this.dispatchCommand({
+            type: 'resize_object',
+            id,
+            bounds: { x: obj.x, y: obj.y, width: maxDim, height: maxDim }
+          });
+        }
+      } else {
+        const newType = actionId.replace('to_', '');
+        for (const id of selectedIds) {
+          this.dispatchCommand({ type: 'change_shape', id, newType });
+        }
+      }
+    } else if (actionId === 'style_sketch') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { roughness: 1 } });
+    } else if (actionId === 'style_clean') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { roughness: 0 } });
+    } else if (actionId === 'stroke_solid') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { strokeStyle: 'solid' } });
+    } else if (actionId === 'stroke_dashed') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { strokeStyle: 'dashed' } });
+    } else if (actionId === 'stroke_dotted') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { strokeStyle: 'dotted' } });
+    } else if (actionId.startsWith('align_')) {
+      const alignment = actionId.replace('align_', '');
+      this.dispatchCommand({ type: 'align_objects', ids: selectedIds, alignment });
+    } else if (actionId === 'dist_h') {
+      this.dispatchCommand({ type: 'distribute_objects', ids: selectedIds, direction: 'horizontal' });
+    } else if (actionId === 'dist_v') {
+      this.dispatchCommand({ type: 'distribute_objects', ids: selectedIds, direction: 'vertical' });
+    }
+  }
+
+  setBoardTheme(themeId) {
+    if (!THEME_PRESETS[themeId]) return;
+    const preset = THEME_PRESETS[themeId];
+    this.dispatchCommand({
+      type: 'set_board_theme',
+      theme: {
+        id: preset.id,
+        background: preset.background,
+        gridColor: preset.gridColor,
+        palette: [...preset.palette],
+        defaultFill: preset.defaultFill,
+        defaultStroke: preset.defaultStroke,
+        defaultStrokeWidth: preset.defaultStrokeWidth,
+        defaultOpacity: preset.defaultOpacity,
+        defaultRoughness: preset.defaultRoughness,
+        defaultFontFamily: preset.defaultFontFamily,
+        defaultFontSize: preset.defaultFontSize
+      }
+    });
+  }
+
+  setInterfaceTheme(theme) {
+    this.interfaceTheme = theme;
+    localStorage.setItem('sabura_ui_theme', theme);
+    this.applyInterfaceTheme(theme);
+    this.updateUI();
+  }
+
+  applyInterfaceTheme(theme) {
+    document.documentElement.setAttribute('data-ui-theme', theme);
+  }
+
+  toggleGridVisible() {
+    this.workspace.setShowGrid(!this.workspace.showGrid);
+    this.updateUI();
+  }
+
+  toggleGridSnap() {
+    this.workspace.setSnapGrid(!this.workspace.snapGrid);
+    this.updateUI();
+  }
+
+  toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } catch (_) {}
+    } else {
+      try {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } catch (_) {}
+    }
+  }
+
+  enterPresentation() {
+    this.textEditor.close(true);
+    this.workspace.selectedIds = [];
+    this.wheel.close();
+    this.inPresentation = true;
+    document.body.classList.add('in-presentation');
+
+    this.workspace.fitToContent(80);
+    this.laser.start();
+
+    // Request fullscreen (gracefully degrades inside tab if disallowed)
+    try {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch (_) {}
+  }
+
+  exitPresentation() {
+    this.inPresentation = false;
+    document.body.classList.remove('in-presentation');
+    this.laser.stop();
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    // Return to Hand/Pan mode
+    this.workspace.setTool('hand');
+    this.workspace.render();
+  }
+
+  getCleanHtmlShell() {
+    const clone = document.documentElement.cloneNode(true);
+    clone.removeAttribute('class');
+    const body = clone.querySelector('body');
+    if (body) {
+      body.removeAttribute('class');
+      const appEl = body.querySelector('#app');
+      if (appEl) appEl.innerHTML = '';
+    }
+    return '<!DOCTYPE html>\n' + clone.outerHTML;
+  }
+
+  saveCopy() {
+    this.status = 'Preparing copy';
+    this.updateUI();
+
+    try {
+      // Reconstruct self-contained HTML from clean application shell
+      const cleanShell = this.getCleanHtmlShell();
+      const packResult = packageHtmlWithDocument(cleanShell, this.doc);
+
+      if (!packResult.success) {
+        alert('Failed to package document: ' + packResult.error);
+        this.status = 'Error';
+        this.updateUI();
+        return;
+      }
+
+      this.status = 'Copy requested';
+      this.updateUI();
+
+      const safeTitle = (this.doc.title || 'whiteboard').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
+
+      triggerFileDownload(filename, packResult.html);
+
+      setTimeout(() => {
+        this.status = 'Clean';
+        this.updateUI();
+      }, 500);
+    } catch (err) {
+      console.error('Save Copy failed:', err);
+      this.status = 'Error';
+      this.updateUI();
+    }
+  }
+
+  updateUI() {
+    this.topbar.update(this.doc, this.status, this.interfaceTheme, this.workspace.snapGrid, this.workspace.showGrid);
+    this.workspace.render();
+  }
+
+  notifySubscribers() {
+    for (const sub of this.subscribers) {
+      try {
+        sub(this.doc, this.status);
+      } catch (err) {
+        console.error('Subscriber error:', err);
+      }
+    }
+  }
+
+  exposeApi() {
+    window.sabura = {
+      getDocument: () => cloneDocument(this.doc),
+      applyCommands: (commands) => {
+        if (!Array.isArray(commands)) {
+          return { success: false, errors: ['Commands must be an array'] };
+        }
+        // 1. Validate commands upfront
+        const validationErrors = [];
+        for (let i = 0; i < commands.length; i++) {
+          const val = validateCommand(commands[i]);
+          if (!val.valid) {
+            validationErrors.push(`Command [${i}] (${commands[i]?.type || 'unknown'}): ${val.errors.join(', ')}`);
+          }
+        }
+        if (validationErrors.length > 0) {
+          return { success: false, errors: validationErrors };
+        }
+
+        // 2. Apply batch atomically on a test copy first
+        try {
+          const testDoc = cloneDocument(this.doc);
+          const { doc: finalDoc, inverseCmd } = applyCommandBatch(testDoc, commands);
+          this.doc = finalDoc;
+          if (inverseCmd && inverseCmd.type !== 'noop') {
+            this.undoStack.push(inverseCmd);
+            this.redoStack = [];
+          }
+          this.status = 'Changed';
+          this.updateUI();
+          this.notifySubscribers();
+          return { success: true, document: cloneDocument(this.doc) };
+        } catch (err) {
+          return { success: false, errors: [err.message] };
+        }
+      },
+      exportCanonicalJson: () => canonicalJson(this.doc),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+      subscribe: (listener) => {
+        this.subscribers.add(listener);
+        return () => this.subscribers.delete(listener);
+      }
+    };
+  }
+}
+
+// Auto-bootstrap when loaded in browser
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const startApp = () => {
+    if (!window.saburaApp) {
+      try {
+        window.saburaApp = new SaburaApp();
+      } catch (err) {
+        console.error('Fatal startup error in SaburaApp:', err);
+        document.body.innerHTML = '<div style="color: #c92a2a; font-family: monospace; font-size: 16px; padding: 24px; background: #fff5f5; border: 2px solid #ffc9c9; margin: 20px; border-radius: 8px;"><strong>Fatal Sabura Startup Error:</strong><pre style="white-space: pre-wrap; margin-top: 12px;">' + (err.stack || err.message || err) + '</pre></div>';
+      }
+    }
+  };
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', startApp);
+  } else {
+    startApp();
+  }
+}
+})();
+  </script>
+</body>
+</html>

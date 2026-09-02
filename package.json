@@ -1,0 +1,20 @@
+{
+  "name": "sabura",
+  "version": "1.0.0",
+  "description": "AI-first, offline whiteboard self-contained in a single HTML file",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "node scripts/build.js"
+  },
+  "keywords": [
+    "whiteboard",
+    "excalidraw",
+    "offline",
+    "single-file",
+    "canvas",
+    "ai-first"
+  ],
+  "author": "",
+  "license": "MIT"
+}

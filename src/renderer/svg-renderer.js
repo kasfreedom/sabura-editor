@@ -1,0 +1,407 @@
+/**
+ * Sabura SVG Renderer: Pure SVG rendering of canvas background, shapes, connectors, text,
+ * and runtime interaction overlays (selection, handles, guides).
+ */
+
+import { generateSketchPath, sketchLine, generateClosedFillPath } from '../core/sketch.js';
+import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox } from '../core/geometry.js';
+import { FONT_FAMILIES } from '../core/types.js';
+
+/**
+ * Calculates perceived luminance of a hex color.
+ */
+function hexToLuminance(hex) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return 0.5;
+  let c = hex.slice(1);
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return 0.5;
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Ensures text or stroke remains legible across dark/light theme transitions.
+ */
+function resolveContrastColor(color, background, fallbackLight = '#ffffff', fallbackDark = '#1e1e1e') {
+  if (!color || color === 'none') return color;
+  const bgLum = hexToLuminance(background);
+  const colLum = hexToLuminance(color);
+  if (bgLum < 0.25 && colLum < 0.22) {
+    return fallbackLight;
+  }
+  if (bgLum > 0.75 && colLum > 0.78) {
+    return fallbackDark;
+  }
+  return color;
+}
+
+/**
+ * Escapes XML/HTML text.
+ */
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Renders an SVG arrowhead marker with natural Excalidraw stroke character.
+ */
+function renderArrowhead(tipX, tipY, fromX, fromY, size = 14, stroke = '#1e1e1e', strokeWidth = 2, isSketch = true) {
+  const angle = Math.atan2(tipY - fromY, tipX - fromX);
+  const leftAngle = angle + Math.PI * 0.84;
+  const rightAngle = angle - Math.PI * 0.84;
+
+  const lx = tipX + Math.cos(leftAngle) * size;
+  const ly = tipY + Math.sin(leftAngle) * size;
+  const rx = tipX + Math.cos(rightAngle) * size;
+  const ry = tipY + Math.sin(rightAngle) * size;
+
+  if (!isSketch) {
+    return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} L ${tipX.toFixed(1)} ${tipY.toFixed(1)} L ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+  }
+
+  // Hand-drawn sketchy arrowhead wings with subtle curve
+  const mxL = (lx + tipX) / 2 + Math.sin(angle) * 1.5;
+  const myL = (ly + tipY) / 2 - Math.cos(angle) * 1.5;
+  const mxR = (rx + tipX) / 2 - Math.sin(angle) * 1.5;
+  const myR = (ry + tipY) / 2 + Math.cos(angle) * 1.5;
+
+  return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} Q ${mxL.toFixed(1)} ${myL.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)} Q ${mxR.toFixed(1)} ${myR.toFixed(1)} ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+}
+
+/**
+ * Wraps text into lines based on approximate character width.
+ */
+function wrapText(text, maxWidth, fontSize) {
+  if (!text) return [];
+  const approxCharWidth = fontSize * 0.55;
+  const maxChars = Math.max(1, Math.floor(maxWidth / approxCharWidth));
+  const rawLines = text.split('\n');
+  const wrapped = [];
+
+  for (const raw of rawLines) {
+    if (raw.length <= maxChars) {
+      wrapped.push(raw);
+    } else {
+      const words = raw.split(' ');
+      let current = '';
+      for (const w of words) {
+        if (!current) {
+          current = w;
+        } else if ((current + ' ' + w).length <= maxChars) {
+          current += ' ' + w;
+        } else {
+          wrapped.push(current);
+          current = w;
+        }
+      }
+      if (current) wrapped.push(current);
+    }
+  }
+  return wrapped;
+}
+
+/**
+ * Renders the entire SVG scene string.
+ * 
+ * @param {Object} doc - Sabura document
+ * @param {Object} runtime - Ephemeral runtime state (camera, selection, marquee, snapLines, hoverHandle)
+ * @returns {string} Inner SVG content
+ */
+export function renderSvgScene(doc, runtime) {
+  const { camera, selectedIds = [], marquee = null, snapGuides = [], connectorDraft = null } = runtime;
+  const theme = doc.theme;
+
+  let out = [];
+  out.push('<svg id="canvas-svg" width="100%" height="100%" style="display: block; width: 100%; height: 100%;">');
+
+  // Defs for filters / patterns
+  out.push('<defs>');
+  if (theme.id === 'blueprint') {
+    out.push(`
+      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+        patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
+        <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${theme.gridColor || 'rgba(56, 189, 248, 0.15)'}" stroke-width="0.8" />
+      </pattern>
+    `);
+  } else {
+    out.push(`
+      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+        patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
+        <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
+      </pattern>
+    `);
+  }
+  out.push('</defs>');
+
+  // Background rect with grid pattern
+  out.push(`<rect width="100%" height="100%" fill="${theme.background}" />`);
+  if (runtime.showGrid !== false) {
+    out.push('<rect width="100%" height="100%" fill="url(#canvas-grid)" pointer-events="none" />');
+  }
+
+  // World transform group
+  out.push(`<g id="world-layer" transform="translate(${camera.x}, ${camera.y}) scale(${camera.zoom})">`);
+
+  // Determine effective rendering order:
+  // Non-connectors follow doc.order.
+  // Connectors follow explicit stacking ('front' or 'back') or naturally follow the visual level of connected objects.
+  const baseOrder = [...doc.order];
+  const orderIndices = new Map(baseOrder.map((id, idx) => [id, idx]));
+
+  const sortedOrder = [...baseOrder].sort((aId, bId) => {
+    const aObj = doc.objects[aId];
+    const bObj = doc.objects[bId];
+    const aBase = orderIndices.get(aId) ?? 0;
+    const bBase = orderIndices.get(bId) ?? 0;
+
+    const getEffectiveKey = (obj, baseIdx) => {
+      if (!obj || obj.type !== 'connector') return baseIdx * 10;
+      if (obj.stacking === 'back') return -1000 + baseIdx;
+      if (obj.stacking === 'front') return 1000000 + baseIdx;
+
+      // Natural visual level: if connected to objects, sit at or above max connected object
+      const fromIdx = obj.from?.id ? orderIndices.get(obj.from.id) : undefined;
+      const toIdx = obj.to?.id ? orderIndices.get(obj.to.id) : undefined;
+      if (fromIdx !== undefined || toIdx !== undefined) {
+        const maxConnected = Math.max(fromIdx ?? -1, toIdx ?? -1);
+        const naturalIdx = Math.max(baseIdx, maxConnected);
+        return naturalIdx * 10 + 1;
+      }
+      return baseIdx * 10;
+    };
+
+    return getEffectiveKey(aObj, aBase) - getEffectiveKey(bObj, bBase);
+  });
+
+  // Render objects according to sorted order
+  for (const objId of sortedOrder) {
+    const obj = doc.objects[objId];
+    if (!obj) continue;
+
+    out.push(renderObject(doc, obj, selectedIds.includes(objId)));
+  }
+
+  // Render connector draft if in progress
+  if (connectorDraft) {
+    out.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${theme.defaultStroke}" stroke-width="2" stroke-dasharray="4,4" />`);
+  }
+
+  // Render runtime snap guides
+  for (const guide of snapGuides) {
+    if (guide.orientation === 'v') {
+      out.push(`<line x1="${guide.pos}" y1="${guide.from}" x2="${guide.pos}" y2="${guide.to}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+    } else {
+      out.push(`<line x1="${guide.from}" y1="${guide.pos}" x2="${guide.to}" y2="${guide.pos}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+    }
+  }
+
+  // Render selection boxes and handles
+  if (selectedIds.length > 0) {
+    out.push(renderSelectionOverlay(doc, selectedIds));
+  }
+
+  // Render marquee selection box
+  if (marquee) {
+    const mx = Math.min(marquee.startX, marquee.currentX);
+    const my = Math.min(marquee.startY, marquee.currentY);
+    const mw = Math.abs(marquee.currentX - marquee.startX);
+    const mh = Math.abs(marquee.currentY - marquee.startY);
+    out.push(`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="rgba(25, 113, 194, 0.1)" stroke="#1971c2" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" />`);
+  }
+
+  out.push('</g>'); // end world-layer
+  out.push('</svg>');
+  return out.join('\n');
+}
+
+/**
+ * Renders an individual object to SVG.
+ */
+export function renderObject(doc, obj, isSelected = false) {
+  const isSketch = (obj.roughness !== undefined ? obj.roughness : 1) > 0;
+  const strokeWidth = obj.strokeWidth || 2;
+  const baseStroke = obj.stroke || '#1e1e1e';
+  const stroke = resolveContrastColor(baseStroke, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+  const fill = obj.fill || 'none';
+  const opacity = obj.opacity !== undefined ? obj.opacity : 1.0;
+  const strokeDash = obj.strokeStyle === 'dashed' ? '8,6' : (obj.strokeStyle === 'dotted' ? '3,4' : 'none');
+
+  let markup = [];
+  markup.push(`<g id="elem-${obj.id}" data-id="${obj.id}" opacity="${opacity}">`);
+
+  if (obj.type === 'connector') {
+    const geom = resolveConnectorGeometry(doc, obj);
+    let pathD = geom.path;
+
+    markup.push(`<path d="${pathD}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+
+    // Arrowheads
+    if (obj.endArrow && geom.points.length >= 2) {
+      const tip = geom.points[geom.points.length - 1];
+      const prev = geom.points[geom.points.length - 2];
+      markup.push(renderArrowhead(tip.x, tip.y, prev.x, prev.y, 14, stroke, strokeWidth, isSketch));
+    }
+    if (obj.startArrow && geom.points.length >= 2) {
+      const tip = geom.points[0];
+      const next = geom.points[1];
+      markup.push(renderArrowhead(tip.x, tip.y, next.x, next.y, 14, stroke, strokeWidth, isSketch));
+    }
+  } else if (obj.type === 'text') {
+    // Standalone text
+    const textStyle = obj.textStyle || {};
+    const fontSize = textStyle.resolvedSize || 20;
+    const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
+    const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
+    const fontWeight = textStyle.bold ? 'bold' : 'normal';
+    const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
+    const fillCol = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+    const lines = obj.text ? obj.text.split('\n') : [];
+    if (lines.length > 0) {
+      let textAnchor = 'start';
+      let textX = obj.x + 6;
+      if (textStyle.align === 'center') {
+        textAnchor = 'middle';
+        textX = obj.x + obj.width / 2;
+      } else if (textStyle.align === 'right') {
+        textAnchor = 'end';
+        textX = obj.x + obj.width - 6;
+      }
+
+      const lineHeight = fontSize * 1.3;
+      const totalHeight = (lines.length - 1) * lineHeight + fontSize;
+      const startY = obj.y + Math.max(0, (obj.height - totalHeight) / 2) + fontSize * 0.85;
+
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${fillCol}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      for (let i = 0; i < lines.length; i++) {
+        markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
+      }
+      markup.push('</text>');
+    }
+  } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'path'].includes(obj.type)) {
+    // Shape base background for fill (organic marker wash in sketch mode)
+    if (fill !== 'none') {
+      const fillPath = generateClosedFillPath(obj);
+      if (fillPath) {
+        const isWhite = fill.toLowerCase() === '#ffffff' || fill.toLowerCase() === '#fff' || fill.toLowerCase() === '#18181b';
+        const fillOpacity = isSketch ? (isWhite ? 0.95 : 0.42) : 1.0;
+        markup.push(`<path d="${fillPath}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="none" />`);
+      }
+    }
+
+    // Stroke path (sketchy or clean)
+    const strokePath = generateSketchPath(obj);
+    if (strokePath) {
+      markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+    }
+
+    // Text inside shape
+    if (obj.text && obj.text.trim()) {
+      const textStyle = obj.textStyle || {};
+      const fontSize = textStyle.resolvedSize || 20;
+      const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
+      const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
+      const fontWeight = textStyle.bold ? 'bold' : 'normal';
+      const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
+      const textColor = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+
+      const lines = wrapText(obj.text, obj.width - 16, fontSize);
+      const lineHeight = fontSize * 1.25;
+      const totalTextHeight = lines.length * lineHeight;
+      const startY = obj.y + (obj.height - totalTextHeight) / 2 + fontSize * 0.85;
+
+      let textAnchor = 'middle';
+      let textX = obj.x + obj.width / 2;
+      if (textStyle.align === 'left') {
+        textAnchor = 'start';
+        textX = obj.x + 12;
+      } else if (textStyle.align === 'right') {
+        textAnchor = 'end';
+        textX = obj.x + obj.width - 12;
+      }
+
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      for (let i = 0; i < lines.length; i++) {
+        markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
+      }
+      markup.push('</text>');
+    }
+  } else {
+    // Custom namespaced unknown object placeholder
+    markup.push(`<rect x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" fill="#f1f3f5" stroke="#868e96" stroke-width="1.5" stroke-dasharray="4,4" />`);
+    markup.push(`<text x="${obj.x + 8}" y="${obj.y + 20}" font-size="12" fill="#495057" font-family="sans-serif">[Inert: ${escapeXml(obj.type)}]</text>`);
+  }
+
+  // Lock indicator icon if locked
+  if (obj.locked) {
+    const box = getBoundingBox(obj);
+    markup.push(`<g transform="translate(${box.right - 18}, ${box.y + 4})">
+      <rect x="0" y="4" width="12" height="9" rx="2" fill="#868e96" />
+      <path d="M 2 4 V 2 A 4 4 0 0 1 10 2 V 4" stroke="#868e96" stroke-width="1.5" fill="none" />
+    </g>`);
+  }
+
+  markup.push('</g>');
+  return markup.join('\n');
+}
+
+/**
+ * Renders selection bounding box, group boundaries, and 8 resize handles.
+ */
+export function renderSelectionOverlay(doc, selectedIds) {
+  const selectedObjects = selectedIds.map(id => doc.objects[id]).filter(Boolean);
+  if (selectedObjects.length === 0) return '';
+
+  const markup = [];
+
+  // If single connector selected, render endpoint handles
+  if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
+    const conn = selectedObjects[0];
+    const geom = resolveConnectorGeometry(doc, conn);
+    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    return markup.join('\n');
+  }
+
+  const unionBox = getUnionBoundingBox(selectedObjects);
+  if (!unionBox) return '';
+
+  const pad = 4;
+  const bx = unionBox.x - pad;
+  const by = unionBox.y - pad;
+  const bw = unionBox.width + pad * 2;
+  const bh = unionBox.height + pad * 2;
+
+  // Bounding rect: Concepts precision hairline dash with subtle accent wash
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(25, 113, 194, 0.03)" stroke="#1971c2" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+
+  // Only render 8 resize handles if single unlocked object or non-group selection
+  const isSingle = selectedObjects.length === 1;
+  const isLocked = selectedObjects.some(o => o.locked);
+
+  if (!isLocked) {
+    const handles = [
+      { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
+      { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },
+      { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
+      { id: 'e', x: bx + bw, y: by + bh / 2, cursor: 'ew-resize' },
+      { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
+      { id: 's', x: bx + bw / 2, y: by + bh, cursor: 'ns-resize' },
+      { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' },
+      { id: 'w', x: bx, y: by + bh / 2, cursor: 'ew-resize' }
+    ];
+
+    for (const h of handles) {
+      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="#ffffff" stroke="#1971c2" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+    }
+  }
+
+  return markup.join('\n');
+}
