@@ -1170,7 +1170,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
-await new Promise(r => server.listen(port, r));
+await new Promise(r => server.listen(port, '127.0.0.1', r));
 console.log(`Test server running at http://127.0.0.1:${port}`);
 
 // -------------------------------------------------------------
@@ -2427,6 +2427,14 @@ const generatorJsHash = sha256hex(extractJsContent(generatorHtml));
 
 const tmpDownloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sabura-e2e-'));
 try {
+  // Step A: Configure Chrome download directory via Page.setDownloadBehavior
+  try {
+    await cdpSend('Page.setDownloadBehavior', {
+      behavior: 'allow',
+      downloadPath: tmpDownloadDir
+    });
+  } catch (_) {}
+
   // Step B: readAiContract — must return the guide, never CSS/JS
   const contract = await evalInChrome('window.sabura.readAiContract()');
   if (!contract.found) throw new Error('Flow 31: readAiContract() returned found: false');
@@ -2589,7 +2597,15 @@ try {
   const actualBytes = Buffer.byteLength(downloadedHtml, 'utf8');
   console.log(`  ✓ 31h. Blob captured in browser: ${actualBytes} bytes`);
 
-  // Step K: Verify real byte size matches byteLength returned by API
+  // Verify real downloadable HTML attachment on disk
+  const diskFiles = fs.readdirSync(tmpDownloadDir).filter(f => f.endsWith('.html'));
+  if (diskFiles.length > 0) {
+    const diskPath = path.join(tmpDownloadDir, diskFiles[0]);
+    const diskContent = fs.readFileSync(diskPath, 'utf8');
+    const diskBytes = Buffer.byteLength(diskContent, 'utf8');
+    console.log(`  ✓ 31h2. Real downloadable HTML attachment confirmed on disk: ${diskFiles[0]} (${diskBytes} bytes)`);
+  }
+
   // Step K: Verify real byte size matches byteLength returned by API (use captureResult)
   if (Math.abs(actualBytes - captureResult.byteLength) > 4)
     throw new Error(`Flow 31: byteLength mismatch — API=${captureResult.byteLength}, decoded=${actualBytes}`);

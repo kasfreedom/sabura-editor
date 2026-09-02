@@ -103,3 +103,16 @@ export function triggerFileDownload(filename, htmlContent) {
   }, 200);
   return byteLength;
 }
+
+/**
+ * Sanitizes a title string for use in filenames, falling back if non-Latin, empty, or only punctuation.
+ *
+ * @param {string} [title]
+ * @param {string} [fallback='board']
+ * @returns {string}
+ */
+export function sanitizeFilenameTitle(title, fallback = 'board') {
+  const rawTitle = typeof title === 'string' ? title : '';
+  const sanitized = rawTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return sanitized || fallback;
+}

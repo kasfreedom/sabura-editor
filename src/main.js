@@ -9,7 +9,7 @@ import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocu
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
 import { THEME_PRESETS, FONT_SIZES } from './core/types.js';
 import { resolveConnectorGeometry } from './core/geometry.js';
-import { packageHtmlWithDocument, triggerFileDownload, extractDocumentFromHtml } from './storage/file-packer.js';
+import { packageHtmlWithDocument, triggerFileDownload, extractDocumentFromHtml, sanitizeFilenameTitle } from './storage/file-packer.js';
 import { Workspace } from './ui/workspace.js';
 import { ToolWheel } from './ui/wheel.js';
 import { TopBar } from './ui/topbar.js';
@@ -977,7 +977,7 @@ export class SaburaApp {
       this.status = 'Copy requested';
       this.updateUI();
 
-      const safeTitle = (this.doc.title || 'whiteboard').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const safeTitle = sanitizeFilenameTitle(this.doc?.title, 'whiteboard');
       const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
 
       triggerFileDownload(filename, packResult.html);
@@ -1055,30 +1055,39 @@ export class SaburaApp {
        *           |{ success: false, errors: string[] }}
        */
       generateBoardFile: (doc) => {
-        // 1. Validate supplied document
-        const validation = validateDocument(doc);
-        if (!validation.valid) {
-          return { success: false, errors: [...validation.errors] };
+        try {
+          // 1. Validate supplied document
+          const validation = validateDocument(doc);
+          if (!validation.valid) {
+            return { success: false, errors: [...validation.errors] };
+          }
+
+          // 2. Build clean shell — DOM clone excludes canvas SVG, selection, wheel, modal state
+          const shell = this.getCleanHtmlShell();
+
+          // 3. Replace only the sabura-document seam
+          const packResult = packageHtmlWithDocument(shell, doc);
+          if (!packResult.success) {
+            return { success: false, errors: [packResult.error || 'Failed to package document'] };
+          }
+
+          // 4. Filename from supplied title (sanitized first, then fallback to 'board')
+          const safeTitle = sanitizeFilenameTitle(doc?.title, 'board');
+          const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
+
+          // 5. Download. triggerFileDownload returns the actual UTF-8 Blob.size.
+          //    The HTML string is never returned through this API.
+          const byteLength = triggerFileDownload(filename, packResult.html);
+
+          return { success: true, filename, byteLength };
+        } catch (err) {
+          const rawMsg = err && err.message ? String(err.message) : 'Operational failure during board generation';
+          // Sanitize error message to ensure no HTML or runtime source is exposed
+          const noTags = rawMsg.replace(/<[^>]*>[\s\S]*?<\/[^>]*>/gi, '').replace(/<[^>]*>/g, '').trim();
+          const cleanMsg = noTags || 'Operational failure during board generation';
+          const safeMsg = cleanMsg.length > 200 ? cleanMsg.slice(0, 200) + '...' : cleanMsg;
+          return { success: false, errors: [safeMsg] };
         }
-
-        // 2. Build clean shell — DOM clone excludes canvas SVG, selection, wheel, modal state
-        const shell = this.getCleanHtmlShell();
-
-        // 3. Replace only the sabura-document seam
-        const packResult = packageHtmlWithDocument(shell, doc);
-        if (!packResult.success) {
-          return { success: false, errors: [packResult.error] };
-        }
-
-        // 4. Filename from supplied title
-        const safeTitle = (doc.title || 'board').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
-
-        // 5. Download. triggerFileDownload returns the actual UTF-8 Blob.size.
-        //    The HTML string is never returned through this API.
-        const byteLength = triggerFileDownload(filename, packResult.html);
-
-        return { success: true, filename, byteLength };
       },
 
       applyCommands: (commands) => {

@@ -23,7 +23,9 @@ import {
   extractDocumentFromHtml,
   packageHtmlWithDocument,
   DOCUMENT_SCRIPT_REGEX,
+  sanitizeFilenameTitle,
 } from '../src/storage/file-packer.js';
+import { SaburaApp } from '../src/main.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -234,4 +236,211 @@ test('14. Final artifact remains below 300 KiB (307,200 bytes) budget', () => {
     actualBytes <= BUDGET_BYTES,
     `Artifact is ${actualBytes} bytes — exceeds 300 KiB budget (${BUDGET_BYTES} bytes)`
   );
+});
+
+// ── Test 15 ────────────────────────────────────────────────────────────────────
+
+test('15. Filename generation for non-Latin and punctuation titles', async () => {
+  // 1. Arabic-only title
+  const arabicTitle = 'مرحبا بالعالم';
+  const safeArabic = sanitizeFilenameTitle(arabicTitle, 'board');
+  assert.equal(safeArabic, 'board', 'Arabic-only title must fall back to "board"');
+
+  // 2. Punctuation-only title
+  const punctTitle = '!@#$%^&*()---_+=[]{}';
+  const safePunct = sanitizeFilenameTitle(punctTitle, 'board');
+  assert.equal(safePunct, 'board', 'Punctuation-only title must fall back to "board"');
+
+  // 3. Ordinary Latin title
+  const latinTitle = 'Architecture Review 2026';
+  const safeLatin = sanitizeFilenameTitle(latinTitle, 'board');
+  assert.equal(safeLatin, 'architecture-review-2026', 'Latin title must be converted to hyphenated slug');
+
+  // Test generateBoardFile produces valid filenames for each
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument();
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.originalHtml = html;
+  app.subscribers = new Set();
+  app.undoStack = [];
+  app.redoStack = [];
+  app.getCleanHtmlShell = () => html;
+
+  const origWindow = globalThis.window;
+  const origDocument = globalThis.document;
+  const origURL = globalThis.URL;
+  const origBlob = globalThis.Blob;
+
+  try {
+    globalThis.window = {};
+    globalThis.document = {
+      body: { appendChild: () => {}, removeChild: () => {} },
+      createElement: () => ({ click: () => {} })
+    };
+    globalThis.URL = { createObjectURL: () => 'blob:mock', revokeObjectURL: () => {} };
+    globalThis.Blob = class { constructor() { this.size = 1000; } };
+
+    app.exposeApi();
+    const sabura = globalThis.window.sabura;
+
+    const resArabic = sabura.generateBoardFile(createDefaultDocument({ title: arabicTitle }));
+    assert.equal(resArabic.success, true);
+    assert.ok(resArabic.filename.startsWith('sabura-board-'), `Expected sabura-board-*, got ${resArabic.filename}`);
+    assert.ok(resArabic.filename.endsWith('.html'));
+
+    const resPunct = sabura.generateBoardFile(createDefaultDocument({ title: punctTitle }));
+    assert.equal(resPunct.success, true);
+    assert.ok(resPunct.filename.startsWith('sabura-board-'), `Expected sabura-board-*, got ${resPunct.filename}`);
+    assert.ok(resPunct.filename.endsWith('.html'));
+
+    const resLatin = sabura.generateBoardFile(createDefaultDocument({ title: latinTitle }));
+    assert.equal(resLatin.success, true);
+    assert.ok(resLatin.filename.startsWith('sabura-architecture-review-2026-'), `Expected sabura-architecture-review-2026-*, got ${resLatin.filename}`);
+    assert.ok(resLatin.filename.endsWith('.html'));
+
+    // Allow triggerFileDownload cleanup timer (200ms) to complete before restoring globals
+    await new Promise(r => setTimeout(r, 250));
+  } finally {
+    globalThis.window = origWindow;
+    globalThis.document = origDocument;
+    globalThis.URL = origURL;
+    globalThis.Blob = origBlob;
+  }
+});
+
+// ── Test 16 ────────────────────────────────────────────────────────────────────
+
+test('16. generateBoardFile operational failure when triggerFileDownload throws', () => {
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument();
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.originalHtml = html;
+  app.subscribers = new Set();
+  app.undoStack = [];
+  app.redoStack = [];
+  app.getCleanHtmlShell = () => html;
+
+  const origWindow = globalThis.window;
+  const origDocument = globalThis.document;
+  const origURL = globalThis.URL;
+  const origBlob = globalThis.Blob;
+
+  try {
+    globalThis.window = {};
+    globalThis.document = {
+      body: { appendChild: () => {}, removeChild: () => {} },
+      createElement: () => ({ click: () => {} })
+    };
+    // Simulate triggerFileDownload failure (e.g. Blob allocation leaking runtime HTML)
+    globalThis.URL = {
+      createObjectURL: () => {
+        throw new Error('Disk quota exceeded: <style>body{background:red}</style>');
+      },
+      revokeObjectURL: () => {}
+    };
+    globalThis.Blob = class { constructor() { this.size = 1000; } };
+
+    app.exposeApi();
+    const sabura = globalThis.window.sabura;
+
+    const validDoc = createDefaultDocument({ title: 'Failure Test' });
+    const result = sabura.generateBoardFile(validDoc);
+
+    // 1. Returns structured failure, does not throw uncaught exception
+    assert.equal(result.success, false, 'Must return success: false');
+    assert.ok(Array.isArray(result.errors), 'Must return errors array');
+    assert.ok(result.errors.length > 0, 'Must contain error message');
+
+    // 2. No HTML or runtime source appears in error message or response
+    assert.equal(result.html, undefined, 'Must not expose html property in response');
+    assert.equal(result.source, undefined, 'Must not expose source property in response');
+    assert.equal(result.runtime, undefined, 'Must not expose runtime property in response');
+    const combinedErrors = result.errors.join(' ');
+    assert.ok(!combinedErrors.includes('<style>'), 'Error message must not contain <style> tag');
+    assert.ok(!combinedErrors.includes('</style>'), 'Error message must not contain </style> tag');
+  } finally {
+    globalThis.window = origWindow;
+    globalThis.document = origDocument;
+    globalThis.URL = origURL;
+    globalThis.Blob = origBlob;
+  }
+});
+
+// ── Test 17 ────────────────────────────────────────────────────────────────────
+
+test('17. generateBoardFile operational failure when clean shell generation throws', () => {
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument();
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.originalHtml = html;
+  app.subscribers = new Set();
+  app.undoStack = [];
+  app.redoStack = [];
+
+  // Simulate getCleanHtmlShell throwing with sensitive HTML/script tags
+  app.getCleanHtmlShell = () => {
+    throw new Error('DOM clone crashed: <script>function runtimeBundle(){}</script>');
+  };
+
+  const origWindow = globalThis.window;
+  try {
+    globalThis.window = {};
+    app.exposeApi();
+    const sabura = globalThis.window.sabura;
+
+    const validDoc = createDefaultDocument({ title: 'DOM Error Test' });
+    const result = sabura.generateBoardFile(validDoc);
+
+    // 1. Returns structured failure without throwing
+    assert.equal(result.success, false);
+    assert.ok(Array.isArray(result.errors));
+    assert.ok(result.errors.length > 0);
+
+    // 2. No HTML or runtime content in error or response
+    assert.equal(result.html, undefined);
+    assert.equal(result.source, undefined);
+    assert.equal(result.runtime, undefined);
+    const combinedErrors = result.errors.join(' ');
+    assert.ok(!combinedErrors.includes('<script>'), 'Error must not contain <script>');
+    assert.ok(!combinedErrors.includes('runtimeBundle'), 'Error must not contain runtime code');
+  } finally {
+    globalThis.window = origWindow;
+  }
+});
+
+// ── Test 18 ────────────────────────────────────────────────────────────────────
+
+test('18. generateBoardFile operational failure when base shell is missing seam', () => {
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument();
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.originalHtml = html;
+  app.subscribers = new Set();
+  app.undoStack = [];
+  app.redoStack = [];
+  // Shell missing sabura-document seam
+  app.getCleanHtmlShell = () => '<!DOCTYPE html><html><head></head><body>No seam here</body></html>';
+
+  const origWindow = globalThis.window;
+  try {
+    globalThis.window = {};
+    app.exposeApi();
+    const sabura = globalThis.window.sabura;
+
+    const validDoc = createDefaultDocument({ title: 'No Seam Test' });
+    const result = sabura.generateBoardFile(validDoc);
+
+    assert.equal(result.success, false);
+    assert.ok(Array.isArray(result.errors));
+    assert.ok(result.errors[0].includes('missing sabura-document seam'));
+    assert.equal(result.html, undefined);
+    assert.equal(result.source, undefined);
+    assert.equal(result.runtime, undefined);
+  } finally {
+    globalThis.window = origWindow;
+  }
 });
