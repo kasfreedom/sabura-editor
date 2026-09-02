@@ -179,9 +179,13 @@ export function validateDocument(doc) {
       if (obj.type === 'connector') {
         if (!obj.from || typeof obj.from !== 'object') {
           errors.push(`Connector "${objId}" must have a valid "from" definition`);
+        } else if (obj.from.anchor && (typeof obj.from.anchor.x !== 'number' || typeof obj.from.anchor.y !== 'number')) {
+          errors.push(`Connector "${objId}" from.anchor must have numeric x and y`);
         }
         if (!obj.to || typeof obj.to !== 'object') {
           errors.push(`Connector "${objId}" must have a valid "to" definition`);
+        } else if (obj.to.anchor && (typeof obj.to.anchor.x !== 'number' || typeof obj.to.anchor.y !== 'number')) {
+          errors.push(`Connector "${objId}" to.anchor must have numeric x and y`);
         }
       }
     }

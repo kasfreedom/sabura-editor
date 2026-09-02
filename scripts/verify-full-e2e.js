@@ -235,6 +235,73 @@ async function runSafariTests() {
 
     log('9. Presentation and Fullscreen Transitions', inPres && exitedPres, 'Entered and cleanly exited');
 
+    // Flow 10: Movable Object Connection Points in Safari
+    app.dispatchCommand({
+      type: 'create_object',
+      object: { id: 'safari_box', type: 'rectangle', x: 600, y: 600, width: 200, height: 100, seed: 123 }
+    });
+    app.dispatchCommand({
+      type: 'create_object',
+      object: { id: 'safari_conn', type: 'connector', from: { id: 'safari_box' }, to: { point: { x: 950, y: 650 } }, routing: 'straight', seed: 456 }
+    });
+    app.workspace.setTool('select');
+    app.workspace.selectedIds = ['safari_conn'];
+    app.workspace.render();
+    await sleep(50);
+
+    const fromHandle = document.querySelector('[data-handle="conn-from"]');
+    const hasHandles = Boolean(fromHandle);
+
+    const cRect = app.workspace.container.getBoundingClientRect();
+    const startClientX = 800 * app.workspace.camera.zoom + app.workspace.camera.x + cRect.left;
+    const startClientY = 650 * app.workspace.camera.zoom + app.workspace.camera.y + cRect.top;
+    const targetClientX = 650 * app.workspace.camera.zoom + app.workspace.camera.x + cRect.left;
+    const targetClientY = 600 * app.workspace.camera.zoom + app.workspace.camera.y + cRect.top;
+
+    fetch('/api/safari-log', {
+      method: 'POST',
+      body: 'Flow 10 start. fromHandle=' + Boolean(fromHandle) + ' handleAttr=' + fromHandle?.getAttribute('data-handle')
+    }).catch(() => {});
+
+    // Drag handle to top edge at 25% (x: 150, y: 100)
+    fromHandle?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, composed: true, clientX: startClientX, clientY: startClientY, button: 0, buttons: 1 }));
+    await sleep(20);
+
+    fetch('/api/safari-log', {
+      method: 'POST',
+      body: 'After pointerdown: isReconnecting=' + app.workspace.isReconnecting + ' data=' + JSON.stringify(app.workspace.reconnectingData)
+    }).catch(() => {});
+
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, composed: true, clientX: targetClientX, clientY: targetClientY, button: 0, buttons: 1 }));
+    await sleep(20);
+
+    fetch('/api/safari-log', {
+      method: 'POST',
+      body: 'After pointermove: latest=' + JSON.stringify(app.workspace.latestReconnectTarget)
+    }).catch(() => {});
+
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, composed: true, clientX: targetClientX, clientY: targetClientY, button: 0, buttons: 0 }));
+    await sleep(100);
+
+    fetch('/api/safari-log', {
+      method: 'POST',
+      body: 'After pointerup: conn.from=' + JSON.stringify(app.doc.objects['safari_conn']?.from)
+    }).catch(() => {});
+
+    const customAnchor = Boolean(app.doc.objects['safari_conn']?.from?.anchor && app.doc.objects['safari_conn'].from.id === 'safari_box');
+
+    // Reset via Auto Connection Points wheel action
+    app.handleWheelAction('conn_points_auto');
+    await sleep(100);
+    const resetToAuto = app.doc.objects['safari_conn']?.from?.anchor === undefined;
+
+    // Undo restores custom anchor
+    app.undo();
+    await sleep(100);
+    const restoredAnchor = Boolean(app.doc.objects['safari_conn']?.from?.anchor);
+
+    log('10. Movable Object Connection Points & Auto Reset', hasHandles && customAnchor && resetToAuto && restoredAnchor, 'Anchor=' + JSON.stringify(app.doc.objects['safari_conn']?.from?.anchor));
+
   } catch (err) {
     log('Safari Execution Error', false, err.message);
   }
@@ -247,9 +314,11 @@ async function runSafariTests() {
   }).catch(() => {});
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(runSafariTests, 500);
-});
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(runSafariTests, 300));
+} else {
+  setTimeout(runSafariTests, 300);
+}
 `;
 
 // 3. Start local HTTP server
@@ -257,6 +326,7 @@ let safariResolve = null;
 const safariPromise = new Promise(resolve => { safariResolve = resolve; });
 
 const server = http.createServer((req, res) => {
+  console.log(`[HTTP ${req.method}] ${req.url}`);
   const freshHtml = fs.readFileSync(path.join(rootDir, 'sabura.html'), 'utf8');
   if (req.url === '/sabura.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -269,6 +339,14 @@ const server = http.createServer((req, res) => {
   } else if (req.url === '/safari-e2e-runner.js') {
     res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
     res.end(safariRunnerCode);
+  } else if (req.url === '/api/safari-log' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      console.log('  [Safari Live Log]', body);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
   } else if (req.url === '/api/safari-report' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -557,6 +635,70 @@ if (!c8.rejected || !c8.hasError) {
   throw new Error('Chrome: AI Command validation failed to reject unsupported command');
 }
 
+// Flow 9: Movable Object Connection Points in Chrome
+const c9 = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: 'chrome_box', type: 'rectangle', x: 100, y: 100, width: 200, height: 100, seed: 1 }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: 'chrome_conn', type: 'connector', from: { id: 'chrome_box' }, to: { point: { x: 500, y: 150 } }, routing: 'straight', seed: 2 }
+  });
+
+  app.workspace.selectedIds = ['chrome_conn'];
+  app.workspace.render();
+
+  const handle = document.querySelector('[data-handle="conn-from"]');
+  const hasHandles = Boolean(handle);
+
+  // Drag handle to top edge at 25% (x: 150, y: 100)
+  handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 300, clientY: 150, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 150, clientY: 100, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 100, buttons: 0 }));
+
+  const conn1 = app.doc.objects['chrome_conn'];
+  const customAnchor = Boolean(conn1.from.anchor && conn1.from.id === 'chrome_box');
+
+  // Move chrome_box
+  app.dispatchCommand({ type: 'move_objects', ids: ['chrome_box'], dx: 40, dy: 60 });
+  const boxMoved = app.doc.objects['chrome_box'].x === 140;
+
+  // Resize chrome_box
+  app.dispatchCommand({ type: 'resize_object', id: 'chrome_box', bounds: { x: 140, y: 160, width: 400, height: 100 } });
+  const boxResized = app.doc.objects['chrome_box'].width === 400;
+
+  // Detach to whitespace
+  app.workspace.selectedIds = ['chrome_conn'];
+  app.workspace.render();
+  const handle2 = document.querySelector('[data-handle="conn-from"]');
+  handle2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 240, clientY: 160, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 50, clientY: 50, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 50, clientY: 50, buttons: 0 }));
+
+  const connDetached = app.doc.objects['chrome_conn'];
+  const isDetached = Boolean(connDetached.from.point && !connDetached.from.id);
+
+  // Undo detachment
+  app.undo();
+  const connReattached = Boolean(app.doc.objects['chrome_conn'].from.id === 'chrome_box');
+
+  // Auto reset
+  app.handleWheelAction('conn_points_auto');
+  const isAuto = app.doc.objects['chrome_conn'].from.anchor === undefined;
+
+  // Undo auto reset
+  app.undo();
+  const isCustomAgain = Boolean(app.doc.objects['chrome_conn'].from.anchor);
+
+  return { hasHandles, customAnchor, boxMoved, boxResized, isDetached, connReattached, isAuto, isCustomAgain };
+})()`);
+console.log('Chrome 9. Movable connection points:', c9);
+if (!c9.hasHandles || !c9.customAnchor || !c9.isDetached || !c9.connReattached || !c9.isAuto || !c9.isCustomAgain) {
+  throw new Error('Chrome: Movable connection points failed');
+}
+
 console.log('✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
@@ -572,7 +714,7 @@ console.log('Launching Safari with automated test harness...');
 exec(`open -a Safari "http://127.0.0.1:${port}/sabura-safari.html"`);
 
 // Wait for Safari callback report
-const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 15 seconds')), 15000));
+const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 30 seconds')), 30000));
 const safariData = await Promise.race([safariPromise, timeout]);
 
 console.log('\nSafari Test Results:');

@@ -203,6 +203,18 @@ export function renderSvgScene(doc, runtime) {
     }
   }
 
+  // Render transient reconnect snap guide / candidate indicator
+  if (runtime.reconnectSnapIndicator && runtime.reconnectSnapIndicator.point) {
+    const snap = runtime.reconnectSnapIndicator;
+    const snapColor = doc.theme?.id === 'night' ? '#7aa2f7' : (doc.theme?.id === 'blueprint' ? '#38bdf8' : '#1971c2');
+    out.push(`
+      <g class="reconnect-snap-guide" pointer-events="none">
+        <circle cx="${snap.point.x}" cy="${snap.point.y}" r="8" fill="none" stroke="${snapColor}" stroke-width="2.5" opacity="0.9" />
+        <circle cx="${snap.point.x}" cy="${snap.point.y}" r="3.5" fill="${snapColor}" />
+      </g>
+    `);
+  }
+
   // Render selection boxes and handles
   if (selectedIds.length > 0) {
     out.push(renderSelectionOverlay(doc, selectedIds));

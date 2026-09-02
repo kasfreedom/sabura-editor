@@ -161,6 +161,202 @@ export function getShapeBoundaryPoint(shape, targetPoint) {
 }
 
 /**
+ * Projects a point (px, py) onto line segment (x1, y1)-(x2, y2).
+ */
+export function projectPointToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { x: x1, y: y1 };
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  return {
+    x: x1 + t * dx,
+    y: y1 + t * dy
+  };
+}
+
+/**
+ * Computes useful connection snap points (side centers and vertices/corners) for a shape.
+ * @param {Object} shape 
+ * @returns {Array<{ name: string, point: { x: number, y: number }, anchor: { x: number, y: number } }>}
+ */
+export function getShapeSnapPoints(shape) {
+  const box = getBoundingBox(shape);
+  const snapPoints = [];
+
+  if (shape.type === 'diamond') {
+    // 4 Vertices
+    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
+    snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
+    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
+    snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+    // 4 Edge midpoints
+    snapPoints.push({ name: 'top-right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.cy) / 2 }, anchor: { x: 0.75, y: 0.25 } });
+    snapPoints.push({ name: 'bottom-right', point: { x: (box.right + box.cx) / 2, y: (box.cy + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.75 } });
+    snapPoints.push({ name: 'bottom-left', point: { x: (box.cx + box.x) / 2, y: (box.bottom + box.cy) / 2 }, anchor: { x: 0.25, y: 0.75 } });
+    snapPoints.push({ name: 'top-left', point: { x: (box.x + box.cx) / 2, y: (box.cy + box.y) / 2 }, anchor: { x: 0.25, y: 0.25 } });
+    return snapPoints;
+  }
+
+  if (shape.type === 'triangle') {
+    // 3 Vertices
+    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
+    snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
+    snapPoints.push({ name: 'bottom-left', point: { x: box.x, y: box.bottom }, anchor: { x: 0, y: 1 } });
+    // 3 Edge midpoints
+    snapPoints.push({ name: 'right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.5 } });
+    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
+    snapPoints.push({ name: 'left', point: { x: (box.cx + box.x) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.25, y: 0.5 } });
+    return snapPoints;
+  }
+
+  if (shape.type === 'ellipse') {
+    const a = box.width / 2;
+    const b = box.height / 2;
+    // 4 Cardinal points
+    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
+    snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
+    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
+    snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+    // 4 Diagonals (45 deg)
+    const cos45 = Math.SQRT1_2;
+    const sin45 = Math.SQRT1_2;
+    snapPoints.push({ name: 'top-right', point: { x: box.cx + a * cos45, y: box.cy - b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
+    snapPoints.push({ name: 'bottom-right', point: { x: box.cx + a * cos45, y: box.cy + b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
+    snapPoints.push({ name: 'bottom-left', point: { x: box.cx - a * cos45, y: box.cy + b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
+    snapPoints.push({ name: 'top-left', point: { x: box.cx - a * cos45, y: box.cy - b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
+    return snapPoints;
+  }
+
+  // Rectangle & Text & other shapes
+  // 4 Side centers
+  snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
+  snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
+  snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
+  snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+  // 4 Corners
+  snapPoints.push({ name: 'top-left', point: { x: box.x, y: box.y }, anchor: { x: 0, y: 0 } });
+  snapPoints.push({ name: 'top-right', point: { x: box.right, y: box.y }, anchor: { x: 1, y: 0 } });
+  snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
+  snapPoints.push({ name: 'bottom-left', point: { x: box.x, y: box.bottom }, anchor: { x: 0, y: 1 } });
+
+  return snapPoints;
+}
+
+/**
+ * Calculates continuous position around shape perimeter with gentle snapping to side centers/corners.
+ * @param {Object} shape 
+ * @param {{ x: number, y: number }} worldPoint 
+ * @param {number} snapDistance 
+ * @returns {{ point: { x: number, y: number }, anchor: { x: number, y: number }, snapped: boolean, snapName?: string }}
+ */
+export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
+  const box = getBoundingBox(shape);
+  const px = worldPoint.x;
+  const py = worldPoint.y;
+  let closestPt = null;
+
+  if (shape.type === 'ellipse') {
+    const a = Math.max(1, box.width / 2);
+    const b = Math.max(1, box.height / 2);
+    const dx = px - box.cx;
+    const dy = py - box.cy;
+    const angle = (dx === 0 && dy === 0) ? -Math.PI / 2 : Math.atan2(dy, dx);
+    closestPt = {
+      x: box.cx + a * Math.cos(angle),
+      y: box.cy + b * Math.sin(angle)
+    };
+  } else if (shape.type === 'diamond') {
+    const top = { x: box.cx, y: box.y };
+    const right = { x: box.right, y: box.cy };
+    const bottom = { x: box.cx, y: box.bottom };
+    const left = { x: box.x, y: box.cy };
+    const segments = [
+      [top, right],
+      [right, bottom],
+      [bottom, left],
+      [left, top]
+    ];
+    let minDist = Infinity;
+    for (const [p1, p2] of segments) {
+      const proj = projectPointToSegment(px, py, p1.x, p1.y, p2.x, p2.y);
+      const d = Math.hypot(px - proj.x, py - proj.y);
+      if (d < minDist) {
+        minDist = d;
+        closestPt = proj;
+      }
+    }
+  } else if (shape.type === 'triangle') {
+    const top = { x: box.cx, y: box.y };
+    const br = { x: box.right, y: box.bottom };
+    const bl = { x: box.x, y: box.bottom };
+    const segments = [
+      [top, br],
+      [br, bl],
+      [bl, top]
+    ];
+    let minDist = Infinity;
+    for (const [p1, p2] of segments) {
+      const proj = projectPointToSegment(px, py, p1.x, p1.y, p2.x, p2.y);
+      const d = Math.hypot(px - proj.x, py - proj.y);
+      if (d < minDist) {
+        minDist = d;
+        closestPt = proj;
+      }
+    }
+  } else {
+    // Rectangle, Text, and general boxes
+    const topProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.y };
+    const bottomProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.bottom };
+    const leftProj = { x: box.x, y: Math.max(box.y, Math.min(box.bottom, py)) };
+    const rightProj = { x: box.right, y: Math.max(box.y, Math.min(box.bottom, py)) };
+
+    const candidates = [
+      { pt: topProj, dist: Math.hypot(px - topProj.x, py - topProj.y) },
+      { pt: rightProj, dist: Math.hypot(px - rightProj.x, py - rightProj.y) },
+      { pt: bottomProj, dist: Math.hypot(px - bottomProj.x, py - bottomProj.y) },
+      { pt: leftProj, dist: Math.hypot(px - leftProj.x, py - leftProj.y) }
+    ];
+    candidates.sort((a, b) => a.dist - b.dist);
+    closestPt = candidates[0].pt;
+  }
+
+  // Check gentle snapping against useful snap points
+  const snapPoints = getShapeSnapPoints(shape);
+  let bestSnap = null;
+  let bestSnapDist = Infinity;
+
+  for (const s of snapPoints) {
+    const d = Math.hypot(closestPt.x - s.point.x, closestPt.y - s.point.y);
+    if (d <= snapDistance && d < bestSnapDist) {
+      bestSnapDist = d;
+      bestSnap = s;
+    }
+  }
+
+  if (bestSnap) {
+    return {
+      point: bestSnap.point,
+      anchor: bestSnap.anchor,
+      snapped: true,
+      snapName: bestSnap.name
+    };
+  }
+
+  const anchorX = box.width > 0 ? (closestPt.x - box.x) / box.width : 0.5;
+  const anchorY = box.height > 0 ? (closestPt.y - box.y) / box.height : 0.5;
+
+  return {
+    point: closestPt,
+    anchor: {
+      x: Math.round(anchorX * 10000) / 10000,
+      y: Math.round(anchorY * 10000) / 10000
+    },
+    snapped: false
+  };
+}
+
+/**
  * Calculates start and end coordinates and routing points for a connector object.
  * @param {Object} doc 
  * @param {Object} connector 
@@ -173,9 +369,38 @@ export function resolveConnectorGeometry(doc, connector) {
   let startCenter = fromObj ? { x: fromObj.x + fromObj.width / 2, y: fromObj.y + fromObj.height / 2 } : (connector.from?.point || { x: connector.x, y: connector.y });
   let endCenter = toObj ? { x: toObj.x + toObj.width / 2, y: toObj.y + toObj.height / 2 } : (connector.to?.point || { x: connector.x + connector.width, y: connector.y + connector.height });
 
-  // Boundary attachment
-  let start = fromObj ? getShapeBoundaryPoint(fromObj, endCenter) : { ...startCenter };
-  let end = toObj ? getShapeBoundaryPoint(toObj, startCenter) : { ...endCenter };
+  // Resolve boundary points, respecting explicit custom anchors if present
+  let start;
+  if (fromObj) {
+    if (connector.from?.anchor && typeof connector.from.anchor.x === 'number' && typeof connector.from.anchor.y === 'number') {
+      const fromBox = getBoundingBox(fromObj);
+      const targetPt = {
+        x: fromBox.x + connector.from.anchor.x * fromBox.width,
+        y: fromBox.y + connector.from.anchor.y * fromBox.height
+      };
+      start = getShapeBoundaryPoint(fromObj, targetPt);
+    } else {
+      start = getShapeBoundaryPoint(fromObj, endCenter);
+    }
+  } else {
+    start = { ...startCenter };
+  }
+
+  let end;
+  if (toObj) {
+    if (connector.to?.anchor && typeof connector.to.anchor.x === 'number' && typeof connector.to.anchor.y === 'number') {
+      const toBox = getBoundingBox(toObj);
+      const targetPt = {
+        x: toBox.x + connector.to.anchor.x * toBox.width,
+        y: toBox.y + connector.to.anchor.y * toBox.height
+      };
+      end = getShapeBoundaryPoint(toObj, targetPt);
+    } else {
+      end = getShapeBoundaryPoint(toObj, startCenter);
+    }
+  } else {
+    end = { ...endCenter };
+  }
 
   const routing = connector.routing || 'straight';
   let points = [];

@@ -382,6 +382,44 @@ export class SaburaApp {
           endArrow: payload.endArrow
         });
       }
+    } else if (actionId === 'conn_points_auto') {
+      const cmds = [];
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector') {
+          if (conn.from?.id && conn.from.anchor) {
+            cmds.push({ type: 'reconnect_connector', id, endpoint: 'from', target: { id: conn.from.id } });
+          }
+          if (conn.to?.id && conn.to.anchor) {
+            cmds.push({ type: 'reconnect_connector', id, endpoint: 'to', target: { id: conn.to.id } });
+          }
+        }
+      }
+      if (cmds.length > 0) {
+        this.dispatchCommandBatch(cmds);
+      }
+    } else if (actionId === 'conn_points_auto_from') {
+      const cmds = [];
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector' && conn.from?.id && conn.from.anchor) {
+          cmds.push({ type: 'reconnect_connector', id, endpoint: 'from', target: { id: conn.from.id } });
+        }
+      }
+      if (cmds.length > 0) {
+        this.dispatchCommandBatch(cmds);
+      }
+    } else if (actionId === 'conn_points_auto_to') {
+      const cmds = [];
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector' && conn.to?.id && conn.to.anchor) {
+          cmds.push({ type: 'reconnect_connector', id, endpoint: 'to', target: { id: conn.to.id } });
+        }
+      }
+      if (cmds.length > 0) {
+        this.dispatchCommandBatch(cmds);
+      }
     } else if (actionId === 'action_reconnect') {
       if (selectedIds.length === 1 && this.doc.objects[selectedIds[0]]?.type === 'connector') {
         this.workspace.render();

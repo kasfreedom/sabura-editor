@@ -73,6 +73,14 @@ export function validateCommand(cmd) {
     if (typeof cmd.text !== 'string') errors.push('set_text requires string text');
   } else if (cmd.type === 'configure_connector') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector requires a string id');
+  } else if (cmd.type === 'reconnect_connector') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('reconnect_connector requires a string id');
+    if (cmd.endpoint !== 'from' && cmd.endpoint !== 'to') errors.push('reconnect_connector endpoint must be "from" or "to"');
+    if (!cmd.target || typeof cmd.target !== 'object') errors.push('reconnect_connector requires a target object');
+    else if (!cmd.target.id && !cmd.target.point) errors.push('reconnect_connector target must specify an id or point');
+    if (cmd.target?.anchor && (typeof cmd.target.anchor.x !== 'number' || typeof cmd.target.anchor.y !== 'number')) {
+      errors.push('reconnect_connector target.anchor must have numeric x and y');
+    }
   } else if (cmd.type === 'set_board_theme') {
     if (!cmd.theme && !cmd.themeId) errors.push('set_board_theme requires theme or themeId');
   } else if (cmd.type === 'batch') {

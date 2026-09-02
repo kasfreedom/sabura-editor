@@ -5,7 +5,7 @@
 
 import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
 import { createDefaultObject, cloneDocument } from '../core/document.js';
-import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector } from '../core/geometry.js';
+import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, getClosestBoundaryPoint, getShapeSnapPoints } from '../core/geometry.js';
 
 export class Workspace {
   constructor(svgContainer, callbacks) {
@@ -30,6 +30,7 @@ export class Workspace {
     this.isResizing = false;
     this.isCreating = false;
     this.isReconnecting = false;
+    this.reconnectSnapIndicator = null;
     this.isMarquee = false;
     this.spaceHeld = false;
 
@@ -274,28 +275,13 @@ export class Workspace {
   }
 
   onPointerDown(e) {
-    // If middle click or space held or activeTool === 'hand', start panning
-    if (e.button === 1 || this.spaceHeld || this.activeTool === 'hand') {
-      this.isPanning = true;
-      this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
-      this.updateCursor();
-      return;
-    }
-
-    if (e.button !== 0) return; // Only primary left click beyond here
+    if (e.button !== 0 && e.button !== 1) return;
 
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     this.pointerStartScreen = { x: e.clientX, y: e.clientY };
 
-    // Setup long-press timer (500ms) for opening circular wheel on touch / static click
-    this.longPressTimer = setTimeout(() => {
-      this.longPressTimer = null;
-      const hit = this.findObjectAt(worldPt);
-      this.callbacks.onOpenWheel(e.clientX, e.clientY, hit ? 'object' : 'canvas', hit);
-    }, 500);
-
-    // Check if clicked a resize or connector handle
-    const handleEl = e.target?.closest?.('[data-handle]');
+    // 1. Check if clicked a resize or connector handle (always takes priority on left click)
+    const handleEl = e.button === 0 ? e.target?.closest?.('[data-handle]') : null;
     if (handleEl) {
       clearTimeout(this.longPressTimer);
       const handleId = handleEl.getAttribute('data-handle');
@@ -309,6 +295,7 @@ export class Workspace {
         const conn = doc.objects[this.selectedIds[0]];
         this.reconnectOriginalTarget = conn ? JSON.parse(JSON.stringify(conn[this.reconnectingData.endpoint])) : null;
         this.latestReconnectTarget = null;
+        this.reconnectSnapIndicator = null;
       } else {
         this.isResizing = true;
         this.activeHandle = handleId;
@@ -326,6 +313,21 @@ export class Workspace {
       }
       return;
     }
+
+    // 2. If middle click or space held or activeTool === 'hand', start panning
+    if (e.button === 1 || this.spaceHeld || this.activeTool === 'hand') {
+      this.isPanning = true;
+      this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
+      this.updateCursor();
+      return;
+    }
+
+    // Setup long-press timer (500ms) for opening circular wheel on touch / static click
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTimer = null;
+      const hit = this.findObjectAt(worldPt);
+      this.callbacks.onOpenWheel(e.clientX, e.clientY, hit ? 'object' : 'canvas', hit);
+    }, 500);
 
     // Check if clicked an object
     const hitObj = this.findObjectAt(worldPt);
@@ -555,10 +557,60 @@ export class Workspace {
     }
 
     if (this.isReconnecting && this.reconnectingData) {
-      const hit = this.findObjectAt(worldPt);
-      const target = hit && hit.id !== this.reconnectingData.connectorId ? { id: hit.id } : { point: { ...worldPt } };
       const doc = this.callbacks.getDocument();
-      const conn = doc.objects[this.reconnectingData.connectorId];
+      const connId = this.reconnectingData.connectorId;
+      const conn = doc.objects[connId];
+      const attachedId = this.reconnectOriginalTarget?.id;
+      const attachedObj = attachedId ? doc.objects[attachedId] : null;
+
+      let targetObj = null;
+      const hit = this.findObjectAt(worldPt);
+
+      // Direct hit on an object (excluding the connector itself)
+      if (hit && hit.id !== connId && hit.type !== 'connector') {
+        targetObj = hit;
+      } else if (attachedObj) {
+        // Generous buffer (24px screen-space) around currently attached object to prevent accidental detachment
+        const b = getBoundingBox(attachedObj);
+        const buf = 24 / this.camera.zoom;
+        if (worldPt.x >= b.x - buf && worldPt.x <= b.right + buf &&
+            worldPt.y >= b.y - buf && worldPt.y <= b.bottom + buf) {
+          targetObj = attachedObj;
+        }
+      }
+
+      // If still no target, check if within gentle buffer of any other non-connector shape
+      if (!targetObj) {
+        const buf = 14 / this.camera.zoom;
+        for (const o of Object.values(doc.objects)) {
+          if (o.id !== connId && o.type !== 'connector') {
+            const b = getBoundingBox(o);
+            if (worldPt.x >= b.x - buf && worldPt.x <= b.right + buf &&
+                worldPt.y >= b.y - buf && worldPt.y <= b.bottom + buf) {
+              targetObj = o;
+              break;
+            }
+          }
+        }
+      }
+
+      let target;
+      if (targetObj) {
+        const closest = getClosestBoundaryPoint(targetObj, worldPt, 14 / this.camera.zoom);
+        target = {
+          id: targetObj.id,
+          anchor: closest.anchor
+        };
+        this.reconnectSnapIndicator = closest.snapped ? {
+          point: closest.point,
+          snapName: closest.snapName,
+          objectId: targetObj.id
+        } : null;
+      } else {
+        target = { point: { x: worldPt.x, y: worldPt.y } };
+        this.reconnectSnapIndicator = null;
+      }
+
       if (conn) {
         conn[this.reconnectingData.endpoint] = target;
         this.latestReconnectTarget = target;
@@ -700,6 +752,7 @@ export class Workspace {
 
     if (this.isReconnecting) {
       this.isReconnecting = false;
+      this.reconnectSnapIndicator = null;
       const doc = this.callbacks.getDocument();
 
       if (this.reconnectOriginalTarget && this.reconnectingData) {
@@ -813,6 +866,7 @@ export class Workspace {
       marquee: this.marquee,
       snapGuides: this.snapGuides,
       showGrid: this.showGrid !== false,
+      reconnectSnapIndicator: this.isReconnecting ? this.reconnectSnapIndicator : null,
       connectorDraft: this.draftObject?.type === 'connector' ? {
         start: this.draftObject.from?.point || { x: this.draftObject.x, y: this.draftObject.y },
         end: this.draftObject.to?.point || { x: this.draftObject.x + this.draftObject.width, y: this.draftObject.y + this.draftObject.height }

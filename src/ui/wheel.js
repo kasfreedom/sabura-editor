@@ -278,8 +278,17 @@ export class ToolWheel {
         ]
       });
 
-      // 5. Reconnection
-      items.push({ id: 'action_reconnect', label: 'Reconnect', icon: '↺' });
+      // 5. Connection Points / Auto
+      items.push({
+        id: 'menu_conn_points',
+        label: 'Points',
+        icon: '⊕',
+        subItems: [
+          { id: 'conn_points_auto', label: 'Auto All', icon: '↺' },
+          { id: 'conn_points_auto_from', label: 'Auto From', icon: '⇤' },
+          { id: 'conn_points_auto_to', label: 'Auto To', icon: '⇥' }
+        ]
+      });
 
       // 6. Ink & Opacity
       const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: conn?.stroke === col }));
