@@ -7,8 +7,8 @@ import { MIN_OBJECT_SIZE, FONT_FAMILIES } from './types.js';
 /**
  * Gets axis-aligned bounding box of an object.
  * For connectors, calculates the true bounds from resolved/rendered geometry without phantom zero-origin.
- * @param {Object} obj 
- * @param {Object|null} doc 
+ * @param {Object} obj
+ * @param {Object|null} doc
  * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
 export function getBoundingBox(obj, doc = null) {
@@ -82,8 +82,8 @@ export function getBoundingBox(obj, doc = null) {
 /**
  * Gets union bounding box for multiple objects.
  * Accurately integrates resolved connector geometry and ignores invalid/phantom objects.
- * @param {Array<Object>} objects 
- * @param {Object|null} doc 
+ * @param {Array<Object>} objects
+ * @param {Object|null} doc
  * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
 export function getUnionBoundingBox(objects, doc = null) {
@@ -237,7 +237,7 @@ export function projectPointToSegment(px, py, x1, y1, x2, y2) {
 
 /**
  * Computes useful connection snap points (side centers and vertices/corners) for a shape.
- * @param {Object} shape 
+ * @param {Object} shape
  * @returns {Array<{ name: string, point: { x: number, y: number }, anchor: { x: number, y: number } }>}
  */
 export function getShapeSnapPoints(shape) {
@@ -305,9 +305,9 @@ export function getShapeSnapPoints(shape) {
 
 /**
  * Calculates continuous position around shape perimeter with gentle snapping to side centers/corners.
- * @param {Object} shape 
- * @param {{ x: number, y: number }} worldPoint 
- * @param {number} snapDistance 
+ * @param {Object} shape
+ * @param {{ x: number, y: number }} worldPoint
+ * @param {number} snapDistance
  * @returns {{ point: { x: number, y: number }, anchor: { x: number, y: number }, snapped: boolean, snapName?: string }}
  */
 export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
@@ -418,8 +418,8 @@ export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
 
 /**
  * Calculates start and end coordinates and routing points for a connector object.
- * @param {Object} doc 
- * @param {Object} connector 
+ * @param {Object} doc
+ * @param {Object} connector
  * @returns {{ start: {x: number, y: number}, end: {x: number, y: number}, path: string, points: Array<{x: number, y: number}> }}
  */
 export function resolveConnectorGeometry(doc, connector) {
@@ -571,10 +571,10 @@ export function distanceToSegment(px, py, x1, y1, x2, y2) {
 /**
  * Computes shortest distance from a world point to a connector's actual path.
  * Evaluates straight segments and samples curved beziers.
- * 
- * @param {{ x: number, y: number }} point 
- * @param {Object} connector 
- * @param {Object} doc 
+ *
+ * @param {{ x: number, y: number }} point
+ * @param {Object} connector
+ * @param {Object} doc
  * @returns {number} Distance in world units
  */
 export function distanceToConnector(point, connector, doc) {
@@ -617,9 +617,9 @@ export function distanceToConnector(point, connector, doc) {
 /**
  * Computes shortest distance from a world point to a path object.
  * Evaluates line segments or closed polygon perimeter.
- * 
- * @param {{ x: number, y: number }} point 
- * @param {Object} pathObj 
+ *
+ * @param {{ x: number, y: number }} point
+ * @param {Object} pathObj
  * @returns {number}
  */
 export function distanceToPath(point, pathObj) {
@@ -649,12 +649,12 @@ export function distanceToPath(point, pathObj) {
  * - keepAspect (preserves aspect ratio)
  * - fromCenter (symmetrical resize from center)
  * - minSize enforcement
- * 
+ *
  * @param {string} handle - One of 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
  * @param {{ x: number, y: number, width: number, height: number }} orig - Original bounds
  * @param {number} dx - Pointer delta X
  * @param {number} dy - Pointer delta Y
- * @param {{ keepAspect?: boolean, fromCenter?: boolean, minSize?: number }} options 
+ * @param {{ keepAspect?: boolean, fromCenter?: boolean, minSize?: number }} options
  * @returns {{ x: number, y: number, width: number, height: number }}
  */
 export function calculateResize(handle, orig, dx, dy, options = {}) {
@@ -754,10 +754,10 @@ export function calculateResize(handle, orig, dx, dy, options = {}) {
 
 /**
  * Snapping engine: Computes snapping against grid and other objects.
- * 
- * @param {{ x: number, y: number, width: number, height: number }} currentBox 
- * @param {Array<Object>} otherObjects 
- * @param {{ tolerance?: number, snapGrid?: boolean, gridSize?: number }} options 
+ *
+ * @param {{ x: number, y: number, width: number, height: number }} currentBox
+ * @param {Array<Object>} otherObjects
+ * @param {{ tolerance?: number, snapGrid?: boolean, gridSize?: number }} options
  * @returns {{ x: number, y: number, guides: Array<{ orientation: 'v'|'h', pos: number, from: number, to: number }> }}
  */
 export function calculateSnapping(currentBox, otherObjects, options = {}) {
@@ -858,9 +858,9 @@ export function calculateSnapping(currentBox, otherObjects, options = {}) {
  * Calculates alignment mutations for multiple objects.
  * Attached and free connectors do not participate as independent objects;
  * only eligible spatial objects (type !== 'connector') are aligned.
- * 
- * @param {Array<Object>} objects 
- * @param {'left'|'center'|'right'|'top'|'middle'|'bottom'} alignment 
+ *
+ * @param {Array<Object>} objects
+ * @param {'left'|'center'|'right'|'top'|'middle'|'bottom'} alignment
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 export function alignObjects(objects, alignment) {
@@ -903,9 +903,9 @@ export function alignObjects(objects, alignment) {
  * Calculates even distribution for multiple objects.
  * Attached and free connectors do not participate;
  * only eligible spatial objects (type !== 'connector') are distributed.
- * 
- * @param {Array<Object>} objects 
- * @param {'horizontal'|'vertical'} direction 
+ *
+ * @param {Array<Object>} objects
+ * @param {'horizontal'|'vertical'} direction
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 export function distributeObjects(objects, direction) {
@@ -948,10 +948,10 @@ let _measureCtx = null;
  * Accurately measures multi-line text dimensions.
  * Uses Canvas 2D in DOM environments with accurate font metrics,
  * and a robust proportional fallback in headless/Node.js environments.
- * 
- * @param {string} text 
- * @param {number} fontSize 
- * @param {string} fontFamilyToken 
+ *
+ * @param {string} text
+ * @param {number} fontSize
+ * @param {string} fontFamilyToken
  * @returns {{ width: number, height: number }}
  */
 export function measureText(text, fontSize = 20, fontFamilyToken = 'hand') {

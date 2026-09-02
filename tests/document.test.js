@@ -70,4 +70,3 @@ test('canonicalJson produces deterministic sorted-key JSON and escapes script ta
   assert.ok(jsonStr.includes('\\u003C/script>'));
   assert.equal(JSON.parse(jsonStr).text, textWithScript.text);
 });
-

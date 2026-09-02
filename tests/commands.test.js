@@ -391,4 +391,3 @@ test('set_board_theme restyles strokes, fills, text, and connectors coherently a
   assert.strictEqual(docHC.objects['r1'].textStyle.color, '#000000');
   assert.strictEqual(docHC.objects['c1'].stroke, '#000000');
 });
-

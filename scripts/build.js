@@ -1,6 +1,6 @@
 /**
  * Sabura Single-File Bundler.
- * 
+ *
  * Compiles modular ES sources, styles, and initial canonical document into a standalone,
  * 100% offline self-running sabura.html file.
  */
@@ -35,6 +35,198 @@ const moduleFiles = [
   'src/main.js'
 ];
 
+export function stripCommentsSyntaxSafe(code) {
+  let out = '';
+  let i = 0;
+  const len = code.length;
+  const stack = [];
+
+  while (i < len) {
+    const ch = code[i];
+    const next = i + 1 < len ? code[i + 1] : '';
+
+    // Single-quoted string
+    if (ch === '\'') {
+      out += ch;
+      i++;
+      while (i < len) {
+        const c = code[i];
+        out += c;
+        if (c === '\\') {
+          i++;
+          if (i < len) { out += code[i]; i++; }
+        } else if (c === '\'') {
+          i++;
+          break;
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+
+    // Double-quoted string
+    if (ch === '"') {
+      out += ch;
+      i++;
+      while (i < len) {
+        const c = code[i];
+        out += c;
+        if (c === '\\') {
+          i++;
+          if (i < len) { out += code[i]; i++; }
+        } else if (c === '"') {
+          i++;
+          break;
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+
+    // Template literal
+    if (ch === '`') {
+      out += ch;
+      i++;
+      while (i < len) {
+        const c = code[i];
+        if (c === '\\') {
+          out += c;
+          i++;
+          if (i < len) { out += code[i]; i++; }
+        } else if (c === '$' && i + 1 < len && code[i + 1] === '{') {
+          out += '${';
+          i += 2;
+          stack.push('TEMPLATE_EXPR');
+          break;
+        } else if (c === '`') {
+          out += c;
+          i++;
+          break;
+        } else {
+          out += c;
+          i++;
+        }
+      }
+      continue;
+    }
+
+    // Handle braces for template expressions
+    if (ch === '{') {
+      out += ch;
+      i++;
+      if (stack.length > 0) {
+        stack.push('BLOCK');
+      }
+      continue;
+    }
+
+    if (ch === '}') {
+      out += ch;
+      i++;
+      if (stack.length > 0) {
+        const top = stack.pop();
+        if (top === 'TEMPLATE_EXPR') {
+          while (i < len) {
+            const c = code[i];
+            if (c === '\\') {
+              out += c;
+              i++;
+              if (i < len) { out += code[i]; i++; }
+            } else if (c === '$' && i + 1 < len && code[i + 1] === '{') {
+              out += '${';
+              i += 2;
+              stack.push('TEMPLATE_EXPR');
+              break;
+            } else if (c === '`') {
+              out += c;
+              i++;
+              break;
+            } else {
+              out += c;
+              i++;
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Line comment
+    if (ch === '/' && next === '/') {
+      i += 2;
+      while (i < len && code[i] !== '\n' && code[i] !== '\r') {
+        i++;
+      }
+      continue;
+    }
+
+    // Block comment
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < len) {
+        if (code[i] === '*' && i + 1 < len && code[i + 1] === '/') {
+          i += 2;
+          break;
+        }
+        if (code[i] === '\n') {
+          out += '\n'; // Preserve newline
+        }
+        i++;
+      }
+      continue;
+    }
+
+    // Regex literal vs division
+    if (ch === '/') {
+      let prevIdx = out.length - 1;
+      while (prevIdx >= 0 && /\s/.test(out[prevIdx])) {
+        prevIdx--;
+      }
+      const prevChar = prevIdx >= 0 ? out[prevIdx] : '';
+      const isRegex = prevIdx < 0 || /[=(:;,\[!&|?~^{]/.test(prevChar) || (
+        /\b(return|case|delete|throw|typeof|instanceof|void|yield)$/.test(out.slice(Math.max(0, prevIdx - 15), prevIdx + 1))
+      );
+
+      if (isRegex) {
+        out += ch;
+        i++;
+        let inCharClass = false;
+        while (i < len) {
+          const c = code[i];
+          out += c;
+          if (c === '\\') {
+            i++;
+            if (i < len) { out += code[i]; i++; }
+          } else if (c === '[') {
+            inCharClass = true;
+            i++;
+          } else if (c === ']' && inCharClass) {
+            inCharClass = false;
+            i++;
+          } else if (c === '/' && !inCharClass) {
+            i++;
+            while (i < len && /[a-z]/i.test(code[i])) {
+              out += code[i];
+              i++;
+            }
+            break;
+          } else {
+            i++;
+          }
+        }
+        continue;
+      }
+    }
+
+    out += ch;
+    i++;
+  }
+
+  return out;
+}
+
 function bundleModules() {
   const codeBlocks = [];
 
@@ -54,15 +246,13 @@ function bundleModules() {
     // Strip default exports: export default ...
     code = code.replace(/export\s+default\s+/g, '');
 
-    // Strip block comments (JSDoc and multi-line comments)
-    code = code.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Syntax-safe comment stripping
+    code = stripCommentsSyntaxSafe(code);
 
-    // Strip single-line comments (lines starting with //)
-    code = code.split('\n')
-      .filter(line => !line.trim().startsWith('//'))
-      .join('\n');
+    // Strip trailing whitespace on lines
+    code = code.replace(/[ \t]+$/gm, '');
 
-    // Collapse multiple empty lines
+    // Collapse excessive empty lines
     code = code.replace(/\n\s*\n\s*\n/g, '\n\n');
 
     codeBlocks.push(`// --- Module: ${relPath} ---\n${code.trim()}`);
@@ -206,8 +396,8 @@ function build() {
   const emptyDoc = createDefaultDocument({ title: 'Untitled Board' });
   const serializedEmpty = canonicalJson(emptyDoc);
 
-  const sampleHtml = generateHtml(css, bundledJs, serializedSample);
-  const emptyHtml = generateHtml(css, bundledJs, serializedEmpty);
+  const sampleHtml = generateHtml(css, bundledJs, serializedSample).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
+  const emptyHtml = generateHtml(css, bundledJs, serializedEmpty).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
 
   const outputPath = path.join(rootDir, 'sabura.html');
   fs.writeFileSync(outputPath, sampleHtml, 'utf8');
@@ -243,5 +433,6 @@ function build() {
   console.log(`✓ Successfully created sabura.html (${(sampleTotalBytes / 1024).toFixed(1)} KiB)`);
 }
 
-build();
-
+if (process.argv[1] && import.meta.filename && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
+  build();
+}

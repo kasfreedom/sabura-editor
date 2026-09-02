@@ -2,7 +2,7 @@ import { createPRNG, sketchWedge, sketchEllipse, sketchLine } from '../core/sket
 
 /**
  * Creates SVG path for an annular sector (pie wedge).
- * 
+ *
  * @param {number} cx - Center X
  * @param {number} cy - Center Y
  * @param {number} rInner - Inner radius

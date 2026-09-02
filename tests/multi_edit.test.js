@@ -631,4 +631,3 @@ test('elbow connector orthogonal U-bypass loop with elbowOffset, reflection, and
   const geomRestored = resolveConnectorGeometry(doc, doc.objects.c1);
   assert.equal(geomRestored.isBypass, false);
 });
-

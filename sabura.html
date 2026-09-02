@@ -753,7 +753,6 @@ body.in-presentation {
   text-align: center;
 }
 
-
   </style>
 </head>
 <body>
@@ -792,7 +791,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_5nwmvqcrupf",
+  "id": "board_3h2to2s4q3x",
   "objects": {
     "conn_1": {
       "curveSide": 1,
@@ -808,7 +807,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 1778237486,
+      "seed": 1136013064,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -836,7 +835,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 762508568,
+      "seed": 1138975387,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -863,7 +862,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1518294249,
+      "seed": 67991868,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -890,7 +889,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1629240594,
+      "seed": 1924144593,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -963,18 +962,18 @@ const THEME_PRESETS = {
     background: '#fcfaf6',
     gridColor: 'rgba(70, 50, 20, 0.08)',
     palette: [
-      '#1e1e1e', // Dark charcoal / pen ink
-      '#1971c2', // Blueprint blue
-      '#2f9e44', // Forest green
-      '#e03131', // Vermilion red
-      '#f08c00', // Amber orange
-      '#9c36b5', // Plum violet
-      '#ffec99', // Post-it yellow wash
-      '#b2f2bb', // Mint wash
-      '#a5d8ff', // Sky blue wash
-      '#ffc9c9', // Rose wash
-      '#eebefa', // Lavender wash
-      '#ffffff'  // Pure white
+      '#1e1e1e',
+      '#1971c2',
+      '#2f9e44',
+      '#e03131',
+      '#f08c00',
+      '#9c36b5',
+      '#ffec99',
+      '#b2f2bb',
+      '#a5d8ff',
+      '#ffc9c9',
+      '#eebefa',
+      '#ffffff'
     ],
     defaultFill: 'none',
     defaultStroke: '#1e1e1e',
@@ -990,14 +989,14 @@ const THEME_PRESETS = {
     background: '#0c192e',
     gridColor: 'rgba(56, 189, 248, 0.15)',
     palette: [
-      '#ffffff', // White chalk
-      '#38bdf8', // Cyan drafting ink
-      '#facc15', // Drafting yellow
-      '#4ade80', // Mint green
-      '#fb7185', // Coral pink
-      '#c084fc', // Lilac
-      '#94a3b8', // Slate graphite
-      '#0c192e'  // Deep navy
+      '#ffffff',
+      '#38bdf8',
+      '#facc15',
+      '#4ade80',
+      '#fb7185',
+      '#c084fc',
+      '#94a3b8',
+      '#0c192e'
     ],
     defaultFill: 'none',
     defaultStroke: '#ffffff',
@@ -1013,14 +1012,14 @@ const THEME_PRESETS = {
     background: '#18181b',
     gridColor: 'rgba(255, 255, 255, 0.07)',
     palette: [
-      '#f4f4f5', // Crisp chalk white
-      '#7aa2f7', // Pastel sky
-      '#9ece6a', // Pastel sage
-      '#f7768e', // Pastel coral
-      '#ff9e64', // Pastel amber
-      '#bb9af7', // Pastel lavender
-      '#71717a', // Muted slate
-      '#18181b'  // Dark obsidian
+      '#f4f4f5',
+      '#7aa2f7',
+      '#9ece6a',
+      '#f7768e',
+      '#ff9e64',
+      '#bb9af7',
+      '#71717a',
+      '#18181b'
     ],
     defaultFill: 'none',
     defaultStroke: '#f4f4f5',
@@ -1209,6 +1208,7 @@ function getShapeBoundaryPoint(shape, targetPoint) {
   const dy = targetPoint.y - center.y;
 
   if (shape.type === 'ellipse') {
+
     const a = box.width / 2;
     const b = box.height / 2;
     const angle = Math.atan2(dy, dx);
@@ -1255,10 +1255,10 @@ function getShapeBoundaryPoint(shape, targetPoint) {
   }
 
   const segments = [
-    [{ x: box.x, y: box.y }, { x: box.right, y: box.y }], // top
-    [{ x: box.right, y: box.y }, { x: box.right, y: box.bottom }], // right
-    [{ x: box.right, y: box.bottom }, { x: box.x, y: box.bottom }], // bottom
-    [{ x: box.x, y: box.bottom }, { x: box.x, y: box.y }] // left
+    [{ x: box.x, y: box.y }, { x: box.right, y: box.y }],
+    [{ x: box.right, y: box.y }, { x: box.right, y: box.bottom }],
+    [{ x: box.right, y: box.bottom }, { x: box.x, y: box.bottom }],
+    [{ x: box.x, y: box.bottom }, { x: box.x, y: box.y }]
   ];
 
   for (const [p1, p2] of segments) {
@@ -1286,10 +1286,12 @@ function getShapeSnapPoints(shape) {
   const snapPoints = [];
 
   if (shape.type === 'diamond') {
+
     snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
     snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
     snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
     snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+
     snapPoints.push({ name: 'top-right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.cy) / 2 }, anchor: { x: 0.75, y: 0.25 } });
     snapPoints.push({ name: 'bottom-right', point: { x: (box.right + box.cx) / 2, y: (box.cy + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.75 } });
     snapPoints.push({ name: 'bottom-left', point: { x: (box.cx + box.x) / 2, y: (box.bottom + box.cy) / 2 }, anchor: { x: 0.25, y: 0.75 } });
@@ -1298,9 +1300,11 @@ function getShapeSnapPoints(shape) {
   }
 
   if (shape.type === 'triangle') {
+
     snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
     snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
     snapPoints.push({ name: 'bottom-left', point: { x: box.x, y: box.bottom }, anchor: { x: 0, y: 1 } });
+
     snapPoints.push({ name: 'right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.5 } });
     snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
     snapPoints.push({ name: 'left', point: { x: (box.cx + box.x) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.25, y: 0.5 } });
@@ -1310,10 +1314,12 @@ function getShapeSnapPoints(shape) {
   if (shape.type === 'ellipse') {
     const a = box.width / 2;
     const b = box.height / 2;
+
     snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
     snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
     snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
     snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+
     const cos45 = Math.SQRT1_2;
     const sin45 = Math.SQRT1_2;
     snapPoints.push({ name: 'top-right', point: { x: box.cx + a * cos45, y: box.cy - b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
@@ -1327,6 +1333,7 @@ function getShapeSnapPoints(shape) {
   snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
   snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
   snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+
   snapPoints.push({ name: 'top-left', point: { x: box.x, y: box.y }, anchor: { x: 0, y: 0 } });
   snapPoints.push({ name: 'top-right', point: { x: box.right, y: box.y }, anchor: { x: 1, y: 0 } });
   snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
@@ -1390,6 +1397,7 @@ function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
       }
     }
   } else {
+
     const topProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.y };
     const bottomProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.bottom };
     const leftProj = { x: box.x, y: Math.max(box.y, Math.min(box.bottom, py)) };
@@ -1488,8 +1496,10 @@ function resolveConnectorGeometry(doc, connector) {
     let elbowMidpoint = null;
 
     if (typeof connector.elbowOffset === 'number' && !isNaN(connector.elbowOffset)) {
+
       const offset = connector.elbowOffset;
       if (Math.abs(dx) >= Math.abs(dy)) {
+
         const baseY = offset >= 0 ? Math.max(start.y, end.y) : Math.min(start.y, end.y);
         const bypassY = baseY + offset;
         points = [
@@ -1501,6 +1511,7 @@ function resolveConnectorGeometry(doc, connector) {
         pathStr = `M ${start.x} ${start.y} L ${start.x} ${bypassY} L ${end.x} ${bypassY} L ${end.x} ${end.y}`;
         elbowMidpoint = { x: (start.x + end.x) / 2, y: bypassY };
       } else {
+
         const baseX = offset >= 0 ? Math.max(start.x, end.x) : Math.min(start.x, end.x);
         const bypassX = baseX + offset;
         points = [
@@ -1514,6 +1525,7 @@ function resolveConnectorGeometry(doc, connector) {
       }
       return { start, end, points, path: pathStr, elbowMidpoint, isBypass: true, elbowOffset: offset };
     } else {
+
       if (Math.abs(dx) > Math.abs(dy)) {
         const midX = start.x + dx / 2;
         points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
@@ -1528,6 +1540,7 @@ function resolveConnectorGeometry(doc, connector) {
       return { start, end, points, path: pathStr, elbowMidpoint, isBypass: false };
     }
   } else if (routing === 'curved') {
+
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const dist = Math.hypot(dx, dy);
@@ -1557,6 +1570,7 @@ function resolveConnectorGeometry(doc, connector) {
       isAutoCurve: connector.curveDistance === undefined || connector.curveDistance === null
     };
   } else {
+
     points = [start, end];
     pathStr = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
   }
@@ -1580,6 +1594,7 @@ function distanceToConnector(point, connector, doc) {
   const routing = connector.routing || 'straight';
 
   if (routing === 'curved' && geom.points.length === 3) {
+
     const p0 = geom.points[0];
     const p1 = geom.points[1];
     const p2 = geom.points[2];
@@ -1668,6 +1683,7 @@ function calculateResize(handle, orig, dx, dy, options = {}) {
       newHeight = newWidth / origAspectRatio;
       if (!fromCenter) newY = orig.y + (orig.height - newHeight) / 2;
     } else {
+
       const scaleX = newWidth / orig.width;
       const scaleY = newHeight / orig.height;
       const scale = Math.max(scaleX, scaleY);
@@ -1954,15 +1970,16 @@ function createDefaultDocument(options = {}) {
 }
 
 function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) {
+  const safeTheme = normalizeTheme(theme);
   const id = overrides.id || generateId(type.slice(0, 4));
   const seed = overrides.seed !== undefined ? overrides.seed : generateSeed();
-  const fontSizeToken = overrides.textStyle?.size || theme.defaultFontSize || 'm';
+  const fontSizeToken = overrides.textStyle?.size || safeTheme.defaultFontSize;
   const resolvedSize = FONT_SIZES[fontSizeToken] || 20;
 
   let defaultWidth = type === 'text' ? 80 : 160;
   let defaultHeight = type === 'text' ? 32 : 100;
   if (type === 'text' && overrides.text) {
-    const familyToken = overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'hand';
+    const familyToken = overrides.textStyle?.fontFamily || safeTheme.defaultFontFamily;
     const m = measureText(overrides.text, resolvedSize, familyToken);
     defaultWidth = m.width;
     defaultHeight = m.height;
@@ -1975,12 +1992,12 @@ function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) 
     id,
     type,
     rotation: overrides.rotation || 0,
-    fill: overrides.fill !== undefined ? overrides.fill : theme.defaultFill,
-    stroke: overrides.stroke !== undefined ? overrides.stroke : theme.defaultStroke,
-    strokeWidth: overrides.strokeWidth !== undefined ? overrides.strokeWidth : theme.defaultStrokeWidth,
+    fill: overrides.fill !== undefined ? overrides.fill : safeTheme.defaultFill,
+    stroke: overrides.stroke !== undefined ? overrides.stroke : safeTheme.defaultStroke,
+    strokeWidth: overrides.strokeWidth !== undefined ? overrides.strokeWidth : safeTheme.defaultStrokeWidth,
     strokeStyle: overrides.strokeStyle || 'solid',
-    opacity: overrides.opacity !== undefined ? overrides.opacity : theme.defaultOpacity,
-    roughness: overrides.roughness !== undefined ? overrides.roughness : theme.defaultRoughness,
+    opacity: overrides.opacity !== undefined ? overrides.opacity : safeTheme.defaultOpacity,
+    roughness: overrides.roughness !== undefined ? overrides.roughness : safeTheme.defaultRoughness,
     seed,
     locked: overrides.locked || false,
     groupId: overrides.groupId || null,
@@ -1988,17 +2005,17 @@ function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) 
     textStyle: {
       size: fontSizeToken,
       resolvedSize,
-      fontFamily: overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'sans',
+      fontFamily: overrides.textStyle?.fontFamily || safeTheme.defaultFontFamily,
       bold: overrides.textStyle?.bold || false,
       align: overrides.textStyle?.align || (type === 'text' ? 'left' : 'center'),
-      color: overrides.textStyle?.color || overrides.stroke || theme.defaultStroke
+      color: overrides.textStyle?.color || overrides.stroke || safeTheme.defaultStroke
     }
   };
 
   if (type === 'connector') {
     baseObject.from = overrides.from || { point: { x: overrides.x !== undefined ? overrides.x : 0, y: overrides.y !== undefined ? overrides.y : 0 } };
     baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
-    baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
+    baseObject.routing = overrides.routing || 'straight';
     baseObject.curveSide = overrides.curveSide !== undefined ? overrides.curveSide : 1;
     if (overrides.curveDistance !== undefined) baseObject.curveDistance = overrides.curveDistance;
     if (overrides.elbowOffset !== undefined) baseObject.elbowOffset = overrides.elbowOffset;
@@ -2121,6 +2138,48 @@ const PATH_ALLOWED_FIELDS = new Set([
   'endArrow'
 ]);
 
+const CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS = new Set(['id', 'anchor']);
+const CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS = new Set(['point']);
+const CONNECTOR_ANCHOR_ALLOWED_FIELDS = new Set(['x', 'y']);
+const CONNECTOR_POINT_ALLOWED_FIELDS = new Set(['x', 'y']);
+
+const DEFAULT_THEME_VALUES = Object.freeze({
+  defaultStroke: '#1e1e1e',
+  defaultStrokeWidth: 2,
+  defaultFill: 'none',
+  defaultOpacity: 1.0,
+  defaultRoughness: 1,
+  defaultFontSize: 'm',
+  defaultFontFamily: 'hand',
+  gridColor: 'rgba(0, 0, 0, 0.08)'
+});
+
+function normalizeTheme(theme) {
+  if (!theme || typeof theme !== 'object') {
+    return { background: '#fcfaf6', palette: ['#1e1e1e'], ...DEFAULT_THEME_VALUES };
+  }
+  const normalized = { ...theme };
+  if (normalized.defaultStroke === undefined) normalized.defaultStroke = DEFAULT_THEME_VALUES.defaultStroke;
+  if (normalized.defaultStrokeWidth === undefined) normalized.defaultStrokeWidth = DEFAULT_THEME_VALUES.defaultStrokeWidth;
+  if (normalized.defaultFill === undefined) normalized.defaultFill = DEFAULT_THEME_VALUES.defaultFill;
+  if (normalized.defaultOpacity === undefined) normalized.defaultOpacity = DEFAULT_THEME_VALUES.defaultOpacity;
+  if (normalized.defaultRoughness === undefined) normalized.defaultRoughness = DEFAULT_THEME_VALUES.defaultRoughness;
+  if (normalized.defaultFontSize === undefined) normalized.defaultFontSize = DEFAULT_THEME_VALUES.defaultFontSize;
+  if (normalized.defaultFontFamily === undefined) normalized.defaultFontFamily = DEFAULT_THEME_VALUES.defaultFontFamily;
+  if (normalized.gridColor === undefined) normalized.gridColor = DEFAULT_THEME_VALUES.gridColor;
+  return normalized;
+}
+
+function deterministicSeedFromId(id) {
+  const str = String(id || '');
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h & 0x7fffffff) || 1;
+}
+
 function getAllowedFieldsForType(type) {
   if (['rectangle', 'ellipse', 'diamond', 'triangle'].includes(type)) return SHAPE_ALLOWED_FIELDS;
   if (type === 'text') return TEXT_ALLOWED_FIELDS;
@@ -2134,6 +2193,59 @@ function checkUnknownProperties(obj, allowedSet, context, errors) {
   for (const key of Object.keys(obj)) {
     if (!key.startsWith('ext:') && !allowedSet.has(key)) {
       errors.push(`Unknown unnamespaced property "${key}" on ${context}. Only standard properties or "ext:*" namespaced properties are allowed.`);
+    }
+  }
+}
+
+function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
+  if (!endpoint || typeof endpoint !== 'object' || Array.isArray(endpoint)) {
+    errors.push(`Connector "${objId}" must have a valid "${endpointName}" definition`);
+    return;
+  }
+
+  const hasId = endpoint.id !== undefined;
+  const hasPoint = endpoint.point !== undefined;
+
+  if (hasId && hasPoint) {
+    errors.push(`Connector "${objId}" ${endpointName} cannot contain both "id" and "point"`);
+    return;
+  }
+
+  if (!hasId && !hasPoint) {
+    errors.push(`Connector "${objId}" ${endpointName} must contain either "id" (with optional "anchor") or "point"`);
+    return;
+  }
+
+  if (hasId) {
+    checkUnknownProperties(endpoint, CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}`, errors);
+    if (typeof endpoint.id !== 'string' || !endpoint.id.trim()) {
+      errors.push(`Connector "${objId}" ${endpointName}.id must be a non-empty string`);
+    } else if (!doc.objects || !doc.objects[endpoint.id]) {
+      errors.push(`Connector "${objId}" ${endpointName} references non-existent object ID: "${endpoint.id}"`);
+    }
+
+    if (endpoint.anchor !== undefined) {
+      if (!endpoint.anchor || typeof endpoint.anchor !== 'object' || Array.isArray(endpoint.anchor)) {
+        errors.push(`Connector "${objId}" ${endpointName}.anchor must be an object`);
+      } else {
+        checkUnknownProperties(endpoint.anchor, CONNECTOR_ANCHOR_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.anchor`, errors);
+        if (typeof endpoint.anchor.x !== 'number' || isNaN(endpoint.anchor.x) || typeof endpoint.anchor.y !== 'number' || isNaN(endpoint.anchor.y)) {
+          errors.push(`Connector "${objId}" ${endpointName}.anchor must have numeric x and y`);
+        } else if (endpoint.anchor.x < 0 || endpoint.anchor.x > 1 || endpoint.anchor.y < 0 || endpoint.anchor.y > 1) {
+          errors.push(`Connector "${objId}" ${endpointName}.anchor (x, y) must be normalized between 0 and 1`);
+        }
+      }
+    }
+  } else if (hasPoint) {
+    checkUnknownProperties(endpoint, CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}`, errors);
+    const pt = endpoint.point;
+    if (!pt || typeof pt !== 'object' || Array.isArray(pt)) {
+      errors.push(`Connector "${objId}" ${endpointName}.point must be an object with { x, y }`);
+    } else {
+      checkUnknownProperties(pt, CONNECTOR_POINT_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.point`, errors);
+      if (typeof pt.x !== 'number' || isNaN(pt.x) || typeof pt.y !== 'number' || isNaN(pt.y)) {
+        errors.push(`Connector "${objId}" ${endpointName}.point coordinates (x, y) must be valid numbers`);
+      }
     }
   }
 }
@@ -2302,45 +2414,8 @@ function validateDocument(doc) {
       }
 
       if (obj.type === 'connector') {
-        if (!obj.from || typeof obj.from !== 'object' || Array.isArray(obj.from)) {
-          errors.push(`Connector "${objId}" must have a valid "from" definition`);
-        } else {
-          const hasId = typeof obj.from.id === 'string' && obj.from.id.trim().length > 0;
-          const hasPoint = obj.from.point && typeof obj.from.point === 'object' && typeof obj.from.point.x === 'number' && !isNaN(obj.from.point.x) && typeof obj.from.point.y === 'number' && !isNaN(obj.from.point.y);
-          if (!hasId && !hasPoint) {
-            errors.push(`Connector "${objId}" from must specify a valid object "id" or numeric "point" { x, y }`);
-          }
-          if (hasId && (!doc.objects || !doc.objects[obj.from.id])) {
-            errors.push(`Connector "${objId}" from references non-existent object ID: "${obj.from.id}"`);
-          }
-          if (obj.from.anchor !== undefined) {
-            if (!obj.from.anchor || typeof obj.from.anchor !== 'object' || Array.isArray(obj.from.anchor) || typeof obj.from.anchor.x !== 'number' || isNaN(obj.from.anchor.x) || typeof obj.from.anchor.y !== 'number' || isNaN(obj.from.anchor.y)) {
-              errors.push(`Connector "${objId}" from.anchor must have numeric x and y`);
-            } else if (obj.from.anchor.x < 0 || obj.from.anchor.x > 1 || obj.from.anchor.y < 0 || obj.from.anchor.y > 1) {
-              errors.push(`Connector "${objId}" from.anchor (x, y) must be normalized between 0 and 1`);
-            }
-          }
-        }
-
-        if (!obj.to || typeof obj.to !== 'object' || Array.isArray(obj.to)) {
-          errors.push(`Connector "${objId}" must have a valid "to" definition`);
-        } else {
-          const hasId = typeof obj.to.id === 'string' && obj.to.id.trim().length > 0;
-          const hasPoint = obj.to.point && typeof obj.to.point === 'object' && typeof obj.to.point.x === 'number' && !isNaN(obj.to.point.x) && typeof obj.to.point.y === 'number' && !isNaN(obj.to.point.y);
-          if (!hasId && !hasPoint) {
-            errors.push(`Connector "${objId}" to must specify a valid object "id" or numeric "point" { x, y }`);
-          }
-          if (hasId && (!doc.objects || !doc.objects[obj.to.id])) {
-            errors.push(`Connector "${objId}" to references non-existent object ID: "${obj.to.id}"`);
-          }
-          if (obj.to.anchor !== undefined) {
-            if (!obj.to.anchor || typeof obj.to.anchor !== 'object' || Array.isArray(obj.to.anchor) || typeof obj.to.anchor.x !== 'number' || isNaN(obj.to.anchor.x) || typeof obj.to.anchor.y !== 'number' || isNaN(obj.to.anchor.y)) {
-              errors.push(`Connector "${objId}" to.anchor must have numeric x and y`);
-            } else if (obj.to.anchor.x < 0 || obj.to.anchor.x > 1 || obj.to.anchor.y < 0 || obj.to.anchor.y > 1) {
-              errors.push(`Connector "${objId}" to.anchor (x, y) must be normalized between 0 and 1`);
-            }
-          }
-        }
+        validateConnectorEndpoint(obj.from, 'from', objId, doc, errors);
+        validateConnectorEndpoint(obj.to, 'to', objId, doc, errors);
 
         if (obj.routing !== undefined && !CONNECTOR_ROUTINGS.includes(obj.routing)) {
           errors.push(`Connector "${objId}" has unsupported routing: "${obj.routing}". Expected one of: ${CONNECTOR_ROUTINGS.join(', ')}`);
@@ -2431,7 +2506,8 @@ function validateDocument(doc) {
 
 function normalizeDocument(doc) {
   if (!doc || typeof doc !== 'object') return doc;
-  const theme = doc.theme || THEME_PRESETS.paper;
+  doc.theme = normalizeTheme(doc.theme);
+  const theme = doc.theme;
 
   if (!doc.groups) doc.groups = {};
   if (!doc.assets) doc.assets = {};
@@ -2440,13 +2516,13 @@ function normalizeDocument(doc) {
 
   for (const [id, obj] of Object.entries(doc.objects)) {
     if (!obj || typeof obj !== 'object') continue;
-    if (obj.stroke === undefined) obj.stroke = theme.defaultStroke || '#1e1e1e';
-    if (obj.strokeWidth === undefined) obj.strokeWidth = theme.defaultStrokeWidth || 2;
+    if (obj.stroke === undefined) obj.stroke = theme.defaultStroke;
+    if (obj.strokeWidth === undefined) obj.strokeWidth = theme.defaultStrokeWidth;
     if (obj.strokeStyle === undefined) obj.strokeStyle = 'solid';
-    if (obj.fill === undefined) obj.fill = theme.defaultFill || 'none';
-    if (obj.opacity === undefined) obj.opacity = theme.defaultOpacity !== undefined ? theme.defaultOpacity : 1.0;
-    if (obj.roughness === undefined) obj.roughness = theme.defaultRoughness !== undefined ? theme.defaultRoughness : 1;
-    if (obj.seed === undefined) obj.seed = generateSeed();
+    if (obj.fill === undefined) obj.fill = theme.defaultFill;
+    if (obj.opacity === undefined) obj.opacity = theme.defaultOpacity;
+    if (obj.roughness === undefined) obj.roughness = theme.defaultRoughness;
+    if (obj.seed === undefined) obj.seed = deterministicSeedFromId(obj.id);
     if (obj.locked === undefined) obj.locked = false;
     if (obj.groupId === undefined) obj.groupId = null;
     if (obj.rotation === undefined) obj.rotation = 0;
@@ -2454,21 +2530,21 @@ function normalizeDocument(doc) {
 
     if (obj.textStyle === undefined) {
       obj.textStyle = {
-        size: theme.defaultFontSize || 'm',
-        resolvedSize: FONT_SIZES[theme.defaultFontSize || 'm'] || 20,
-        fontFamily: theme.defaultFontFamily || 'hand',
+        size: theme.defaultFontSize,
+        resolvedSize: FONT_SIZES[theme.defaultFontSize] || 20,
+        fontFamily: theme.defaultFontFamily,
         bold: false,
         align: obj.type === 'text' ? 'left' : 'center',
-        color: obj.stroke || theme.defaultStroke || '#1e1e1e'
+        color: obj.stroke || theme.defaultStroke
       };
     } else {
-      const fontSizeToken = obj.textStyle.size || theme.defaultFontSize || 'm';
+      const fontSizeToken = obj.textStyle.size || theme.defaultFontSize;
       if (!obj.textStyle.size) obj.textStyle.size = fontSizeToken;
       if (!obj.textStyle.resolvedSize) obj.textStyle.resolvedSize = FONT_SIZES[fontSizeToken] || 20;
-      if (!obj.textStyle.fontFamily) obj.textStyle.fontFamily = theme.defaultFontFamily || 'hand';
+      if (!obj.textStyle.fontFamily) obj.textStyle.fontFamily = theme.defaultFontFamily;
       if (obj.textStyle.bold === undefined) obj.textStyle.bold = false;
       if (!obj.textStyle.align) obj.textStyle.align = obj.type === 'text' ? 'left' : 'center';
-      if (!obj.textStyle.color) obj.textStyle.color = obj.stroke || theme.defaultStroke || '#1e1e1e';
+      if (!obj.textStyle.color) obj.textStyle.color = obj.stroke || theme.defaultStroke;
     }
 
     if (obj.type === 'connector') {
@@ -2509,6 +2585,7 @@ function canonicalJson(value) {
 
   const sorted = sortKeys(value);
   const jsonStr = JSON.stringify(sorted, null, 2);
+
   return jsonStr.replace(/</g, '\\u003C');
 }
 
@@ -2675,6 +2752,7 @@ function applyCommand(doc, cmd) {
         const prevTo = cloneDocument(conn.to);
 
         if (conn.from && conn.from.id && idsToDelete.includes(conn.from.id)) {
+
           conn.from = { point: conn.from.point || { x: conn.x, y: conn.y } };
           modified = true;
         }
@@ -2725,7 +2803,7 @@ function applyCommand(doc, cmd) {
         if (typeof dup.x === 'number') dup.x += offset.x;
         if (typeof dup.y === 'number') dup.y += offset.y;
         dup.seed = generateSeed();
-        dup.locked = false; // Duplicated objects are unlocked by default
+        dup.locked = false;
 
         if (dup.groupId) {
           if (!groupMap[dup.groupId]) {
@@ -2745,10 +2823,12 @@ function applyCommand(doc, cmd) {
 
       for (const dup of newObjects) {
         if (dup.type === 'connector') {
+
           if (dup.from) {
             if (dup.from.id && idMap[dup.from.id]) {
               dup.from.id = idMap[dup.from.id];
             } else if (dup.from.id) {
+
               const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
               const origConn = doc.objects[origId] || dup;
               const resolved = resolveConnectorGeometry(doc, origConn);
@@ -2768,6 +2848,7 @@ function applyCommand(doc, cmd) {
             if (dup.to.id && idMap[dup.to.id]) {
               dup.to.id = idMap[dup.to.id];
             } else if (dup.to.id) {
+
               const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
               const origConn = doc.objects[origId] || dup;
               const resolved = resolveConnectorGeometry(doc, origConn);
@@ -2944,11 +3025,13 @@ function applyCommand(doc, cmd) {
       obj.text = String(cmd.text !== undefined ? cmd.text : '');
 
       if (cmd.prevBounds) {
+
         obj.x = cmd.prevBounds.x;
         obj.y = cmd.prevBounds.y;
         obj.width = cmd.prevBounds.width;
         obj.height = cmd.prevBounds.height;
       } else if (obj.type === 'text') {
+
         const fontSize = obj.textStyle?.resolvedSize || 20;
         const familyToken = obj.textStyle?.fontFamily || 'hand';
         const m = measureText(obj.text, fontSize, familyToken);
@@ -3103,13 +3186,14 @@ function applyCommand(doc, cmd) {
       if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
 
       const prevOrder = [...newDoc.order];
-      const action = cmd.action; // 'front' | 'back' | 'forward' | 'backward'
+      const action = cmd.action;
 
       if (action === 'front') {
         newDoc.order = newDoc.order.filter(id => !ids.includes(id)).concat(ids);
       } else if (action === 'back') {
         newDoc.order = ids.concat(newDoc.order.filter(id => !ids.includes(id)));
       } else if (action === 'forward') {
+
         for (let i = newDoc.order.length - 2; i >= 0; i--) {
           const curr = newDoc.order[i];
           const next = newDoc.order[i + 1];
@@ -3119,6 +3203,7 @@ function applyCommand(doc, cmd) {
           }
         }
       } else if (action === 'backward') {
+
         for (let i = 1; i < newDoc.order.length; i++) {
           const curr = newDoc.order[i];
           const prev = newDoc.order[i - 1];
@@ -3252,7 +3337,7 @@ function applyCommand(doc, cmd) {
       if (!conn || conn.type !== 'connector' || conn.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
-      const endpoint = cmd.endpoint; // 'from' | 'to'
+      const endpoint = cmd.endpoint;
       const prevTarget = cloneDocument(conn[endpoint]);
       conn[endpoint] = cloneDocument(cmd.target);
 
@@ -3372,6 +3457,7 @@ function applyCommand(doc, cmd) {
           }
         }
       } else {
+
         const oldStroke = prevTheme.defaultStroke;
         const newStroke = newDoc.theme.defaultStroke;
         const oldBg = prevTheme.background;
@@ -3481,6 +3567,7 @@ function applyCommandBatch(doc, commands) {
         inverseList.push(result.inverseCmd);
       }
     } catch (err) {
+
       throw new Error(`Batch execution failed at command [${i}] (${commands[i]?.type || 'unknown'}): ${err.message}`);
     }
   }
@@ -3635,7 +3722,7 @@ function sketchEllipse(cx, cy, rx, ry, prng, roughness = 1) {
     return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z`;
   }
 
-  const k = 0.5522847498; // Cubic bezier constant for circular arcs
+  const k = 0.5522847498;
   const paths = [];
 
   for (let pass = 0; pass < 2; pass++) {
@@ -3885,9 +3972,14 @@ function extractDocumentFromHtml(htmlContent) {
     return { valid: false, document: null, errors: ['No <script id="sabura-document"> tag found in HTML'] };
   }
 
+  const rawContent = match[1].trim();
+  if (!rawContent) {
+    return { valid: false, document: null, errors: ['Embedded <script id="sabura-document"> seam is empty'] };
+  }
+
   let parsed = null;
   try {
-    parsed = JSON.parse(match[1]);
+    parsed = JSON.parse(rawContent);
   } catch (err) {
     return { valid: false, document: null, errors: [`JSON parse error in document seam: ${err.message}`] };
   }
@@ -4250,7 +4342,7 @@ function renderSvgScene(doc, runtime) {
     out.push(`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="rgba(25, 113, 194, 0.1)" stroke="#1971c2" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" />`);
   }
 
-  out.push('</g>'); // end world-layer
+  out.push('</g>');
   out.push('</svg>');
   return out.join('\n');
 }
@@ -4284,6 +4376,7 @@ function renderObject(doc, obj, isSelected = false) {
       markup.push(renderArrowhead(tip.x, tip.y, next.x, next.y, 14, stroke, strokeWidth, isSketch));
     }
   } else if (obj.type === 'text') {
+
     const textStyle = obj.textStyle || {};
     const fontSize = textStyle.resolvedSize || 20;
     const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
@@ -4314,6 +4407,7 @@ function renderObject(doc, obj, isSelected = false) {
       markup.push('</text>');
     }
   } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'path'].includes(obj.type)) {
+
     if (fill !== 'none') {
       const fillPath = generateClosedFillPath(obj);
       if (fillPath) {
@@ -4383,6 +4477,7 @@ function renderObject(doc, obj, isSelected = false) {
       markup.push('</text>');
     }
   } else {
+
     markup.push(`<rect x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" fill="#f1f3f5" stroke="#868e96" stroke-width="1.5" stroke-dasharray="4,4" />`);
     markup.push(`<text x="${obj.x + 8}" y="${obj.y + 20}" font-size="12" fill="#495057" font-family="sans-serif">[Inert: ${escapeXml(obj.type)}]</text>`);
   }
@@ -4573,10 +4668,10 @@ function getStrokeWidthItems(curWidth = 2) {
 class ToolWheel {
   constructor(containerElement, onAction) {
     this.container = containerElement;
-    this.onAction = onAction; // Callback (actionName, payload)
+    this.onAction = onAction;
     this.isOpen = false;
     this.pos = { x: 0, y: 0 };
-    this.context = 'canvas'; // 'canvas' | 'object'
+    this.context = 'canvas';
     this.selectedObject = null;
     this.hoveredItem = null;
     this.activeSubMenu = null;
@@ -4604,8 +4699,8 @@ class ToolWheel {
     this.activeSubMenu = null;
     this.hoveredItem = null;
 
-    const pad = 226; // Max radius with outer Ring 3
-    const topBarPad = 72; // Header clearance
+    const pad = 226;
+    const topBarPad = 72;
     const clampedX = Math.max(pad + 10, Math.min(window.innerWidth - pad - 10, x));
     const clampedY = Math.max(pad + topBarPad, Math.min(window.innerHeight - pad - 10, y));
     this.pos = { x: clampedX, y: clampedY };
@@ -4656,8 +4751,8 @@ class ToolWheel {
           { id: 'shape_diamond', label: 'Diamond', icon: '◇' },
           { id: 'shape_triangle', label: 'Triangle', icon: '△' }
         ]
-      }, // Slot 0: 12:00
-      { id: 'tool_text', label: 'Text', icon: 'T' }, // Slot 1: 1:30
+      },
+      { id: 'tool_text', label: 'Text', icon: 'T' },
       {
         id: 'connector',
         label: 'Connect',
@@ -4667,12 +4762,12 @@ class ToolWheel {
           { id: 'conn_elbow', label: 'Elbow', icon: '⌐' },
           { id: 'conn_curved', label: 'Curved', icon: '~' }
         ]
-      }, // Slot 2: 3:00
-      { id: 'tool_line', label: 'Line / Poly', icon: '⏢' }, // Slot 3: 4:30
-      { id: 'tool_hand', label: 'Hand/Pan', icon: '✋' }, // Slot 4: 6:00
-      { id: 'action_undo', label: 'Undo', icon: '↶' }, // Slot 5: 7:30
-      { id: 'action_redo', label: 'Redo', icon: '↷' }, // Slot 6: 9:00
-      { id: 'tool_select', label: 'Select', icon: '↖' } // Slot 7: 10:30
+      },
+      { id: 'tool_line', label: 'Line / Poly', icon: '⏢' },
+      { id: 'tool_hand', label: 'Hand/Pan', icon: '✋' },
+      { id: 'action_undo', label: 'Undo', icon: '↶' },
+      { id: 'action_redo', label: 'Redo', icon: '↷' },
+      { id: 'tool_select', label: 'Select', icon: '↖' }
     ];
   }
 
@@ -4856,6 +4951,7 @@ class ToolWheel {
 
     let slot0, slot1;
     if (isClosed) {
+
       const fillColors = [
         { id: 'fill_none', label: 'None', color: 'none', icon: '⊘', isActive: !pObj.fill || pObj.fill === 'none' },
         ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col, isActive: pObj.fill === col }))
@@ -4869,6 +4965,7 @@ class ToolWheel {
       slot0 = { id: 'menu_fill', label: 'Fill', icon: '▨', subItems: fillColors, thirdItems: opacityItems };
       slot1 = curveItem;
     } else {
+
       const curStart = Boolean(pObj.startArrow);
       const curEnd = Boolean(pObj.endArrow);
       const curArrows = (!curStart && !curEnd) ? 'none' : (curStart && !curEnd ? 'start' : (!curStart && curEnd ? 'end' : 'both'));
@@ -4924,6 +5021,7 @@ class ToolWheel {
   }
 
   getMultiItems(spatialCount, isGrouped, anyUnlocked) {
+
     const alignItem = {
       id: 'menu_align',
       label: 'Align',
@@ -5052,13 +5150,16 @@ class ToolWheel {
     }
 
     svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" tabindex="0" role="button" aria-label="Close Wheel" />`);
+
     const hubSketch = sketchEllipse(center, center, rInner - 3, rInner - 3, prng, 1);
     svgParts.push(`<path d="${hubSketch}" class="wheel-hub-sketch" pointer-events="none" />`);
+
     const x1 = sketchLine(center - 5, center - 5, center + 5, center + 5, prng, 1);
     const x2 = sketchLine(center + 5, center - 5, center - 5, center + 5, prng, 1);
     svgParts.push(`<path d="${x1} ${x2}" class="wheel-hub-x" pointer-events="none" />`);
 
     const angleStep = (Math.PI * 2) / count;
+
     const angleOffset = -Math.PI / 2 - angleStep / 2;
 
     let subMenuToRender = null;
@@ -5128,6 +5229,7 @@ class ToolWheel {
         const sY = center + sTextR * Math.sin(sMid);
 
         if (sub.color && sub.color !== 'none') {
+
           if (isSubActive) {
             const checkFill = isDarkColor(sub.color) ? '#ffffff' : '#1e1e1e';
             svgParts.push(`<g class="wheel-label-group" pointer-events="none">
@@ -5135,6 +5237,7 @@ class ToolWheel {
             </g>`);
           }
         } else {
+
           svgParts.push(`<g class="wheel-label-group" pointer-events="none">
             <text x="${sX}" y="${sY - 6}" text-anchor="middle" class="wheel-icon">${sub.icon || ''}</text>
             <text x="${sX}" y="${sY + 11}" text-anchor="middle" class="wheel-sub-text">${sub.label}${isSubActive ? ' ✓' : ''}</text>
@@ -5255,7 +5358,7 @@ class ToolWheel {
 class TextEditor {
   constructor(containerElement, onCommit) {
     this.container = containerElement;
-    this.onCommit = onCommit; // Callback (objectId, newText)
+    this.onCommit = onCommit;
     this.targetObject = null;
     this.initialText = '';
 
@@ -5322,8 +5425,9 @@ class TextEditor {
   onKeyDown(e) {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      this.close(false); // Cancel without saving
+      this.close(false);
     } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || this.targetObject?.type !== 'text')) {
+
       e.preventDefault();
       this.close(true);
     }
@@ -5359,10 +5463,10 @@ class TopBar {
     const snapGrid = Boolean(this.snapGrid);
     const showGrid = this.showGrid !== false;
 
-    let statusColor = '#2f9e44'; // Clean green
-    if (status === 'Changed') statusColor = '#f08c00'; // Amber
-    else if (status === 'Error') statusColor = '#e03131'; // Red
-    else if (status.includes('copy') || status.includes('Copy')) statusColor = '#1971c2'; // Blue
+    let statusColor = '#2f9e44';
+    if (status === 'Changed') statusColor = '#f08c00';
+    else if (status === 'Error') statusColor = '#e03131';
+    else if (status.includes('copy') || status.includes('Copy')) statusColor = '#1971c2';
 
     this.barEl.innerHTML = `
       <div class="topbar-left">
@@ -5509,12 +5613,14 @@ class ShortcutsCoordinator {
   }
 
   onKeyDown(e) {
+
     const activeEl = document.activeElement;
     const isTyping = ['INPUT', 'TEXTAREA'].includes(activeEl?.tagName) ||
       Boolean(activeEl?.isContentEditable) ||
       Boolean(this.handlers.isTextEditing?.());
 
     if (isTyping) {
+
       if (e.key === 'Escape') {
         this.handlers.onEscape?.();
       }
@@ -5949,6 +6055,7 @@ class HelpModal {
     this.render();
     this.isOpen = true;
     this.modalEl.classList.add('visible');
+
     setTimeout(() => {
       const closeBtn = this.modalEl.querySelector('#btn-close-help');
       if (closeBtn && typeof closeBtn.focus === 'function') closeBtn.focus();
@@ -5982,7 +6089,7 @@ class Workspace {
     this.callbacks = callbacks;
 
     this.camera = { x: 0, y: 0, zoom: 1.0 };
-    this.activeTool = 'hand'; // Default tool: Hand/Pan!
+    this.activeTool = 'hand';
     this.previousTool = 'select';
     this.connectorRouting = 'straight';
     this.selectedIds = [];
@@ -6313,18 +6420,21 @@ class Workspace {
 
   findObjectAt(worldPoint) {
     const doc = this.callbacks.getDocument();
+
     for (let i = doc.order.length - 1; i >= 0; i--) {
       const objId = doc.order[i];
       const obj = doc.objects[objId];
       if (!obj) continue;
 
       if (obj.type === 'connector') {
+
         const dist = distanceToConnector(worldPoint, obj, doc);
         const hitThreshold = Math.max(12, 14 / this.camera.zoom);
         if (dist <= hitThreshold) {
           return obj;
         }
       } else if (obj.type === 'path' && !obj.closed) {
+
         const dist = distanceToPath(worldPoint, obj);
         const hitThreshold = Math.max(12, 14 / this.camera.zoom);
         if (dist <= hitThreshold) {
@@ -6503,14 +6613,17 @@ class Workspace {
               this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
             }
           } else if (this.activeGroupId === hitObj.groupId) {
+
             this.selectedIds = [targetId];
           } else if (this.selectedIds.includes(targetId)) {
+
             this.activeGroupId = null;
             const allIn = groupMembers.every(id => this.selectedIds.includes(id));
             if (!allIn) {
               this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
             }
           } else {
+
             this.activeGroupId = null;
             this.selectedIds = groupMembers;
           }
@@ -6545,6 +6658,7 @@ class Workspace {
         }
         this.render();
       } else {
+
         if (!e.shiftKey) {
           this.selectedIds = [];
           this.activeGroupId = null;
@@ -6607,6 +6721,7 @@ class Workspace {
   }
 
   onPointerMove(e) {
+
     if (this.longPressTimer) {
       const dist = Math.hypot(e.clientX - this.pointerStartScreen.x, e.clientY - this.pointerStartScreen.y);
       if (dist > 6) {
@@ -6641,7 +6756,7 @@ class Workspace {
       const includedGroups = new Set();
 
       for (const obj of Object.values(doc.objects)) {
-        if (obj.locked) continue; // Locked objects are never selected by marquee!
+        if (obj.locked) continue;
         const b = getBoundingBox(obj, doc);
         if (!b) continue;
         if (b.x < mr && b.right > mx && b.y < mb && b.bottom > my) {
@@ -6670,6 +6785,7 @@ class Workspace {
 
       if (this.isDHeld && !this.isDDragging) {
         this.isDDragging = true;
+
         for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
           const orig = doc.objects[id];
           if (orig) {
@@ -6715,6 +6831,7 @@ class Workspace {
       this.dragAccumulatedDelta = { dx, dy };
 
       if (this.isDDragging) {
+
         this.render();
         return;
       }
@@ -6823,6 +6940,7 @@ class Workspace {
       if (hit && hit.id !== connId && hit.type !== 'connector') {
         targetObj = hit;
       } else if (attachedObj) {
+
         const b = getBoundingBox(attachedObj);
         const buf = 24 / this.camera.zoom;
         if (worldPt.x >= b.x - buf && worldPt.x <= b.right + buf &&
@@ -6906,10 +7024,12 @@ class Workspace {
         this.draftObject.height = worldPt.y - this.draftObject.y;
         this.render();
       } else {
+
         let w = worldPt.x - this.dragStart.x;
         let h = worldPt.y - this.dragStart.y;
 
         if (e.shiftKey) {
+
           const side = Math.max(Math.abs(w), Math.abs(h));
           w = w < 0 ? -side : side;
           h = h < 0 ? -side : side;
@@ -6934,6 +7054,7 @@ class Workspace {
       this.isPanning = false;
       this.updateCursor();
       if (!this.panMoved && e.button === 0 && !this.spaceHeld) {
+
         const hit = this.findObjectAt(worldPt);
         if (hit) {
           this.selectedIds = [hit.id];
@@ -7022,6 +7143,7 @@ class Workspace {
           let finalDistance = data.currentDistance;
 
           if (dragDist < 5) {
+
             finalSide = data.initialSide === -1 ? 1 : -1;
             finalDistance = data.initialDistance;
           }
@@ -7044,6 +7166,7 @@ class Workspace {
           let finalOffset = data.currentOffset;
 
           if (dragDist < 5) {
+
             if (data.initialOffset === null || data.initialOffset === 0) {
               finalOffset = 80;
             } else {
@@ -7185,6 +7308,7 @@ class Workspace {
         });
         this.selectedIds = [obj.id];
       } else {
+
         if (obj.width <= 25 && obj.height <= 25) {
           if (obj.type === 'text') {
             obj.width = 80;
@@ -7220,9 +7344,11 @@ class Workspace {
   onWheel(e) {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
+
       const zoomFactor = Math.pow(0.992, e.deltaY);
       this.zoomAt(e.clientX, e.clientY, zoomFactor);
     } else {
+
       this.camera.x -= e.deltaX;
       this.camera.y -= e.deltaY;
       this.render();
@@ -7331,7 +7457,7 @@ class Workspace {
 class SaburaApp {
   constructor() {
     this.doc = null;
-    this.status = 'Clean'; // 'Clean' | 'Changed' | 'Preparing copy' | 'Copy requested' | 'Error'
+    this.status = 'Clean';
     this.interfaceTheme = (typeof localStorage !== 'undefined' ? localStorage.getItem('sabura_ui_theme') : null) || 'system';
     this.undoStack = [];
     this.redoStack = [];
@@ -7357,27 +7483,39 @@ class SaburaApp {
 
   initDocument() {
     this.originalHtml = (typeof document !== 'undefined' && document.documentElement) ? document.documentElement.outerHTML : '';
-    const seamScript = document.getElementById('sabura-document');
-    if (seamScript && seamScript.textContent.trim()) {
-      try {
-        const parsed = JSON.parse(seamScript.textContent);
-        const val = validateDocument(parsed);
-        if (val.valid) {
-          this.doc = normalizeDocument(parsed);
-          return;
-        }
-        this.isCorrupted = true;
-        this.loadErrors = val.errors;
-        console.warn('Embedded document validation failed:', val.errors);
-        return;
-      } catch (err) {
-        this.isCorrupted = true;
-        this.loadErrors = [`JSON parse error in document seam: ${err.message}`];
-        console.error('Failed to parse embedded document seam:', err);
+    const seamScript = (typeof document !== 'undefined') ? document.getElementById('sabura-document') : null;
+    if (!seamScript) {
+      this.isCorrupted = true;
+      this.loadErrors = ['Missing required <script id="sabura-document"> seam in HTML file'];
+      console.error('Fatal document error: missing #sabura-document seam');
+      return;
+    }
+
+    const seamContent = seamScript.textContent ? seamScript.textContent.trim() : '';
+    if (!seamContent) {
+      this.isCorrupted = true;
+      this.loadErrors = ['Embedded <script id="sabura-document"> seam is empty'];
+      console.error('Fatal document error: empty #sabura-document seam');
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(seamContent);
+      const val = validateDocument(parsed);
+      if (val.valid) {
+        this.doc = normalizeDocument(parsed);
         return;
       }
+      this.isCorrupted = true;
+      this.loadErrors = val.errors;
+      console.warn('Embedded document validation failed:', val.errors);
+      return;
+    } catch (err) {
+      this.isCorrupted = true;
+      this.loadErrors = [`JSON parse error in document seam: ${err.message}`];
+      console.error('Failed to parse embedded document seam:', err);
+      return;
     }
-    this.doc = createDefaultDocument({ title: 'Sabura Board' });
   }
 
   renderCorruptedState() {
@@ -7429,6 +7567,7 @@ class SaburaApp {
   }
 
   initServices() {
+
     this.laser = new LaserPointer(this.laserCanvas);
 
     this.workspace = new Workspace(this.canvasContainer, {
@@ -7728,7 +7867,7 @@ class SaburaApp {
     this.doc = newDoc;
     if (inverseCmd && inverseCmd.type !== 'noop') {
       this.undoStack.push(inverseCmd);
-      this.redoStack = []; // Clear redo on new action
+      this.redoStack = [];
     }
     this.status = 'Changed';
     this.updateUI();
@@ -7843,7 +7982,7 @@ class SaburaApp {
     } else if (actionId === 'action_connect') {
       this.workspace.setTool('connector');
     } else if (actionId.startsWith('order_')) {
-      const action = actionId.replace('order_', ''); // 'forward'|'backward'|'front'|'back'
+      const action = actionId.replace('order_', '');
       this.dispatchCommand({ type: 'reorder_objects', ids: selectedIds, action });
     } else if (actionId.startsWith('fill_')) {
       const col = payload.color;
@@ -8212,10 +8351,12 @@ class SaburaApp {
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
     }
+
     if (this.prePresentationCamera) {
       this.workspace.camera = { ...this.prePresentationCamera };
       this.prePresentationCamera = null;
     }
+
     this.workspace.setTool('hand');
     this.workspace.render();
   }
@@ -8241,6 +8382,7 @@ class SaburaApp {
     this.updateUI();
 
     try {
+
       const cleanShell = this.getCleanHtmlShell();
       const packResult = packageHtmlWithDocument(cleanShell, this.doc);
 
@@ -8299,6 +8441,7 @@ class SaburaApp {
         if (!Array.isArray(commands)) {
           return { success: false, errors: ['Commands must be an array'] };
         }
+
         const validationErrors = [];
         for (let i = 0; i < commands.length; i++) {
           const val = validateCommand(commands[i]);

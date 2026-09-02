@@ -15,7 +15,7 @@ import { measureText } from './geometry.js';
 
 /**
  * Generate a random stable alphanumeric ID.
- * @param {string} prefix 
+ * @param {string} prefix
  * @returns {string}
  */
 export function generateId(prefix = 'obj') {
@@ -34,7 +34,7 @@ export function generateSeed() {
 
 /**
  * Creates a valid, empty Sabura document.
- * @param {Partial<{ id: string, title: string, themeId: string }>} options 
+ * @param {Partial<{ id: string, title: string, themeId: string }>} options
  * @returns {Object}
  */
 export function createDefaultDocument(options = {}) {
@@ -55,21 +55,22 @@ export function createDefaultDocument(options = {}) {
 
 /**
  * Creates a default Sabura object matching schema requirements.
- * @param {string} type 
- * @param {Object} overrides 
- * @param {Object} theme 
+ * @param {string} type
+ * @param {Object} overrides
+ * @param {Object} theme
  * @returns {Object}
  */
 export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) {
+  const safeTheme = normalizeTheme(theme);
   const id = overrides.id || generateId(type.slice(0, 4));
   const seed = overrides.seed !== undefined ? overrides.seed : generateSeed();
-  const fontSizeToken = overrides.textStyle?.size || theme.defaultFontSize || 'm';
+  const fontSizeToken = overrides.textStyle?.size || safeTheme.defaultFontSize;
   const resolvedSize = FONT_SIZES[fontSizeToken] || 20;
 
   let defaultWidth = type === 'text' ? 80 : 160;
   let defaultHeight = type === 'text' ? 32 : 100;
   if (type === 'text' && overrides.text) {
-    const familyToken = overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'hand';
+    const familyToken = overrides.textStyle?.fontFamily || safeTheme.defaultFontFamily;
     const m = measureText(overrides.text, resolvedSize, familyToken);
     defaultWidth = m.width;
     defaultHeight = m.height;
@@ -82,12 +83,12 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     id,
     type,
     rotation: overrides.rotation || 0,
-    fill: overrides.fill !== undefined ? overrides.fill : theme.defaultFill,
-    stroke: overrides.stroke !== undefined ? overrides.stroke : theme.defaultStroke,
-    strokeWidth: overrides.strokeWidth !== undefined ? overrides.strokeWidth : theme.defaultStrokeWidth,
+    fill: overrides.fill !== undefined ? overrides.fill : safeTheme.defaultFill,
+    stroke: overrides.stroke !== undefined ? overrides.stroke : safeTheme.defaultStroke,
+    strokeWidth: overrides.strokeWidth !== undefined ? overrides.strokeWidth : safeTheme.defaultStrokeWidth,
     strokeStyle: overrides.strokeStyle || 'solid',
-    opacity: overrides.opacity !== undefined ? overrides.opacity : theme.defaultOpacity,
-    roughness: overrides.roughness !== undefined ? overrides.roughness : theme.defaultRoughness,
+    opacity: overrides.opacity !== undefined ? overrides.opacity : safeTheme.defaultOpacity,
+    roughness: overrides.roughness !== undefined ? overrides.roughness : safeTheme.defaultRoughness,
     seed,
     locked: overrides.locked || false,
     groupId: overrides.groupId || null,
@@ -95,10 +96,10 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     textStyle: {
       size: fontSizeToken,
       resolvedSize,
-      fontFamily: overrides.textStyle?.fontFamily || theme.defaultFontFamily || 'sans',
+      fontFamily: overrides.textStyle?.fontFamily || safeTheme.defaultFontFamily,
       bold: overrides.textStyle?.bold || false,
       align: overrides.textStyle?.align || (type === 'text' ? 'left' : 'center'),
-      color: overrides.textStyle?.color || overrides.stroke || theme.defaultStroke
+      color: overrides.textStyle?.color || overrides.stroke || safeTheme.defaultStroke
     }
   };
 
@@ -137,7 +138,7 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
 
 /**
  * Validates a Sabura document structure against the canonical schema.
- * @param {any} doc 
+ * @param {any} doc
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export const DOCUMENT_ALLOWED_FIELDS = new Set([
@@ -234,6 +235,54 @@ export const PATH_ALLOWED_FIELDS = new Set([
   'endArrow'
 ]);
 
+export const CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS = new Set(['id', 'anchor']);
+export const CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS = new Set(['point']);
+export const CONNECTOR_ANCHOR_ALLOWED_FIELDS = new Set(['x', 'y']);
+export const CONNECTOR_POINT_ALLOWED_FIELDS = new Set(['x', 'y']);
+
+export const DEFAULT_THEME_VALUES = Object.freeze({
+  defaultStroke: '#1e1e1e',
+  defaultStrokeWidth: 2,
+  defaultFill: 'none',
+  defaultOpacity: 1.0,
+  defaultRoughness: 1,
+  defaultFontSize: 'm',
+  defaultFontFamily: 'hand',
+  gridColor: 'rgba(0, 0, 0, 0.08)'
+});
+
+export function normalizeTheme(theme) {
+  if (!theme || typeof theme !== 'object') {
+    return { background: '#fcfaf6', palette: ['#1e1e1e'], ...DEFAULT_THEME_VALUES };
+  }
+  const normalized = { ...theme };
+  if (normalized.defaultStroke === undefined) normalized.defaultStroke = DEFAULT_THEME_VALUES.defaultStroke;
+  if (normalized.defaultStrokeWidth === undefined) normalized.defaultStrokeWidth = DEFAULT_THEME_VALUES.defaultStrokeWidth;
+  if (normalized.defaultFill === undefined) normalized.defaultFill = DEFAULT_THEME_VALUES.defaultFill;
+  if (normalized.defaultOpacity === undefined) normalized.defaultOpacity = DEFAULT_THEME_VALUES.defaultOpacity;
+  if (normalized.defaultRoughness === undefined) normalized.defaultRoughness = DEFAULT_THEME_VALUES.defaultRoughness;
+  if (normalized.defaultFontSize === undefined) normalized.defaultFontSize = DEFAULT_THEME_VALUES.defaultFontSize;
+  if (normalized.defaultFontFamily === undefined) normalized.defaultFontFamily = DEFAULT_THEME_VALUES.defaultFontFamily;
+  if (normalized.gridColor === undefined) normalized.gridColor = DEFAULT_THEME_VALUES.gridColor;
+  return normalized;
+}
+
+/**
+ * Computes a deterministic non-negative 31-bit integer seed from an object ID.
+ * Guarantees that omitted seeds normalize identically on repeated loads.
+ * @param {string} id
+ * @returns {number}
+ */
+export function deterministicSeedFromId(id) {
+  const str = String(id || '');
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h & 0x7fffffff) || 1;
+}
+
 export function getAllowedFieldsForType(type) {
   if (['rectangle', 'ellipse', 'diamond', 'triangle'].includes(type)) return SHAPE_ALLOWED_FIELDS;
   if (type === 'text') return TEXT_ALLOWED_FIELDS;
@@ -251,10 +300,63 @@ function checkUnknownProperties(obj, allowedSet, context, errors) {
   }
 }
 
+function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
+  if (!endpoint || typeof endpoint !== 'object' || Array.isArray(endpoint)) {
+    errors.push(`Connector "${objId}" must have a valid "${endpointName}" definition`);
+    return;
+  }
+
+  const hasId = endpoint.id !== undefined;
+  const hasPoint = endpoint.point !== undefined;
+
+  if (hasId && hasPoint) {
+    errors.push(`Connector "${objId}" ${endpointName} cannot contain both "id" and "point"`);
+    return;
+  }
+
+  if (!hasId && !hasPoint) {
+    errors.push(`Connector "${objId}" ${endpointName} must contain either "id" (with optional "anchor") or "point"`);
+    return;
+  }
+
+  if (hasId) {
+    checkUnknownProperties(endpoint, CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}`, errors);
+    if (typeof endpoint.id !== 'string' || !endpoint.id.trim()) {
+      errors.push(`Connector "${objId}" ${endpointName}.id must be a non-empty string`);
+    } else if (!doc.objects || !doc.objects[endpoint.id]) {
+      errors.push(`Connector "${objId}" ${endpointName} references non-existent object ID: "${endpoint.id}"`);
+    }
+
+    if (endpoint.anchor !== undefined) {
+      if (!endpoint.anchor || typeof endpoint.anchor !== 'object' || Array.isArray(endpoint.anchor)) {
+        errors.push(`Connector "${objId}" ${endpointName}.anchor must be an object`);
+      } else {
+        checkUnknownProperties(endpoint.anchor, CONNECTOR_ANCHOR_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.anchor`, errors);
+        if (typeof endpoint.anchor.x !== 'number' || isNaN(endpoint.anchor.x) || typeof endpoint.anchor.y !== 'number' || isNaN(endpoint.anchor.y)) {
+          errors.push(`Connector "${objId}" ${endpointName}.anchor must have numeric x and y`);
+        } else if (endpoint.anchor.x < 0 || endpoint.anchor.x > 1 || endpoint.anchor.y < 0 || endpoint.anchor.y > 1) {
+          errors.push(`Connector "${objId}" ${endpointName}.anchor (x, y) must be normalized between 0 and 1`);
+        }
+      }
+    }
+  } else if (hasPoint) {
+    checkUnknownProperties(endpoint, CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}`, errors);
+    const pt = endpoint.point;
+    if (!pt || typeof pt !== 'object' || Array.isArray(pt)) {
+      errors.push(`Connector "${objId}" ${endpointName}.point must be an object with { x, y }`);
+    } else {
+      checkUnknownProperties(pt, CONNECTOR_POINT_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.point`, errors);
+      if (typeof pt.x !== 'number' || isNaN(pt.x) || typeof pt.y !== 'number' || isNaN(pt.y)) {
+        errors.push(`Connector "${objId}" ${endpointName}.point coordinates (x, y) must be valid numbers`);
+      }
+    }
+  }
+}
+
 /**
  * Validates a Sabura document structure against the canonical v1 schema.
  * Rejects unknown unnamespaced properties, broken references, malformed geometry, etc.
- * @param {any} doc 
+ * @param {any} doc
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export function validateDocument(doc) {
@@ -429,45 +531,8 @@ export function validateDocument(doc) {
 
       // Connector-specific validation
       if (obj.type === 'connector') {
-        if (!obj.from || typeof obj.from !== 'object' || Array.isArray(obj.from)) {
-          errors.push(`Connector "${objId}" must have a valid "from" definition`);
-        } else {
-          const hasId = typeof obj.from.id === 'string' && obj.from.id.trim().length > 0;
-          const hasPoint = obj.from.point && typeof obj.from.point === 'object' && typeof obj.from.point.x === 'number' && !isNaN(obj.from.point.x) && typeof obj.from.point.y === 'number' && !isNaN(obj.from.point.y);
-          if (!hasId && !hasPoint) {
-            errors.push(`Connector "${objId}" from must specify a valid object "id" or numeric "point" { x, y }`);
-          }
-          if (hasId && (!doc.objects || !doc.objects[obj.from.id])) {
-            errors.push(`Connector "${objId}" from references non-existent object ID: "${obj.from.id}"`);
-          }
-          if (obj.from.anchor !== undefined) {
-            if (!obj.from.anchor || typeof obj.from.anchor !== 'object' || Array.isArray(obj.from.anchor) || typeof obj.from.anchor.x !== 'number' || isNaN(obj.from.anchor.x) || typeof obj.from.anchor.y !== 'number' || isNaN(obj.from.anchor.y)) {
-              errors.push(`Connector "${objId}" from.anchor must have numeric x and y`);
-            } else if (obj.from.anchor.x < 0 || obj.from.anchor.x > 1 || obj.from.anchor.y < 0 || obj.from.anchor.y > 1) {
-              errors.push(`Connector "${objId}" from.anchor (x, y) must be normalized between 0 and 1`);
-            }
-          }
-        }
-
-        if (!obj.to || typeof obj.to !== 'object' || Array.isArray(obj.to)) {
-          errors.push(`Connector "${objId}" must have a valid "to" definition`);
-        } else {
-          const hasId = typeof obj.to.id === 'string' && obj.to.id.trim().length > 0;
-          const hasPoint = obj.to.point && typeof obj.to.point === 'object' && typeof obj.to.point.x === 'number' && !isNaN(obj.to.point.x) && typeof obj.to.point.y === 'number' && !isNaN(obj.to.point.y);
-          if (!hasId && !hasPoint) {
-            errors.push(`Connector "${objId}" to must specify a valid object "id" or numeric "point" { x, y }`);
-          }
-          if (hasId && (!doc.objects || !doc.objects[obj.to.id])) {
-            errors.push(`Connector "${objId}" to references non-existent object ID: "${obj.to.id}"`);
-          }
-          if (obj.to.anchor !== undefined) {
-            if (!obj.to.anchor || typeof obj.to.anchor !== 'object' || Array.isArray(obj.to.anchor) || typeof obj.to.anchor.x !== 'number' || isNaN(obj.to.anchor.x) || typeof obj.to.anchor.y !== 'number' || isNaN(obj.to.anchor.y)) {
-              errors.push(`Connector "${objId}" to.anchor must have numeric x and y`);
-            } else if (obj.to.anchor.x < 0 || obj.to.anchor.x > 1 || obj.to.anchor.y < 0 || obj.to.anchor.y > 1) {
-              errors.push(`Connector "${objId}" to.anchor (x, y) must be normalized between 0 and 1`);
-            }
-          }
-        }
+        validateConnectorEndpoint(obj.from, 'from', objId, doc, errors);
+        validateConnectorEndpoint(obj.to, 'to', objId, doc, errors);
 
         if (obj.routing !== undefined && !CONNECTOR_ROUTINGS.includes(obj.routing)) {
           errors.push(`Connector "${objId}" has unsupported routing: "${obj.routing}". Expected one of: ${CONNECTOR_ROUTINGS.join(', ')}`);
@@ -562,12 +627,13 @@ export function validateDocument(doc) {
  * Normalizes a valid document by filling in version-defined defaults
  * for any omitted optional properties.
  * Does not replace invalid values.
- * @param {Object} doc 
+ * @param {Object} doc
  * @returns {Object}
  */
 export function normalizeDocument(doc) {
   if (!doc || typeof doc !== 'object') return doc;
-  const theme = doc.theme || THEME_PRESETS.paper;
+  doc.theme = normalizeTheme(doc.theme);
+  const theme = doc.theme;
 
   if (!doc.groups) doc.groups = {};
   if (!doc.assets) doc.assets = {};
@@ -576,13 +642,13 @@ export function normalizeDocument(doc) {
 
   for (const [id, obj] of Object.entries(doc.objects)) {
     if (!obj || typeof obj !== 'object') continue;
-    if (obj.stroke === undefined) obj.stroke = theme.defaultStroke || '#1e1e1e';
-    if (obj.strokeWidth === undefined) obj.strokeWidth = theme.defaultStrokeWidth || 2;
+    if (obj.stroke === undefined) obj.stroke = theme.defaultStroke;
+    if (obj.strokeWidth === undefined) obj.strokeWidth = theme.defaultStrokeWidth;
     if (obj.strokeStyle === undefined) obj.strokeStyle = 'solid';
-    if (obj.fill === undefined) obj.fill = theme.defaultFill || 'none';
-    if (obj.opacity === undefined) obj.opacity = theme.defaultOpacity !== undefined ? theme.defaultOpacity : 1.0;
-    if (obj.roughness === undefined) obj.roughness = theme.defaultRoughness !== undefined ? theme.defaultRoughness : 1;
-    if (obj.seed === undefined) obj.seed = generateSeed();
+    if (obj.fill === undefined) obj.fill = theme.defaultFill;
+    if (obj.opacity === undefined) obj.opacity = theme.defaultOpacity;
+    if (obj.roughness === undefined) obj.roughness = theme.defaultRoughness;
+    if (obj.seed === undefined) obj.seed = deterministicSeedFromId(obj.id);
     if (obj.locked === undefined) obj.locked = false;
     if (obj.groupId === undefined) obj.groupId = null;
     if (obj.rotation === undefined) obj.rotation = 0;
@@ -590,21 +656,21 @@ export function normalizeDocument(doc) {
 
     if (obj.textStyle === undefined) {
       obj.textStyle = {
-        size: theme.defaultFontSize || 'm',
-        resolvedSize: FONT_SIZES[theme.defaultFontSize || 'm'] || 20,
-        fontFamily: theme.defaultFontFamily || 'hand',
+        size: theme.defaultFontSize,
+        resolvedSize: FONT_SIZES[theme.defaultFontSize] || 20,
+        fontFamily: theme.defaultFontFamily,
         bold: false,
         align: obj.type === 'text' ? 'left' : 'center',
-        color: obj.stroke || theme.defaultStroke || '#1e1e1e'
+        color: obj.stroke || theme.defaultStroke
       };
     } else {
-      const fontSizeToken = obj.textStyle.size || theme.defaultFontSize || 'm';
+      const fontSizeToken = obj.textStyle.size || theme.defaultFontSize;
       if (!obj.textStyle.size) obj.textStyle.size = fontSizeToken;
       if (!obj.textStyle.resolvedSize) obj.textStyle.resolvedSize = FONT_SIZES[fontSizeToken] || 20;
-      if (!obj.textStyle.fontFamily) obj.textStyle.fontFamily = theme.defaultFontFamily || 'hand';
+      if (!obj.textStyle.fontFamily) obj.textStyle.fontFamily = theme.defaultFontFamily;
       if (obj.textStyle.bold === undefined) obj.textStyle.bold = false;
       if (!obj.textStyle.align) obj.textStyle.align = obj.type === 'text' ? 'left' : 'center';
-      if (!obj.textStyle.color) obj.textStyle.color = obj.stroke || theme.defaultStroke || '#1e1e1e';
+      if (!obj.textStyle.color) obj.textStyle.color = obj.stroke || theme.defaultStroke;
     }
 
     if (obj.type === 'connector') {
@@ -626,7 +692,7 @@ export function normalizeDocument(doc) {
 /**
  * Deep clones any JSON-compatible structure.
  * @template T
- * @param {T} obj 
+ * @param {T} obj
  * @returns {T}
  */
 export function cloneDocument(obj) {
@@ -640,7 +706,7 @@ export function cloneDocument(obj) {
  * - Indented with 2 spaces
  * - Encodes every literal '<' as '\u003C' to guarantee that user or AI-generated
  *   text cannot form HTML parser closing tags such as '</script>' regardless of casing.
- * @param {any} value 
+ * @param {any} value
  * @returns {string}
  */
 export function canonicalJson(value) {

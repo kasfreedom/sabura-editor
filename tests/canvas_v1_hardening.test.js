@@ -13,6 +13,7 @@ import {
   extractDocumentFromHtml
 } from '../src/storage/file-packer.js';
 import { CANVAS_SCHEMA_VERSION, OBJECT_TYPES } from '../src/core/types.js';
+import { stripCommentsSyntaxSafe } from '../scripts/build.js';
 
 test('valid empty and representative documents pass strict validation', () => {
   const emptyDoc = createDefaultDocument({ title: 'Empty Canvas' });
@@ -380,4 +381,201 @@ ${canonicalJson(baseDoc)}
   assert.equal(reloaded.document.objects.conn_client_api.from.id, 'svc_client');
   assert.equal(reloaded.document.objects.conn_client_api.to.id, 'svc_api');
   assert.deepEqual(reloaded.document.order, ['svc_client', 'svc_api', 'conn_client_api']);
+});
+
+test('omitted seed normalization is deterministic across multiple loads', () => {
+  const doc = createDefaultDocument({ title: 'Deterministic Seeds' });
+  doc.objects = {
+    box1: { id: 'box1', type: 'rectangle', x: 10, y: 10, width: 100, height: 60 },
+    conn1: { id: 'conn1', type: 'connector', from: { id: 'box1' }, to: { point: { x: 200, y: 200 } } },
+    path1: { id: 'path1', type: 'path', x: 0, y: 0, width: 50, height: 50, points: [{ x: 0, y: 0 }, { x: 50, y: 50 }] }
+  };
+  doc.order = ['box1', 'conn1', 'path1'];
+
+  const norm1 = normalizeDocument(cloneDocument(doc));
+  const norm2 = normalizeDocument(cloneDocument(doc));
+
+  assert.equal(norm1.objects.box1.seed, norm2.objects.box1.seed);
+  assert.equal(norm1.objects.conn1.seed, norm2.objects.conn1.seed);
+  assert.equal(norm1.objects.path1.seed, norm2.objects.path1.seed);
+  assert.equal(canonicalJson(norm1), canonicalJson(norm2));
+});
+
+test('nested connector endpoints strictly validate allowed properties and reject combinations', () => {
+  const doc = createDefaultDocument();
+  const r1 = createDefaultObject('rectangle', { id: 'r1' });
+  const r2 = createDefaultObject('rectangle', { id: 'r2' });
+  doc.objects = { r1, r2 };
+  doc.order = ['r1', 'r2'];
+
+  // 1. Simultaneous id and point
+  const badBoth = createDefaultObject('connector', {
+    id: 'c_both',
+    from: { id: 'r1', point: { x: 10, y: 10 } },
+    to: { id: 'r2' }
+  });
+  doc.objects.c_both = badBoth;
+  doc.order.push('c_both');
+  const valBoth = validateDocument(doc);
+  assert.equal(valBoth.valid, false);
+  assert.ok(valBoth.errors.some(e => e.includes('cannot contain both "id" and "point"')));
+
+  // 2. Neither id nor point
+  delete doc.objects.c_both;
+  doc.order.pop();
+  const badNeither = createDefaultObject('connector', {
+    id: 'c_neither',
+    from: { anchor: { x: 0.5, y: 0.5 } },
+    to: { id: 'r2' }
+  });
+  doc.objects.c_neither = badNeither;
+  doc.order.push('c_neither');
+  const valNeither = validateDocument(doc);
+  assert.equal(valNeither.valid, false);
+  assert.ok(valNeither.errors.some(e => e.includes('must contain either "id"')));
+
+  // 3. Unknown unnamespaced property on endpoint
+  delete doc.objects.c_neither;
+  doc.order.pop();
+  const badEndpointProp = createDefaultObject('connector', {
+    id: 'c_bad_prop',
+    from: { id: 'r1', unknownEndpointField: 123 },
+    to: { id: 'r2' }
+  });
+  doc.objects.c_bad_prop = badEndpointProp;
+  doc.order.push('c_bad_prop');
+  const valEndProp = validateDocument(doc);
+  assert.equal(valEndProp.valid, false);
+  assert.ok(valEndProp.errors.some(e => e.includes('Unknown unnamespaced property "unknownEndpointField"')));
+
+  // 4. Unknown unnamespaced property on anchor
+  delete doc.objects.c_bad_prop;
+  doc.order.pop();
+  const badAnchorProp = createDefaultObject('connector', {
+    id: 'c_bad_anchor',
+    from: { id: 'r1', anchor: { x: 0.5, y: 0.5, z: 0 } },
+    to: { id: 'r2' }
+  });
+  doc.objects.c_bad_anchor = badAnchorProp;
+  doc.order.push('c_bad_anchor');
+  const valAnchorProp = validateDocument(doc);
+  assert.equal(valAnchorProp.valid, false);
+  assert.ok(valAnchorProp.errors.some(e => e.includes('Unknown unnamespaced property "z"')));
+
+  // 5. Unknown unnamespaced property on point
+  delete doc.objects.c_bad_anchor;
+  doc.order.pop();
+  const badPointProp = createDefaultObject('connector', {
+    id: 'c_bad_point',
+    from: { id: 'r1' },
+    to: { point: { x: 100, y: 100, color: 'red' } }
+  });
+  doc.objects.c_bad_point = badPointProp;
+  doc.order.push('c_bad_point');
+  const valPointProp = validateDocument(doc);
+  assert.equal(valPointProp.valid, false);
+  assert.ok(valPointProp.errors.some(e => e.includes('Unknown unnamespaced property "color"')));
+
+  // 6. ext:* on endpoint, anchor, and point are accepted and preserved
+  delete doc.objects.c_bad_point;
+  doc.order.pop();
+  const validExtConn = createDefaultObject('connector', {
+    id: 'c_ext',
+    from: {
+      id: 'r1',
+      anchor: { x: 0.5, y: 0.5, 'ext:anchor_mode': 'snap' },
+      'ext:port_id': 'out_1'
+    },
+    to: {
+      point: { x: 200, y: 150, 'ext:guide': true },
+      'ext:port_id': 'in_free'
+    }
+  });
+  doc.objects.c_ext = validExtConn;
+  doc.order.push('c_ext');
+  const valExt = validateDocument(doc);
+  assert.equal(valExt.valid, true, `Expected valid ext connector: ${valExt.errors.join(', ')}`);
+});
+
+test('minimal valid theme normalizes safely and allows creating new rectangle', () => {
+  const minimalDoc = {
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    id: 'board_minimal',
+    title: 'Minimal Theme Board',
+    theme: {
+      background: '#222222',
+      palette: ['#ffffff', '#ff0000']
+    },
+    objects: {},
+    order: [],
+    groups: {},
+    assets: {}
+  };
+
+  const validationInitial = validateDocument(minimalDoc);
+  assert.equal(validationInitial.valid, true, `Minimal doc must be valid: ${validationInitial.errors.join(', ')}`);
+
+  const normalizedDoc = normalizeDocument(cloneDocument(minimalDoc));
+  assert.equal(normalizedDoc.theme.defaultStroke, '#1e1e1e');
+  assert.equal(normalizedDoc.theme.defaultFill, 'none');
+
+  // Create new rectangle with the theme
+  const newRect = createDefaultObject('rectangle', { x: 40, y: 40, width: 120, height: 80 }, normalizedDoc.theme);
+  assert.equal(typeof newRect.stroke, 'string');
+  assert.equal(typeof newRect.fill, 'string');
+  assert.equal(typeof newRect.strokeWidth, 'number');
+
+  normalizedDoc.objects[newRect.id] = newRect;
+  normalizedDoc.order.push(newRect.id);
+
+  const finalVal = validateDocument(normalizedDoc);
+  assert.equal(finalVal.valid, true, `Document after adding rectangle must be valid: ${finalVal.errors.join(', ')}`);
+});
+
+test('missing or empty sabura-document seam is treated as corrupted', () => {
+  // 1. Missing seam in HTML
+  const missingHtml = '<!DOCTYPE html><html><body><div id="app"></div></body></html>';
+  const extractMissing = extractDocumentFromHtml(missingHtml);
+  assert.equal(extractMissing.valid, false);
+  assert.ok(extractMissing.errors.some(e => e.includes('No <script id="sabura-document"> tag found')));
+
+  // 2. Empty seam in HTML
+  const emptyHtml = '<!DOCTYPE html><html><body><script type="application/json" id="sabura-document"></script></body></html>';
+  const extractEmpty = extractDocumentFromHtml(emptyHtml);
+  assert.equal(extractEmpty.valid, false);
+  assert.ok(extractEmpty.errors.some(e => e.includes('seam is empty')));
+
+  // 3. Whitespace-only seam in HTML
+  const whitespaceHtml = '<!DOCTYPE html><html><body><script type="application/json" id="sabura-document">   \n\t  </script></body></html>';
+  const extractWhitespace = extractDocumentFromHtml(whitespaceHtml);
+  assert.equal(extractWhitespace.valid, false);
+  assert.ok(extractWhitespace.errors.some(e => e.includes('seam is empty')));
+});
+
+test('stripCommentsSyntaxSafe preserves strings, template literals, and regexes while removing comments', () => {
+  const inputCode = `
+    const str1 = 'http://example.com/*not a comment*/';
+    const str2 = "also // not a comment /* still not */";
+    const tpl = \`value: \${ 1 + /* strip me */ 2 } // preserved in template\`;
+    const regex = /http:\\/\\/[a-z]+\\/\\*test/i; // end line comment
+    /*
+      multi-line
+      block comment
+    */
+    function test() {
+      return regex.test(str1); // check
+    }
+  `;
+
+  const stripped = stripCommentsSyntaxSafe(inputCode);
+
+  assert.ok(stripped.includes('http://example.com/*not a comment*/'));
+  assert.ok(stripped.includes('also // not a comment /* still not */'));
+  assert.ok(stripped.includes('value: ${ 1 +  2 } // preserved in template'));
+  assert.ok(stripped.includes('/http:\\/\\/[a-z]+\\/\\*test/i'));
+  assert.ok(!stripped.includes('multi-line'));
+  assert.ok(!stripped.includes('block comment'));
+  assert.ok(!stripped.includes('strip me'));
+  assert.ok(!stripped.includes('end line comment'));
+  assert.ok(!stripped.includes('check'));
 });

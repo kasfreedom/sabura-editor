@@ -1,6 +1,6 @@
 /**
  * Sabura Main Application Entrypoint.
- * 
+ *
  * Coordinates the functional core, SVG renderer, contextual circular tool wheel,
  * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
  */
@@ -48,28 +48,39 @@ export class SaburaApp {
 
   initDocument() {
     this.originalHtml = (typeof document !== 'undefined' && document.documentElement) ? document.documentElement.outerHTML : '';
-    const seamScript = document.getElementById('sabura-document');
-    if (seamScript && seamScript.textContent.trim()) {
-      try {
-        const parsed = JSON.parse(seamScript.textContent);
-        const val = validateDocument(parsed);
-        if (val.valid) {
-          this.doc = normalizeDocument(parsed);
-          return;
-        }
-        this.isCorrupted = true;
-        this.loadErrors = val.errors;
-        console.warn('Embedded document validation failed:', val.errors);
-        return;
-      } catch (err) {
-        this.isCorrupted = true;
-        this.loadErrors = [`JSON parse error in document seam: ${err.message}`];
-        console.error('Failed to parse embedded document seam:', err);
+    const seamScript = (typeof document !== 'undefined') ? document.getElementById('sabura-document') : null;
+    if (!seamScript) {
+      this.isCorrupted = true;
+      this.loadErrors = ['Missing required <script id="sabura-document"> seam in HTML file'];
+      console.error('Fatal document error: missing #sabura-document seam');
+      return;
+    }
+
+    const seamContent = seamScript.textContent ? seamScript.textContent.trim() : '';
+    if (!seamContent) {
+      this.isCorrupted = true;
+      this.loadErrors = ['Embedded <script id="sabura-document"> seam is empty'];
+      console.error('Fatal document error: empty #sabura-document seam');
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(seamContent);
+      const val = validateDocument(parsed);
+      if (val.valid) {
+        this.doc = normalizeDocument(parsed);
         return;
       }
+      this.isCorrupted = true;
+      this.loadErrors = val.errors;
+      console.warn('Embedded document validation failed:', val.errors);
+      return;
+    } catch (err) {
+      this.isCorrupted = true;
+      this.loadErrors = [`JSON parse error in document seam: ${err.message}`];
+      console.error('Failed to parse embedded document seam:', err);
+      return;
     }
-    // Fallback to initial default board only if no seam tag or empty
-    this.doc = createDefaultDocument({ title: 'Sabura Board' });
   }
 
   renderCorruptedState() {

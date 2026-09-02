@@ -1,6 +1,6 @@
 /**
  * Sabura Compact Zoom and Help Toolbar.
- * 
+ *
  * Positioned in the bottom-left corner with sketch-inspired styling.
  * Contains: Zoom Out, Current Zoom Percentage, Zoom In, Fit, Help icon.
  */

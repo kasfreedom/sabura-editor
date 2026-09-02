@@ -387,6 +387,3 @@ test('Style menu provides stroke width options in thirdItems (Ring 3) across all
     assert.equal(activeItem.value, ctx.expectedActiveWidth, `${ctx.name} active width should match expected value`);
   }
 });
-
-
-

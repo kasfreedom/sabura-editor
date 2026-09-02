@@ -239,4 +239,3 @@ test('ShortcutsCoordinator triggers onEqualSides on S or =, and protects text ed
   typingCoordinator.onKeyDown({ key: 's', preventDefault: () => {} });
   assert.equal(equalTriggered, 2, 'Typing S inside text editor must not trigger equal sides');
 });
-

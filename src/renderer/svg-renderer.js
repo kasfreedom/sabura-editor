@@ -110,7 +110,7 @@ function wrapText(text, maxWidth, fontSize) {
 
 /**
  * Renders the entire SVG scene string.
- * 
+ *
  * @param {Object} doc - Sabura document
  * @param {Object} runtime - Ephemeral runtime state (camera, selection, marquee, snapLines, hoverHandle)
  * @returns {string} Inner SVG content

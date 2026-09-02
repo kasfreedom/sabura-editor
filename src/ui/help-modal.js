@@ -1,6 +1,6 @@
 /**
  * Sabura Integrated Help & Shortcuts Modal.
- * 
+ *
  * Provides scannable, offline documentation for tools, editing, connectors,
  * view controls, and platform-specific keyboard shortcuts.
  */

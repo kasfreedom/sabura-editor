@@ -1,13 +1,13 @@
 /**
  * Sabura Deterministic Sketch Generator.
- * 
+ *
  * Uses a seedable Mulberry32 PRNG to generate reproducible hand-drawn SVG paths
  * for shapes and connectors. Never produces random jitter across renders.
  */
 
 /**
  * Creates a fast, seedable 32-bit PRNG (Mulberry32).
- * @param {number} seed 
+ * @param {number} seed
  * @returns {() => number} Returns float in [0, 1)
  */
 export function createPRNG(seed) {
@@ -31,13 +31,13 @@ function randomRange(prng, min, max) {
 /**
  * Produces a sketchy, hand-drawn straight or slightly bowed line between two points.
  * Generates two overlapping, slightly offset passes for sketch feel.
- * 
- * @param {number} x1 
- * @param {number} y1 
- * @param {number} x2 
- * @param {number} y2 
- * @param {() => number} prng 
- * @param {number} roughness 
+ *
+ * @param {number} x1
+ * @param {number} y1
+ * @param {number} x2
+ * @param {number} y2
+ * @param {() => number} prng
+ * @param {number} roughness
  * @returns {string} SVG path segment string
  */
 export function sketchLine(x1, y1, x2, y2, prng, roughness = 1) {
@@ -84,11 +84,11 @@ export function sketchLine(x1, y1, x2, y2, prng, roughness = 1) {
 
 /**
  * Generates sketchy SVG path for a polygon given its vertices.
- * 
- * @param {Array<[number, number]>} vertices 
- * @param {() => number} prng 
- * @param {number} roughness 
- * @param {boolean} closePath 
+ *
+ * @param {Array<[number, number]>} vertices
+ * @param {() => number} prng
+ * @param {number} roughness
+ * @param {boolean} closePath
  * @returns {string}
  */
 export function sketchPolygon(vertices, prng, roughness = 1, closePath = true) {
@@ -118,11 +118,11 @@ export function sketchPolygon(vertices, prng, roughness = 1, closePath = true) {
 /**
  * Generates smooth Catmull-Rom spline SVG path for a list of vertices.
  * Converts to cubic Bezier curves with continuous C1 tangency.
- * 
- * @param {Array<[number, number]>} vertices 
- * @param {() => number} prng 
- * @param {number} roughness 
- * @param {boolean} closePath 
+ *
+ * @param {Array<[number, number]>} vertices
+ * @param {() => number} prng
+ * @param {number} roughness
+ * @param {boolean} closePath
  * @returns {string}
  */
 export function sketchSpline(vertices, prng, roughness = 1, closePath = false) {
@@ -186,13 +186,13 @@ export function sketchSpline(vertices, prng, roughness = 1, closePath = false) {
 /**
  * Generates sketchy SVG path for an ellipse.
  * Uses two slightly offset 4-point cubic bezier loops.
- * 
- * @param {number} cx 
- * @param {number} cy 
- * @param {number} rx 
- * @param {number} ry 
- * @param {() => number} prng 
- * @param {number} roughness 
+ *
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rx
+ * @param {number} ry
+ * @param {() => number} prng
+ * @param {number} roughness
  * @returns {string}
  */
 export function sketchEllipse(cx, cy, rx, ry, prng, roughness = 1) {
@@ -237,7 +237,7 @@ export function sketchEllipse(cx, cy, rx, ry, prng, roughness = 1) {
  * Master sketch path generator for any Sabura object.
  * Returns pure SVG path `d` string.
  * Strictly deterministic: identical inputs yield identical output.
- * 
+ *
  * @param {Object} obj - Sabura object
  * @returns {string} SVG path 'd' attribute
  */
@@ -304,7 +304,7 @@ export function generateSketchPath(obj) {
 /**
  * Generates a closed SVG path suitable for organic watercolor/marker fills.
  * When roughness > 0, connects vertices with subtle natural curves.
- * 
+ *
  * @param {Object} obj - Sabura object
  * @returns {string} SVG path 'd' attribute
  */
@@ -384,14 +384,14 @@ export function generateClosedFillPath(obj) {
 
 /**
  * Sketches a hand-drawn circular arc from startAngle to endAngle at radius r.
- * 
- * @param {number} cx 
- * @param {number} cy 
- * @param {number} r 
- * @param {number} startAngle 
- * @param {number} endAngle 
- * @param {() => number} prng 
- * @param {number} roughness 
+ *
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} r
+ * @param {number} startAngle
+ * @param {number} endAngle
+ * @param {() => number} prng
+ * @param {number} roughness
  * @returns {string} SVG path segment string
  */
 export function sketchArc(cx, cy, r, startAngle, endAngle, prng, roughness = 1) {
@@ -438,16 +438,16 @@ export function sketchArc(cx, cy, r, startAngle, endAngle, prng, roughness = 1) 
 
 /**
  * Sketches a hand-drawn outline for a wheel wedge with natural pen lines and arcs.
- * 
- * @param {number} cx 
- * @param {number} cy 
- * @param {number} rInner 
- * @param {number} rOuter 
- * @param {number} startAngle 
- * @param {number} endAngle 
- * @param {() => number} prng 
- * @param {number} roughness 
- * @param {number} gapAngle 
+ *
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rInner
+ * @param {number} rOuter
+ * @param {number} startAngle
+ * @param {number} endAngle
+ * @param {() => number} prng
+ * @param {number} roughness
+ * @param {number} gapAngle
  * @returns {string} SVG path string
  */
 export function sketchWedge(cx, cy, rInner, rOuter, startAngle, endAngle, prng, roughness = 1, gapAngle = 0.025) {

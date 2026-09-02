@@ -113,7 +113,7 @@ const moveCheck = await evalInPage(`(() => {
   // Select tool and select object
   ws.setTool('select');
   ws.selectedIds = [objId];
-  
+
   // Move object by +40, +60
   app.dispatchCommand({
     type: 'move_objects',
@@ -139,7 +139,7 @@ console.log('\n--- Step 3: Text Editing via Enter/F2 and Dynamic Scaling ---');
 const textEditCheck = await evalInPage(`(() => {
   const app = window.saburaApp;
   const ws = app.workspace;
-  
+
   // Create a shape
   const shape = {
     id: 'test_shape_text',
@@ -185,7 +185,7 @@ if (!textEditCheck.editorOpened || textEditCheck.scaledFontSize <= 20) {
 console.log('\n--- Step 4: Connector Routes & Arrow Ends Combinations ---');
 const connCheck = await evalInPage(`(() => {
   const app = window.saburaApp;
-  
+
   // Create connector
   const conn = {
     id: 'test_conn',
@@ -253,7 +253,7 @@ console.log('\n--- Step 6: Board Theme Switch with Existing Objects ---');
 const themeCheck = await evalInPage(`(() => {
   const app = window.saburaApp;
   const oldTheme = app.doc.theme.id;
-  
+
   // Switch to Blueprint
   app.setBoardTheme('blueprint');
   const bpStroke = app.doc.objects['test_conn'].stroke;
@@ -280,7 +280,7 @@ console.log('\n--- Step 7: Grouping, Moving, and Ungrouping ---');
 const groupCheck = await evalInPage(`(() => {
   const app = window.saburaApp;
   const ids = ['test_shape_text', 'test_conn'];
-  
+
   // Group
   app.dispatchCommand({ type: 'group_objects', ids });
   const gId1 = app.doc.objects['test_shape_text'].groupId;
@@ -353,7 +353,7 @@ if (!dDragCheck.duplicated || !dDragCheck.origStillThere) {
 console.log('\n--- Step 9: Fullscreen and Presentation Mode ---');
 const presentationCheck = await evalInPage(`(() => {
   const app = window.saburaApp;
-  
+
   // Enter presentation
   app.enterPresentation();
   const inPres = app.inPresentation && document.body.classList.contains('in-presentation');

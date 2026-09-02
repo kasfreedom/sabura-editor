@@ -9,7 +9,7 @@ export const DOCUMENT_SCRIPT_REGEX = /<script\s+(?:type=["']application\/json["'
 
 /**
  * Extracts and validates the embedded Sabura document from an HTML string.
- * @param {string} htmlContent 
+ * @param {string} htmlContent
  * @returns {{ valid: boolean, document: Object | null, errors: string[] }}
  */
 export function extractDocumentFromHtml(htmlContent) {
@@ -22,9 +22,14 @@ export function extractDocumentFromHtml(htmlContent) {
     return { valid: false, document: null, errors: ['No <script id="sabura-document"> tag found in HTML'] };
   }
 
+  const rawContent = match[1].trim();
+  if (!rawContent) {
+    return { valid: false, document: null, errors: ['Embedded <script id="sabura-document"> seam is empty'] };
+  }
+
   let parsed = null;
   try {
-    parsed = JSON.parse(match[1]);
+    parsed = JSON.parse(rawContent);
   } catch (err) {
     return { valid: false, document: null, errors: [`JSON parse error in document seam: ${err.message}`] };
   }
@@ -39,7 +44,7 @@ export function extractDocumentFromHtml(htmlContent) {
 
 /**
  * Packages a document into an HTML shell by replacing ONLY the canonical document seam.
- * 
+ *
  * @param {string} htmlShell - The full HTML template or current document HTML
  * @param {Object} doc - The validated Sabura document
  * @returns {{ success: boolean, html: string, error?: string }}
@@ -74,9 +79,9 @@ export function packageHtmlWithDocument(htmlShell, doc) {
 
 /**
  * Initiates a browser download for a self-contained HTML file.
- * 
- * @param {string} filename 
- * @param {string} htmlContent 
+ *
+ * @param {string} filename
+ * @param {string} htmlContent
  */
 export function triggerFileDownload(filename, htmlContent) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {

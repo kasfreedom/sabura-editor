@@ -35,7 +35,7 @@ export const SUPPORTED_COMMAND_TYPES = new Set([
 /**
  * Validates an individual command structure.
  * Rejects unknown command types with a descriptive error.
- * @param {any} cmd 
+ * @param {any} cmd
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export function validateCommand(cmd) {
@@ -126,7 +126,7 @@ function contrastRatio(hex1, hex2) {
 /**
  * Applies an individual command to a Sabura document immutably, returning the updated document
  * and the exact inverse command to undo the operation.
- * 
+ *
  * @param {Object} doc - Current Sabura document
  * @param {Object} cmd - Command to apply
  * @returns {{ doc: Object, inverseCmd: Object }}
@@ -986,8 +986,8 @@ export function applyCommand(doc, cmd) {
 /**
  * Applies a batch of commands sequentially and atomically.
  * Validates all commands first and rolls back completely on any error.
- * @param {Object} doc 
- * @param {Array<Object>} commands 
+ * @param {Object} doc
+ * @param {Array<Object>} commands
  * @returns {{ doc: Object, inverseBatch: Object }}
  */
 export function applyCommandBatch(doc, commands) {

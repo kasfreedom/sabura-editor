@@ -652,7 +652,7 @@ async function runSafariTests() {
 
     const curvedToolWedge = document.querySelector('[data-sub-id="conn_curved"]') ||
                             document.querySelector('[data-item-id="tool_connector"]');
-    
+
     // Select curved connector tool
     app.workspace.setConnectorRouting('curved');
     app.workspace.setTool('connector');
@@ -784,7 +784,7 @@ async function runSafariTests() {
 
     // Flow 7: Switch every theme on existing board
     const selectTheme = document.querySelector('#select-board-theme');
-    
+
     selectTheme.value = 'blueprint';
     selectTheme.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(100);
