@@ -4,7 +4,7 @@
  */
 
 import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
-import { createDefaultObject } from '../core/document.js';
+import { createDefaultObject, cloneDocument } from '../core/document.js';
 import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector } from '../core/geometry.js';
 
 export class Workspace {
@@ -16,6 +16,7 @@ export class Workspace {
     this.camera = { x: 0, y: 0, zoom: 1.0 };
     this.activeTool = 'hand'; // Default tool: Hand/Pan!
     this.previousTool = 'select';
+    this.connectorRouting = 'straight';
     this.selectedIds = [];
     this.snapGrid = true;
     this.showGrid = true;
@@ -25,7 +26,7 @@ export class Workspace {
     this.isPanning = false;
     this.isDraggingSelection = false;
     this.isDHeld = false;
-    this.hasDuplicatedForDDrag = false;
+    this.isDDragging = false;
     this.isResizing = false;
     this.isCreating = false;
     this.isReconnecting = false;
@@ -51,6 +52,10 @@ export class Workspace {
     this.activeTool = tool;
     this.updateCursor();
     this.render();
+  }
+
+  setConnectorRouting(routing) {
+    this.connectorRouting = routing || 'straight';
   }
 
   setSnapGrid(enabled) {
@@ -351,6 +356,7 @@ export class Workspace {
         }
 
         this.isDraggingSelection = true;
+        this.isDDragging = Boolean(this.isDHeld);
         this.dragStart = { ...worldPt };
         this.dragInitialPositions = {};
         this.dragAccumulatedDelta = { dx: 0, dy: 0 };
@@ -391,7 +397,8 @@ export class Workspace {
         x: worldPt.x,
         y: worldPt.y,
         width: 1,
-        height: 1
+        height: 1,
+        routing: type === 'connector' ? (this.connectorRouting || 'straight') : undefined
       }, doc.theme);
 
       if (type === 'path') {
@@ -450,9 +457,9 @@ export class Workspace {
       const doc = this.callbacks.getDocument();
 
       // Holding plain D while dragging: drag out a copy!
-      if (this.isDHeld && !this.hasDuplicatedForDDrag) {
-        this.hasDuplicatedForDDrag = true;
-        // 1. Restore originals to pristine initial positions
+      if (this.isDHeld && !this.isDDragging) {
+        this.isDDragging = true;
+        // Restore originals to pristine initial positions
         for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
           const orig = doc.objects[id];
           if (orig) {
@@ -462,27 +469,6 @@ export class Workspace {
               if (pos.fromPoint && orig.from) orig.from.point = { ...pos.fromPoint };
               if (pos.toPoint && orig.to) orig.to.point = { ...pos.toPoint };
             }
-          }
-        }
-        // 2. Dispatch duplicate command
-        this.callbacks.onCommand({
-          type: 'duplicate_objects',
-          ids: [...this.selectedIds]
-        });
-        // 3. The duplicates are now selected
-        const count = this.selectedIds.length;
-        const newIds = doc.order.slice(-count);
-        this.selectedIds = newIds;
-        this.dragInitialPositions = {};
-        for (const id of newIds) {
-          const o = doc.objects[id];
-          if (o) {
-            this.dragInitialPositions[id] = {
-              x: o.x,
-              y: o.y,
-              fromPoint: o.from?.point ? { ...o.from.point } : null,
-              toPoint: o.to?.point ? { ...o.to.point } : null
-            };
           }
         }
       }
@@ -517,6 +503,12 @@ export class Workspace {
       }
 
       this.dragAccumulatedDelta = { dx, dy };
+
+      if (this.isDDragging) {
+        // In D-drag mode, originals are never touched! We simply re-render with preview clones.
+        this.render();
+        return;
+      }
 
       for (const id of this.selectedIds) {
         const obj = doc.objects[id];
@@ -583,7 +575,9 @@ export class Workspace {
         this.render();
       } else if (this.draftObject.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
-        this.draftObject.to = hit ? { id: hit.id } : { point: { ...worldPt } };
+        this.draftObject.to = hit && hit.id !== this.draftObject.from?.id ? { id: hit.id } : { point: { ...worldPt } };
+        this.draftObject.width = worldPt.x - this.draftObject.x;
+        this.draftObject.height = worldPt.y - this.draftObject.y;
         this.render();
       } else {
         // Shapes: Rect, Ellipse, Diamond, Triangle
@@ -625,9 +619,26 @@ export class Workspace {
 
     if (this.isDraggingSelection) {
       this.isDraggingSelection = false;
-      this.hasDuplicatedForDDrag = false;
       this.snapGuides = [];
       const doc = this.callbacks.getDocument();
+
+      if (this.isDDragging) {
+        this.isDDragging = false;
+        if (this.dragAccumulatedDelta && (this.dragAccumulatedDelta.dx !== 0 || this.dragAccumulatedDelta.dy !== 0)) {
+          const origIds = [...this.selectedIds];
+          this.callbacks.onCommand({
+            type: 'duplicate_objects',
+            ids: origIds,
+            offset: { x: this.dragAccumulatedDelta.dx, y: this.dragAccumulatedDelta.dy }
+          });
+          const updatedDoc = this.callbacks.getDocument();
+          this.selectedIds = updatedDoc.order.slice(-origIds.length);
+        }
+        this.dragInitialPositions = null;
+        this.dragAccumulatedDelta = null;
+        this.render();
+        return;
+      }
 
       // Restore initial positions first so dispatchCommand applies clean delta
       if (this.dragInitialPositions) {
@@ -810,8 +821,33 @@ export class Workspace {
 
     let sceneSvg = renderSvgScene(doc, runtime);
 
-    // If a non-connector creation draft is in progress, insert it before world-layer closing
-    if (this.draftObject && this.draftObject.type !== 'connector') {
+    // If D-drag is in progress, insert duplicate preview clones before world-layer closing
+    if (this.isDDragging && this.dragAccumulatedDelta && this.selectedIds.length > 0) {
+      const dx = this.dragAccumulatedDelta.dx;
+      const dy = this.dragAccumulatedDelta.dy;
+      const previews = this.selectedIds.map(id => {
+        const orig = doc.objects[id];
+        if (!orig) return null;
+        const p = cloneDocument(orig);
+        p.id = 'preview-' + p.id;
+        p.x += dx;
+        p.y += dy;
+        if (p.type === 'connector') {
+          if (p.from?.point) { p.from.point.x += dx; p.from.point.y += dy; }
+          if (p.to?.point) { p.to.point.x += dx; p.to.point.y += dy; }
+        }
+        return p;
+      }).filter(Boolean);
+
+      const previewMarkup = previews.map(p => renderObject(doc, p, false)).join('\n');
+      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
+      if (worldCloseIndex !== -1) {
+        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + previewMarkup + '\n' + sceneSvg.slice(worldCloseIndex);
+      }
+    }
+
+    // If a creation draft is in progress, insert it before world-layer closing
+    if (this.draftObject) {
       const draftSvg = renderObject(doc, this.draftObject, false);
       const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
       if (worldCloseIndex !== -1) {

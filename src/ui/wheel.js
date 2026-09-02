@@ -218,15 +218,23 @@ export class ToolWheel {
 
     // Context: Connector
     if (isConnector) {
+      const conn = this.selectedObject;
+      const curRouting = conn?.routing || 'straight';
+      const curStart = Boolean(conn?.startArrow);
+      const curEnd = Boolean(conn?.endArrow);
+      const curArrows = (!curStart && !curEnd) ? 'none' : (curStart && !curEnd ? 'start' : (!curStart && curEnd ? 'end' : 'both'));
+      const curRoughness = conn?.roughness === 0 ? 'clean' : 'sketch';
+      const curStrokeStyle = conn?.strokeStyle || 'solid';
+
       // 1. Route
       items.push({
         id: 'menu_route',
         label: 'Route',
         icon: '↝',
         subItems: [
-          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight' },
-          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow' },
-          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved' }
+          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight', isActive: curRouting === 'straight' },
+          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow', isActive: curRouting === 'elbow' },
+          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved', isActive: curRouting === 'curved' }
         ]
       });
 
@@ -236,10 +244,10 @@ export class ToolWheel {
         label: 'Arrows',
         icon: '↔',
         subItems: [
-          { id: 'conn_arrows_none', label: 'None', icon: '—', startArrow: false, endArrow: false },
-          { id: 'conn_arrows_start', label: 'Start', icon: '←', startArrow: true, endArrow: false },
-          { id: 'conn_arrows_end', label: 'End', icon: '→', startArrow: false, endArrow: true },
-          { id: 'conn_arrows_both', label: 'Both', icon: '↔', startArrow: true, endArrow: true }
+          { id: 'conn_arrows_none', label: 'None', icon: '—', startArrow: false, endArrow: false, isActive: curArrows === 'none' },
+          { id: 'conn_arrows_start', label: 'Start', icon: '←', startArrow: true, endArrow: false, isActive: curArrows === 'start' },
+          { id: 'conn_arrows_end', label: 'End', icon: '→', startArrow: false, endArrow: true, isActive: curArrows === 'end' },
+          { id: 'conn_arrows_both', label: 'Both', icon: '↔', startArrow: true, endArrow: true, isActive: curArrows === 'both' }
         ]
       });
 
@@ -249,11 +257,11 @@ export class ToolWheel {
         label: 'Style',
         icon: '✎',
         subItems: [
-          { id: 'style_sketch', label: 'Sketch', icon: '✎' },
-          { id: 'style_clean', label: 'Clean', icon: '◻' },
-          { id: 'stroke_solid', label: 'Solid', icon: '—' },
-          { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
-          { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+          { id: 'style_sketch', label: 'Sketch', icon: '✎', isActive: curRoughness === 'sketch' },
+          { id: 'style_clean', label: 'Clean', icon: '◻', isActive: curRoughness === 'clean' },
+          { id: 'stroke_solid', label: 'Solid', icon: '—', isActive: curStrokeStyle === 'solid' },
+          { id: 'stroke_dashed', label: 'Dashed', icon: '╌', isActive: curStrokeStyle === 'dashed' },
+          { id: 'stroke_dotted', label: 'Dotted', icon: '···', isActive: curStrokeStyle === 'dotted' }
         ]
       });
 
@@ -274,7 +282,7 @@ export class ToolWheel {
       items.push({ id: 'action_reconnect', label: 'Reconnect', icon: '↺' });
 
       // 6. Ink & Opacity
-      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: conn?.stroke === col }));
       items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
 
       items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
@@ -283,13 +291,22 @@ export class ToolWheel {
     }
 
     // Context: Single Shape
+    const shape = this.selectedObject;
+    const curShapeType = shape?.type || 'rectangle';
+    const curRoughness = shape?.roughness === 0 ? 'clean' : 'sketch';
+    const curStrokeStyle = shape?.strokeStyle || 'solid';
+    const curFontSize = shape?.textStyle?.size || 'm';
+    const curFontFamily = shape?.textStyle?.fontFamily || 'hand';
+    const curBold = Boolean(shape?.textStyle?.bold);
+    const curOpacity = shape?.opacity !== undefined ? shape.opacity : 1.0;
+
     const fillSub = [
-      { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
-      ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
+      { id: 'fill_none', label: 'None', color: 'none', icon: '⊘', isActive: !shape?.fill || shape?.fill === 'none' },
+      ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col, isActive: shape?.fill === col }))
     ];
     items.push({ id: 'menu_fill', label: 'Fill', icon: '▨', subItems: fillSub });
 
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: shape?.stroke === col }));
     items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
 
     items.push({
@@ -297,10 +314,10 @@ export class ToolWheel {
       label: 'Opacity',
       icon: '◐',
       subItems: [
-        { id: 'opacity_100', label: '100%', value: 1.0 },
-        { id: 'opacity_75', label: '75%', value: 0.75 },
-        { id: 'opacity_50', label: '50%', value: 0.5 },
-        { id: 'opacity_25', label: '25%', value: 0.25 }
+        { id: 'opacity_100', label: '100%', value: 1.0, isActive: curOpacity >= 0.9 },
+        { id: 'opacity_75', label: '75%', value: 0.75, isActive: curOpacity >= 0.65 && curOpacity < 0.9 },
+        { id: 'opacity_50', label: '50%', value: 0.5, isActive: curOpacity >= 0.4 && curOpacity < 0.65 },
+        { id: 'opacity_25', label: '25%', value: 0.25, isActive: curOpacity < 0.4 }
       ]
     });
 
@@ -309,15 +326,15 @@ export class ToolWheel {
       label: 'Type',
       icon: 'A',
       subItems: [
-        { id: 'type_s', label: 'S', size: 's' },
-        { id: 'type_m', label: 'M', size: 'm' },
-        { id: 'type_l', label: 'L', size: 'l' },
-        { id: 'type_xl', label: 'XL', size: 'xl' },
-        { id: 'font_hand', label: 'Hand', fontFamily: 'hand' },
-        { id: 'font_sans', label: 'Sans', fontFamily: 'sans' },
-        { id: 'font_serif', label: 'Serif', fontFamily: 'serif' },
-        { id: 'font_mono', label: 'Mono', fontFamily: 'mono' },
-        { id: 'type_bold', label: 'Bold', toggleBold: true },
+        { id: 'type_s', label: 'S', size: 's', isActive: curFontSize === 's' },
+        { id: 'type_m', label: 'M', size: 'm', isActive: curFontSize === 'm' },
+        { id: 'type_l', label: 'L', size: 'l', isActive: curFontSize === 'l' },
+        { id: 'type_xl', label: 'XL', size: 'xl', isActive: curFontSize === 'xl' },
+        { id: 'font_hand', label: 'Hand', fontFamily: 'hand', isActive: curFontFamily === 'hand' },
+        { id: 'font_sans', label: 'Sans', fontFamily: 'sans', isActive: curFontFamily === 'sans' },
+        { id: 'font_serif', label: 'Serif', fontFamily: 'serif', isActive: curFontFamily === 'serif' },
+        { id: 'font_mono', label: 'Mono', fontFamily: 'mono', isActive: curFontFamily === 'mono' },
+        { id: 'type_bold', label: curBold ? 'Bold ✓' : 'Bold', toggleBold: true, isActive: curBold },
         { id: 'type_align', label: 'Align', cycleAlign: true }
       ]
     });
@@ -327,10 +344,10 @@ export class ToolWheel {
       label: 'Shape',
       icon: '◇',
       subItems: [
-        { id: 'to_rectangle', label: 'Rectangle', icon: '▭' },
-        { id: 'to_ellipse', label: 'Ellipse', icon: '◯' },
-        { id: 'to_diamond', label: 'Diamond', icon: '◇' },
-        { id: 'to_triangle', label: 'Triangle', icon: '△' },
+        { id: 'to_rectangle', label: 'Rectangle', icon: '▭', isActive: curShapeType === 'rectangle' },
+        { id: 'to_ellipse', label: 'Ellipse', icon: '◯', isActive: curShapeType === 'ellipse' },
+        { id: 'to_diamond', label: 'Diamond', icon: '◇', isActive: curShapeType === 'diamond' },
+        { id: 'to_triangle', label: 'Triangle', icon: '△', isActive: curShapeType === 'triangle' },
         { id: 'to_equal_sides', label: 'Equal sides', icon: '⊞' }
       ]
     });
@@ -340,11 +357,11 @@ export class ToolWheel {
       label: 'Style',
       icon: '✎',
       subItems: [
-        { id: 'style_sketch', label: 'Sketch', icon: '✎' },
-        { id: 'style_clean', label: 'Clean', icon: '◻' },
-        { id: 'stroke_solid', label: 'Solid', icon: '—' },
-        { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
-        { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+        { id: 'style_sketch', label: 'Sketch', icon: '✎', isActive: curRoughness === 'sketch' },
+        { id: 'style_clean', label: 'Clean', icon: '◻', isActive: curRoughness === 'clean' },
+        { id: 'stroke_solid', label: 'Solid', icon: '—', isActive: curStrokeStyle === 'solid' },
+        { id: 'stroke_dashed', label: 'Dashed', icon: '╌', isActive: curStrokeStyle === 'dashed' },
+        { id: 'stroke_dotted', label: 'Dotted', icon: '···', isActive: curStrokeStyle === 'dotted' }
       ]
     });
 
@@ -378,7 +395,6 @@ export class ToolWheel {
       this.render();
       return;
     }
-
     this.onAction(item.id, item);
     this.close();
   }
@@ -408,7 +424,7 @@ export class ToolWheel {
     }
 
     // Center hub: underlying clickable disc
-    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" />`);
+    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" tabindex="0" role="button" aria-label="Close Wheel" />`);
     // Sketchy hand-drawn circle for center hub
     const hubSketch = sketchEllipse(center, center, rInner - 3, rInner - 3, prng, 1);
     svgParts.push(`<path d="${hubSketch}" class="wheel-hub-sketch" pointer-events="none" />`);
@@ -435,8 +451,8 @@ export class ToolWheel {
       const isSubActive = this.activeSubMenu === item.id;
       const wedgeClass = `wheel-wedge ${isSubActive ? 'active' : ''} ${item.id.includes('delete') ? 'danger' : ''}`;
 
-      // Solid wedge fill layer for hit testing and hover
-      svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" />`);
+      // Solid wedge fill layer with keyboard accessibility
+      svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" tabindex="0" role="button" aria-label="${item.label}" />`);
 
       // Excalidraw hand-drawn sketchy wedge outline
       const sketchD = sketchWedge(center, center, rInner, rOuter, startAngle, endAngle, prng, 1);
@@ -476,10 +492,11 @@ export class ToolWheel {
 
         const subPath = createWedgePath(center, center, rOuter + 4, rSubOuter, sStart, sEnd);
         const colorStyle = sub.color ? `fill: ${sub.color}; stroke: #dee2e6;` : '';
+        const isSubActive = Boolean(sub.isActive);
 
-        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge" data-sub-id="${sub.id}" style="${colorStyle}" />`);
+        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge ${isSubActive ? 'active-choice' : ''}" data-sub-id="${sub.id}" tabindex="0" role="button" aria-label="${sub.label}" style="${colorStyle}" />`);
         const subSketchD = sketchWedge(center, center, rOuter + 4, rSubOuter, sStart, sEnd, prng, 1);
-        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch" pointer-events="none" />`);
+        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch ${isSubActive ? 'active' : ''}" pointer-events="none" />`);
 
         const sTextR = (rOuter + 4 + rSubOuter) / 2;
         const sX = center + sTextR * Math.cos(sMid);
@@ -487,7 +504,7 @@ export class ToolWheel {
 
         svgParts.push(`<g class="wheel-label-group" pointer-events="none">
           <text x="${sX}" y="${sY - 2}" text-anchor="middle" class="wheel-icon">${sub.icon || ''}</text>
-          <text x="${sX}" y="${sY + 10}" text-anchor="middle" class="wheel-sub-text">${sub.label}</text>
+          <text x="${sX}" y="${sY + 10}" text-anchor="middle" class="wheel-sub-text">${sub.label}${isSubActive ? ' ✓' : ''}</text>
         </g>`);
       }
     }
@@ -495,7 +512,7 @@ export class ToolWheel {
     svgParts.push('</svg>');
     this.wheelEl.innerHTML = svgParts.join('\n');
 
-    // Attach click listeners to wedges
+    // Attach click and keyboard listeners to wedges
     const allWedges = this.wheelEl.querySelectorAll('.wheel-wedge');
     allWedges.forEach(w => {
       const id = w.getAttribute('data-item-id');
@@ -510,9 +527,17 @@ export class ToolWheel {
         }
       });
 
-      w.addEventListener('click', (e) => {
+      const activate = (e) => {
         e.stopPropagation();
         this.handleItemClick(item);
+      };
+
+      w.addEventListener('click', activate);
+      w.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate(e);
+        }
       });
     });
 
@@ -522,18 +547,33 @@ export class ToolWheel {
       const subItem = subMenuToRender?.find(s => s.id === subId);
       if (!subItem) return;
 
-      sw.addEventListener('click', (e) => {
+      const activateSub = (e) => {
         e.stopPropagation();
         this.onAction(subItem.id, subItem);
         this.close();
+      };
+
+      sw.addEventListener('click', activateSub);
+      sw.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateSub(e);
+        }
       });
     });
 
     const hub = this.wheelEl.querySelector('.wheel-hub');
     if (hub) {
-      hub.addEventListener('click', (e) => {
+      const closeHub = (e) => {
         e.stopPropagation();
         this.close();
+      };
+      hub.addEventListener('click', closeHub);
+      hub.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          closeHub(e);
+        }
       });
     }
   }

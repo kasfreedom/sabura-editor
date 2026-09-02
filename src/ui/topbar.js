@@ -75,11 +75,11 @@ export class TopBar {
 
         <!-- Grid visibility and snapping (explicit controls) -->
         <div class="grid-controls-group">
-          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility">
-            Grid: ${showGrid ? 'Show' : 'Hide'}
+          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility (Currently ${showGrid ? 'On' : 'Off'})">
+            Grid ${showGrid ? 'On' : 'Off'}
           </button>
-          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping">
-            Snap: ${snapGrid ? 'On' : 'Off'}
+          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping (Currently ${snapGrid ? 'On' : 'Off'})">
+            Snap ${snapGrid ? 'On' : 'Off'}
           </button>
         </div>
       </div>

@@ -404,6 +404,15 @@ html, body {
   filter: brightness(0.94);
 }
 
+.wheel-sub-wedge.active-choice {
+  fill: #d0ebff !important;
+}
+
+.wheel-wedge:focus-visible, .wheel-sub-wedge:focus-visible, .wheel-hub:focus-visible {
+  outline: 2.5px solid var(--ui-accent, #1971c2);
+  outline-offset: -2px;
+}
+
 .wheel-icon {
   font-size: 16px;
   fill: var(--ui-wheel-text, #1e1e1e);
@@ -480,7 +489,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_4eey8o2nnpt",
+  "id": "board_qh45038av98",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -496,7 +505,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 307174058,
+      "seed": 1566871144,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -527,7 +536,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 627116106,
+      "seed": 1994629107,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -554,7 +563,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1147379807,
+      "seed": 1302642275,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -581,7 +590,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 44684333,
+      "seed": 1413230640,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -1668,20 +1677,109 @@ function canonicalJson(value) {
 
 
 
+const SUPPORTED_COMMAND_TYPES = new Set([
+  'create_object',
+  'delete_objects',
+  'move_objects',
+  'resize_object',
+  'set_style',
+  'set_typography',
+  'set_text',
+  'change_shape',
+  'group_objects',
+  'ungroup_objects',
+  'lock_objects',
+  'reorder_objects',
+  'align_objects',
+  'distribute_objects',
+  'reconnect_connector',
+  'configure_connector',
+  'configure_connector_endpoints',
+  'duplicate_objects',
+  'set_board_theme',
+  'set_title',
+  'batch',
+  'noop'
+]);
+
 /**
  * Validates an individual command structure.
+ * Rejects unknown command types with a descriptive error.
  * @param {any} cmd 
  * @returns {{ valid: boolean, errors: string[] }}
  */
 function validateCommand(cmd) {
   const errors = [];
-  if (!cmd || typeof cmd !== 'object') {
+  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) {
     return { valid: false, errors: ['Command must be an object'] };
   }
   if (typeof cmd.type !== 'string' || !cmd.type.trim()) {
     errors.push('Command must have a non-empty type string');
+    return { valid: false, errors };
   }
+  if (!SUPPORTED_COMMAND_TYPES.has(cmd.type)) {
+    errors.push(`Unknown command type: "${cmd.type}". Supported command types are: ${Array.from(SUPPORTED_COMMAND_TYPES).join(', ')}`);
+    return { valid: false, errors };
+  }
+
+  // Type-specific field validations
+  if (cmd.type === 'create_object') {
+    if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object)) {
+      errors.push('create_object requires a valid object payload');
+    }
+  } else if (cmd.type === 'delete_objects') {
+    if (!Array.isArray(cmd.ids)) {
+      errors.push('delete_objects requires an array of ids');
+    }
+  } else if (cmd.type === 'move_objects') {
+    if (!Array.isArray(cmd.ids)) errors.push('move_objects requires an array of ids');
+    if (typeof cmd.dx !== 'number' || typeof cmd.dy !== 'number') {
+      errors.push('move_objects requires numeric dx and dy deltas');
+    }
+  } else if (cmd.type === 'resize_object') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('resize_object requires a string id');
+    if (!cmd.bounds || typeof cmd.bounds !== 'object') errors.push('resize_object requires a bounds object');
+  } else if (cmd.type === 'set_text') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_text requires a string id');
+    if (typeof cmd.text !== 'string') errors.push('set_text requires string text');
+  } else if (cmd.type === 'configure_connector') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector requires a string id');
+  } else if (cmd.type === 'set_board_theme') {
+    if (!cmd.theme && !cmd.themeId) errors.push('set_board_theme requires theme or themeId');
+  } else if (cmd.type === 'batch') {
+    if (!Array.isArray(cmd.commands)) {
+      errors.push('batch requires an array of commands');
+    } else {
+      for (let i = 0; i < cmd.commands.length; i++) {
+        const sub = validateCommand(cmd.commands[i]);
+        if (!sub.valid) {
+          errors.push(`batch command [${i}]: ${sub.errors.join(', ')}`);
+        }
+      }
+    }
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+function hexToLuminance(hex) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return 0.5;
+  let c = hex.slice(1);
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return 0.5;
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(hex1, hex2) {
+  const l1 = hexToLuminance(hex1);
+  const l2 = hexToLuminance(hex2);
+  const bright = Math.max(l1, l2);
+  const dark = Math.min(l1, l2);
+  return (bright + 0.05) / (dark + 0.05);
 }
 
 /**
@@ -1785,6 +1883,16 @@ function applyCommand(doc, cmd) {
         dup.id = newId;
         dup.x += offset.x;
         dup.y += offset.y;
+        if (dup.type === 'connector') {
+          if (dup.from?.point) {
+            dup.from.point.x += offset.x;
+            dup.from.point.y += offset.y;
+          }
+          if (dup.to?.point) {
+            dup.to.point.x += offset.x;
+            dup.to.point.y += offset.y;
+          }
+        }
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
         newDoc.objects[newId] = dup;
@@ -2317,7 +2425,7 @@ function applyCommand(doc, cmd) {
           }
         }
       } else {
-        // Update existing objects and connectors whose styling matches previous theme defaults
+        // Restyle complete existing board coherently across shapes, text, and connectors
         const oldStroke = prevTheme.defaultStroke;
         const newStroke = newDoc.theme.defaultStroke;
         const oldBg = prevTheme.background;
@@ -2325,18 +2433,46 @@ function applyCommand(doc, cmd) {
 
         for (const [id, obj] of Object.entries(newDoc.objects)) {
           const styleBackup = {};
-          if (obj.stroke === oldStroke) {
+
+          // 1. Stroke (shapes & connectors)
+          const strokeLum = hexToLuminance(obj.stroke);
+          const bgLum = hexToLuminance(newBg);
+          const isDarkOnDark = bgLum < 0.25 && strokeLum < 0.15;
+          const isLightOnLight = bgLum > 0.75 && strokeLum > 0.85;
+          const matchesOldStroke = obj.stroke === oldStroke || obj.stroke === prevTheme.palette?.[0] || obj.stroke === '#1e1e1e';
+          if (matchesOldStroke || isDarkOnDark || isLightOnLight) {
             styleBackup.stroke = obj.stroke;
             obj.stroke = newStroke;
           }
+
+          // 2. Fill (shapes)
           if (obj.fill === oldBg) {
             styleBackup.fill = obj.fill;
             obj.fill = newBg;
+          } else if (prevTheme.defaultFill && obj.fill === prevTheme.defaultFill) {
+            styleBackup.fill = obj.fill;
+            obj.fill = newDoc.theme.defaultFill || 'none';
+          } else if (obj.fill && obj.fill !== 'none') {
+            const fillContrast = contrastRatio(obj.fill, newBg);
+            if (fillContrast < 1.15 && (obj.fill === '#ffffff' || obj.fill === '#0c192e' || obj.fill === '#18181b' || obj.fill === '#fcfaf6')) {
+              styleBackup.fill = obj.fill;
+              obj.fill = newBg;
+            }
           }
-          if (obj.textStyle?.color === oldStroke) {
-            styleBackup.textColor = obj.textStyle.color;
+
+          // 3. Text (standalone or inside shape)
+          const effectiveBg = (obj.fill && obj.fill !== 'none') ? obj.fill : newBg;
+          const curTextColor = obj.textStyle?.color || obj.stroke;
+          const textLum = hexToLuminance(curTextColor);
+          const effBgLum = hexToLuminance(effectiveBg);
+          const textDarkOnDark = effBgLum < 0.25 && textLum < 0.15;
+          const textLightOnLight = effBgLum > 0.75 && textLum > 0.85;
+          if (obj.textStyle?.color === oldStroke || textDarkOnDark || textLightOnLight) {
+            styleBackup.textColor = obj.textStyle?.color;
+            if (!obj.textStyle) obj.textStyle = {};
             obj.textStyle.color = newStroke;
           }
+
           if (Object.keys(styleBackup).length > 0) {
             prevObjectStyles[id] = styleBackup;
           }
@@ -2371,19 +2507,56 @@ function applyCommand(doc, cmd) {
     }
 
     case 'noop':
-    default:
       return { doc: newDoc, inverseCmd: { type: 'noop' } };
+
+    default:
+      throw new Error(`Unsupported command type: "${cmd.type}". Supported command types are: ${Array.from(SUPPORTED_COMMAND_TYPES).join(', ')}`);
   }
 }
 
 /**
- * Applies a batch of commands sequentially.
+ * Applies a batch of commands sequentially and atomically.
+ * Validates all commands first and rolls back completely on any error.
  * @param {Object} doc 
  * @param {Array<Object>} commands 
  * @returns {{ doc: Object, inverseBatch: Object }}
  */
 function applyCommandBatch(doc, commands) {
-  return applyCommand(doc, { type: 'batch', commands });
+  if (!Array.isArray(commands)) {
+    throw new Error('Commands must be an array');
+  }
+
+  // Validate all commands upfront
+  for (let i = 0; i < commands.length; i++) {
+    const val = validateCommand(commands[i]);
+    if (!val.valid) {
+      throw new Error(`Validation failed for command [${i}] (${commands[i]?.type || 'unknown'}): ${val.errors.join(', ')}`);
+    }
+  }
+
+  const initialClone = cloneDocument(doc);
+  const inverseList = [];
+  let currentDoc = initialClone;
+
+  for (let i = 0; i < commands.length; i++) {
+    try {
+      const result = applyCommand(currentDoc, commands[i]);
+      currentDoc = result.doc;
+      if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
+        inverseList.push(result.inverseCmd);
+      }
+    } catch (err) {
+      // Abort without mutation
+      throw new Error(`Batch execution failed at command [${i}] (${commands[i]?.type || 'unknown'}): ${err.message}`);
+    }
+  }
+
+  inverseList.reverse();
+  const inverseCmd = {
+    type: 'batch',
+    commands: inverseList
+  };
+  return { doc: currentDoc, inverseCmd };
 }
 
 // --- Module: src/core/sketch.js ---
@@ -3309,7 +3482,8 @@ function renderObject(doc, obj, isSelected = false) {
       const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
       const fontWeight = textStyle.bold ? 'bold' : 'normal';
       const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
-      const textColor = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+      const shapeBg = (obj.fill && obj.fill !== 'none') ? obj.fill : (doc.theme?.background || '#ffffff');
+      const textColor = resolveContrastColor(rawTextColor, shapeBg, '#ffffff', '#1e1e1e');
 
       const lines = wrapText(obj.text, obj.width - 16, fontSize);
       const lineHeight = fontSize * 1.25;
@@ -3358,14 +3532,37 @@ function renderSelectionOverlay(doc, selectedIds) {
   const selectedObjects = selectedIds.map(id => doc.objects[id]).filter(Boolean);
   if (selectedObjects.length === 0) return '';
 
+  const themeId = doc?.theme?.id || 'paper';
+  let selStroke = '#1971c2';
+  let selFill = 'rgba(25, 113, 194, 0.04)';
+  let handleFill = '#ffffff';
+  let handleStroke = '#1971c2';
+
+  if (themeId === 'blueprint') {
+    selStroke = '#38bdf8';
+    selFill = 'rgba(56, 189, 248, 0.08)';
+    handleFill = '#0c192e';
+    handleStroke = '#38bdf8';
+  } else if (themeId === 'night') {
+    selStroke = '#7aa2f7';
+    selFill = 'rgba(122, 162, 247, 0.08)';
+    handleFill = '#18181b';
+    handleStroke = '#7aa2f7';
+  } else if (themeId === 'high-contrast') {
+    selStroke = '#0000ff';
+    selFill = 'rgba(0, 0, 255, 0.08)';
+    handleFill = '#ffffff';
+    handleStroke = '#000000';
+  }
+
   const markup = [];
 
   // If single connector selected, render endpoint handles
   if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
     const conn = selectedObjects[0];
     const geom = resolveConnectorGeometry(doc, conn);
-    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
-    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
     return markup.join('\n');
   }
 
@@ -3379,7 +3576,7 @@ function renderSelectionOverlay(doc, selectedIds) {
   const bh = unionBox.height + pad * 2;
 
   // Bounding rect: Concepts precision hairline dash with subtle accent wash
-  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(25, 113, 194, 0.03)" stroke="#1971c2" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
 
   // Only render 8 resize handles if single unlocked object or non-group selection
   const isSingle = selectedObjects.length === 1;
@@ -3398,7 +3595,7 @@ function renderSelectionOverlay(doc, selectedIds) {
     ];
 
     for (const h of handles) {
-      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="#ffffff" stroke="#1971c2" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
     }
   }
 
@@ -3624,15 +3821,23 @@ class ToolWheel {
 
     // Context: Connector
     if (isConnector) {
+      const conn = this.selectedObject;
+      const curRouting = conn?.routing || 'straight';
+      const curStart = Boolean(conn?.startArrow);
+      const curEnd = Boolean(conn?.endArrow);
+      const curArrows = (!curStart && !curEnd) ? 'none' : (curStart && !curEnd ? 'start' : (!curStart && curEnd ? 'end' : 'both'));
+      const curRoughness = conn?.roughness === 0 ? 'clean' : 'sketch';
+      const curStrokeStyle = conn?.strokeStyle || 'solid';
+
       // 1. Route
       items.push({
         id: 'menu_route',
         label: 'Route',
         icon: '↝',
         subItems: [
-          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight' },
-          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow' },
-          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved' }
+          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight', isActive: curRouting === 'straight' },
+          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow', isActive: curRouting === 'elbow' },
+          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved', isActive: curRouting === 'curved' }
         ]
       });
 
@@ -3642,10 +3847,10 @@ class ToolWheel {
         label: 'Arrows',
         icon: '↔',
         subItems: [
-          { id: 'conn_arrows_none', label: 'None', icon: '—', startArrow: false, endArrow: false },
-          { id: 'conn_arrows_start', label: 'Start', icon: '←', startArrow: true, endArrow: false },
-          { id: 'conn_arrows_end', label: 'End', icon: '→', startArrow: false, endArrow: true },
-          { id: 'conn_arrows_both', label: 'Both', icon: '↔', startArrow: true, endArrow: true }
+          { id: 'conn_arrows_none', label: 'None', icon: '—', startArrow: false, endArrow: false, isActive: curArrows === 'none' },
+          { id: 'conn_arrows_start', label: 'Start', icon: '←', startArrow: true, endArrow: false, isActive: curArrows === 'start' },
+          { id: 'conn_arrows_end', label: 'End', icon: '→', startArrow: false, endArrow: true, isActive: curArrows === 'end' },
+          { id: 'conn_arrows_both', label: 'Both', icon: '↔', startArrow: true, endArrow: true, isActive: curArrows === 'both' }
         ]
       });
 
@@ -3655,11 +3860,11 @@ class ToolWheel {
         label: 'Style',
         icon: '✎',
         subItems: [
-          { id: 'style_sketch', label: 'Sketch', icon: '✎' },
-          { id: 'style_clean', label: 'Clean', icon: '◻' },
-          { id: 'stroke_solid', label: 'Solid', icon: '—' },
-          { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
-          { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+          { id: 'style_sketch', label: 'Sketch', icon: '✎', isActive: curRoughness === 'sketch' },
+          { id: 'style_clean', label: 'Clean', icon: '◻', isActive: curRoughness === 'clean' },
+          { id: 'stroke_solid', label: 'Solid', icon: '—', isActive: curStrokeStyle === 'solid' },
+          { id: 'stroke_dashed', label: 'Dashed', icon: '╌', isActive: curStrokeStyle === 'dashed' },
+          { id: 'stroke_dotted', label: 'Dotted', icon: '···', isActive: curStrokeStyle === 'dotted' }
         ]
       });
 
@@ -3680,7 +3885,7 @@ class ToolWheel {
       items.push({ id: 'action_reconnect', label: 'Reconnect', icon: '↺' });
 
       // 6. Ink & Opacity
-      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+      const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: conn?.stroke === col }));
       items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
 
       items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
@@ -3689,13 +3894,22 @@ class ToolWheel {
     }
 
     // Context: Single Shape
+    const shape = this.selectedObject;
+    const curShapeType = shape?.type || 'rectangle';
+    const curRoughness = shape?.roughness === 0 ? 'clean' : 'sketch';
+    const curStrokeStyle = shape?.strokeStyle || 'solid';
+    const curFontSize = shape?.textStyle?.size || 'm';
+    const curFontFamily = shape?.textStyle?.fontFamily || 'hand';
+    const curBold = Boolean(shape?.textStyle?.bold);
+    const curOpacity = shape?.opacity !== undefined ? shape.opacity : 1.0;
+
     const fillSub = [
-      { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
-      ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
+      { id: 'fill_none', label: 'None', color: 'none', icon: '⊘', isActive: !shape?.fill || shape?.fill === 'none' },
+      ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col, isActive: shape?.fill === col }))
     ];
     items.push({ id: 'menu_fill', label: 'Fill', icon: '▨', subItems: fillSub });
 
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: shape?.stroke === col }));
     items.push({ id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub });
 
     items.push({
@@ -3703,10 +3917,10 @@ class ToolWheel {
       label: 'Opacity',
       icon: '◐',
       subItems: [
-        { id: 'opacity_100', label: '100%', value: 1.0 },
-        { id: 'opacity_75', label: '75%', value: 0.75 },
-        { id: 'opacity_50', label: '50%', value: 0.5 },
-        { id: 'opacity_25', label: '25%', value: 0.25 }
+        { id: 'opacity_100', label: '100%', value: 1.0, isActive: curOpacity >= 0.9 },
+        { id: 'opacity_75', label: '75%', value: 0.75, isActive: curOpacity >= 0.65 && curOpacity < 0.9 },
+        { id: 'opacity_50', label: '50%', value: 0.5, isActive: curOpacity >= 0.4 && curOpacity < 0.65 },
+        { id: 'opacity_25', label: '25%', value: 0.25, isActive: curOpacity < 0.4 }
       ]
     });
 
@@ -3715,15 +3929,15 @@ class ToolWheel {
       label: 'Type',
       icon: 'A',
       subItems: [
-        { id: 'type_s', label: 'S', size: 's' },
-        { id: 'type_m', label: 'M', size: 'm' },
-        { id: 'type_l', label: 'L', size: 'l' },
-        { id: 'type_xl', label: 'XL', size: 'xl' },
-        { id: 'font_hand', label: 'Hand', fontFamily: 'hand' },
-        { id: 'font_sans', label: 'Sans', fontFamily: 'sans' },
-        { id: 'font_serif', label: 'Serif', fontFamily: 'serif' },
-        { id: 'font_mono', label: 'Mono', fontFamily: 'mono' },
-        { id: 'type_bold', label: 'Bold', toggleBold: true },
+        { id: 'type_s', label: 'S', size: 's', isActive: curFontSize === 's' },
+        { id: 'type_m', label: 'M', size: 'm', isActive: curFontSize === 'm' },
+        { id: 'type_l', label: 'L', size: 'l', isActive: curFontSize === 'l' },
+        { id: 'type_xl', label: 'XL', size: 'xl', isActive: curFontSize === 'xl' },
+        { id: 'font_hand', label: 'Hand', fontFamily: 'hand', isActive: curFontFamily === 'hand' },
+        { id: 'font_sans', label: 'Sans', fontFamily: 'sans', isActive: curFontFamily === 'sans' },
+        { id: 'font_serif', label: 'Serif', fontFamily: 'serif', isActive: curFontFamily === 'serif' },
+        { id: 'font_mono', label: 'Mono', fontFamily: 'mono', isActive: curFontFamily === 'mono' },
+        { id: 'type_bold', label: curBold ? 'Bold ✓' : 'Bold', toggleBold: true, isActive: curBold },
         { id: 'type_align', label: 'Align', cycleAlign: true }
       ]
     });
@@ -3733,10 +3947,10 @@ class ToolWheel {
       label: 'Shape',
       icon: '◇',
       subItems: [
-        { id: 'to_rectangle', label: 'Rectangle', icon: '▭' },
-        { id: 'to_ellipse', label: 'Ellipse', icon: '◯' },
-        { id: 'to_diamond', label: 'Diamond', icon: '◇' },
-        { id: 'to_triangle', label: 'Triangle', icon: '△' },
+        { id: 'to_rectangle', label: 'Rectangle', icon: '▭', isActive: curShapeType === 'rectangle' },
+        { id: 'to_ellipse', label: 'Ellipse', icon: '◯', isActive: curShapeType === 'ellipse' },
+        { id: 'to_diamond', label: 'Diamond', icon: '◇', isActive: curShapeType === 'diamond' },
+        { id: 'to_triangle', label: 'Triangle', icon: '△', isActive: curShapeType === 'triangle' },
         { id: 'to_equal_sides', label: 'Equal sides', icon: '⊞' }
       ]
     });
@@ -3746,11 +3960,11 @@ class ToolWheel {
       label: 'Style',
       icon: '✎',
       subItems: [
-        { id: 'style_sketch', label: 'Sketch', icon: '✎' },
-        { id: 'style_clean', label: 'Clean', icon: '◻' },
-        { id: 'stroke_solid', label: 'Solid', icon: '—' },
-        { id: 'stroke_dashed', label: 'Dashed', icon: '╌' },
-        { id: 'stroke_dotted', label: 'Dotted', icon: '···' }
+        { id: 'style_sketch', label: 'Sketch', icon: '✎', isActive: curRoughness === 'sketch' },
+        { id: 'style_clean', label: 'Clean', icon: '◻', isActive: curRoughness === 'clean' },
+        { id: 'stroke_solid', label: 'Solid', icon: '—', isActive: curStrokeStyle === 'solid' },
+        { id: 'stroke_dashed', label: 'Dashed', icon: '╌', isActive: curStrokeStyle === 'dashed' },
+        { id: 'stroke_dotted', label: 'Dotted', icon: '···', isActive: curStrokeStyle === 'dotted' }
       ]
     });
 
@@ -3784,7 +3998,6 @@ class ToolWheel {
       this.render();
       return;
     }
-
     this.onAction(item.id, item);
     this.close();
   }
@@ -3814,7 +4027,7 @@ class ToolWheel {
     }
 
     // Center hub: underlying clickable disc
-    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" />`);
+    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rInner - 3}" class="wheel-hub" tabindex="0" role="button" aria-label="Close Wheel" />`);
     // Sketchy hand-drawn circle for center hub
     const hubSketch = sketchEllipse(center, center, rInner - 3, rInner - 3, prng, 1);
     svgParts.push(`<path d="${hubSketch}" class="wheel-hub-sketch" pointer-events="none" />`);
@@ -3841,8 +4054,8 @@ class ToolWheel {
       const isSubActive = this.activeSubMenu === item.id;
       const wedgeClass = `wheel-wedge ${isSubActive ? 'active' : ''} ${item.id.includes('delete') ? 'danger' : ''}`;
 
-      // Solid wedge fill layer for hit testing and hover
-      svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" />`);
+      // Solid wedge fill layer with keyboard accessibility
+      svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" tabindex="0" role="button" aria-label="${item.label}" />`);
 
       // Excalidraw hand-drawn sketchy wedge outline
       const sketchD = sketchWedge(center, center, rInner, rOuter, startAngle, endAngle, prng, 1);
@@ -3882,10 +4095,11 @@ class ToolWheel {
 
         const subPath = createWedgePath(center, center, rOuter + 4, rSubOuter, sStart, sEnd);
         const colorStyle = sub.color ? `fill: ${sub.color}; stroke: #dee2e6;` : '';
+        const isSubActive = Boolean(sub.isActive);
 
-        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge" data-sub-id="${sub.id}" style="${colorStyle}" />`);
+        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge ${isSubActive ? 'active-choice' : ''}" data-sub-id="${sub.id}" tabindex="0" role="button" aria-label="${sub.label}" style="${colorStyle}" />`);
         const subSketchD = sketchWedge(center, center, rOuter + 4, rSubOuter, sStart, sEnd, prng, 1);
-        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch" pointer-events="none" />`);
+        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch ${isSubActive ? 'active' : ''}" pointer-events="none" />`);
 
         const sTextR = (rOuter + 4 + rSubOuter) / 2;
         const sX = center + sTextR * Math.cos(sMid);
@@ -3893,7 +4107,7 @@ class ToolWheel {
 
         svgParts.push(`<g class="wheel-label-group" pointer-events="none">
           <text x="${sX}" y="${sY - 2}" text-anchor="middle" class="wheel-icon">${sub.icon || ''}</text>
-          <text x="${sX}" y="${sY + 10}" text-anchor="middle" class="wheel-sub-text">${sub.label}</text>
+          <text x="${sX}" y="${sY + 10}" text-anchor="middle" class="wheel-sub-text">${sub.label}${isSubActive ? ' ✓' : ''}</text>
         </g>`);
       }
     }
@@ -3901,7 +4115,7 @@ class ToolWheel {
     svgParts.push('</svg>');
     this.wheelEl.innerHTML = svgParts.join('\n');
 
-    // Attach click listeners to wedges
+    // Attach click and keyboard listeners to wedges
     const allWedges = this.wheelEl.querySelectorAll('.wheel-wedge');
     allWedges.forEach(w => {
       const id = w.getAttribute('data-item-id');
@@ -3916,9 +4130,17 @@ class ToolWheel {
         }
       });
 
-      w.addEventListener('click', (e) => {
+      const activate = (e) => {
         e.stopPropagation();
         this.handleItemClick(item);
+      };
+
+      w.addEventListener('click', activate);
+      w.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate(e);
+        }
       });
     });
 
@@ -3928,18 +4150,33 @@ class ToolWheel {
       const subItem = subMenuToRender?.find(s => s.id === subId);
       if (!subItem) return;
 
-      sw.addEventListener('click', (e) => {
+      const activateSub = (e) => {
         e.stopPropagation();
         this.onAction(subItem.id, subItem);
         this.close();
+      };
+
+      sw.addEventListener('click', activateSub);
+      sw.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateSub(e);
+        }
       });
     });
 
     const hub = this.wheelEl.querySelector('.wheel-hub');
     if (hub) {
-      hub.addEventListener('click', (e) => {
+      const closeHub = (e) => {
         e.stopPropagation();
         this.close();
+      };
+      hub.addEventListener('click', closeHub);
+      hub.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          closeHub(e);
+        }
       });
     }
   }
@@ -4109,11 +4346,11 @@ class TopBar {
 
         <!-- Grid visibility and snapping (explicit controls) -->
         <div class="grid-controls-group">
-          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility">
-            Grid: ${showGrid ? 'Show' : 'Hide'}
+          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility (Currently ${showGrid ? 'On' : 'Off'})">
+            Grid ${showGrid ? 'On' : 'Off'}
           </button>
-          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping">
-            Snap: ${snapGrid ? 'On' : 'Off'}
+          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping (Currently ${snapGrid ? 'On' : 'Off'})">
+            Snap ${snapGrid ? 'On' : 'Off'}
           </button>
         </div>
       </div>
@@ -4338,6 +4575,7 @@ class Workspace {
     this.camera = { x: 0, y: 0, zoom: 1.0 };
     this.activeTool = 'hand'; // Default tool: Hand/Pan!
     this.previousTool = 'select';
+    this.connectorRouting = 'straight';
     this.selectedIds = [];
     this.snapGrid = true;
     this.showGrid = true;
@@ -4347,7 +4585,7 @@ class Workspace {
     this.isPanning = false;
     this.isDraggingSelection = false;
     this.isDHeld = false;
-    this.hasDuplicatedForDDrag = false;
+    this.isDDragging = false;
     this.isResizing = false;
     this.isCreating = false;
     this.isReconnecting = false;
@@ -4373,6 +4611,10 @@ class Workspace {
     this.activeTool = tool;
     this.updateCursor();
     this.render();
+  }
+
+  setConnectorRouting(routing) {
+    this.connectorRouting = routing || 'straight';
   }
 
   setSnapGrid(enabled) {
@@ -4673,6 +4915,7 @@ class Workspace {
         }
 
         this.isDraggingSelection = true;
+        this.isDDragging = Boolean(this.isDHeld);
         this.dragStart = { ...worldPt };
         this.dragInitialPositions = {};
         this.dragAccumulatedDelta = { dx: 0, dy: 0 };
@@ -4713,7 +4956,8 @@ class Workspace {
         x: worldPt.x,
         y: worldPt.y,
         width: 1,
-        height: 1
+        height: 1,
+        routing: type === 'connector' ? (this.connectorRouting || 'straight') : undefined
       }, doc.theme);
 
       if (type === 'path') {
@@ -4772,9 +5016,9 @@ class Workspace {
       const doc = this.callbacks.getDocument();
 
       // Holding plain D while dragging: drag out a copy!
-      if (this.isDHeld && !this.hasDuplicatedForDDrag) {
-        this.hasDuplicatedForDDrag = true;
-        // 1. Restore originals to pristine initial positions
+      if (this.isDHeld && !this.isDDragging) {
+        this.isDDragging = true;
+        // Restore originals to pristine initial positions
         for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
           const orig = doc.objects[id];
           if (orig) {
@@ -4784,27 +5028,6 @@ class Workspace {
               if (pos.fromPoint && orig.from) orig.from.point = { ...pos.fromPoint };
               if (pos.toPoint && orig.to) orig.to.point = { ...pos.toPoint };
             }
-          }
-        }
-        // 2. Dispatch duplicate command
-        this.callbacks.onCommand({
-          type: 'duplicate_objects',
-          ids: [...this.selectedIds]
-        });
-        // 3. The duplicates are now selected
-        const count = this.selectedIds.length;
-        const newIds = doc.order.slice(-count);
-        this.selectedIds = newIds;
-        this.dragInitialPositions = {};
-        for (const id of newIds) {
-          const o = doc.objects[id];
-          if (o) {
-            this.dragInitialPositions[id] = {
-              x: o.x,
-              y: o.y,
-              fromPoint: o.from?.point ? { ...o.from.point } : null,
-              toPoint: o.to?.point ? { ...o.to.point } : null
-            };
           }
         }
       }
@@ -4839,6 +5062,12 @@ class Workspace {
       }
 
       this.dragAccumulatedDelta = { dx, dy };
+
+      if (this.isDDragging) {
+        // In D-drag mode, originals are never touched! We simply re-render with preview clones.
+        this.render();
+        return;
+      }
 
       for (const id of this.selectedIds) {
         const obj = doc.objects[id];
@@ -4905,7 +5134,9 @@ class Workspace {
         this.render();
       } else if (this.draftObject.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
-        this.draftObject.to = hit ? { id: hit.id } : { point: { ...worldPt } };
+        this.draftObject.to = hit && hit.id !== this.draftObject.from?.id ? { id: hit.id } : { point: { ...worldPt } };
+        this.draftObject.width = worldPt.x - this.draftObject.x;
+        this.draftObject.height = worldPt.y - this.draftObject.y;
         this.render();
       } else {
         // Shapes: Rect, Ellipse, Diamond, Triangle
@@ -4947,9 +5178,26 @@ class Workspace {
 
     if (this.isDraggingSelection) {
       this.isDraggingSelection = false;
-      this.hasDuplicatedForDDrag = false;
       this.snapGuides = [];
       const doc = this.callbacks.getDocument();
+
+      if (this.isDDragging) {
+        this.isDDragging = false;
+        if (this.dragAccumulatedDelta && (this.dragAccumulatedDelta.dx !== 0 || this.dragAccumulatedDelta.dy !== 0)) {
+          const origIds = [...this.selectedIds];
+          this.callbacks.onCommand({
+            type: 'duplicate_objects',
+            ids: origIds,
+            offset: { x: this.dragAccumulatedDelta.dx, y: this.dragAccumulatedDelta.dy }
+          });
+          const updatedDoc = this.callbacks.getDocument();
+          this.selectedIds = updatedDoc.order.slice(-origIds.length);
+        }
+        this.dragInitialPositions = null;
+        this.dragAccumulatedDelta = null;
+        this.render();
+        return;
+      }
 
       // Restore initial positions first so dispatchCommand applies clean delta
       if (this.dragInitialPositions) {
@@ -5132,8 +5380,33 @@ class Workspace {
 
     let sceneSvg = renderSvgScene(doc, runtime);
 
-    // If a non-connector creation draft is in progress, insert it before world-layer closing
-    if (this.draftObject && this.draftObject.type !== 'connector') {
+    // If D-drag is in progress, insert duplicate preview clones before world-layer closing
+    if (this.isDDragging && this.dragAccumulatedDelta && this.selectedIds.length > 0) {
+      const dx = this.dragAccumulatedDelta.dx;
+      const dy = this.dragAccumulatedDelta.dy;
+      const previews = this.selectedIds.map(id => {
+        const orig = doc.objects[id];
+        if (!orig) return null;
+        const p = cloneDocument(orig);
+        p.id = 'preview-' + p.id;
+        p.x += dx;
+        p.y += dy;
+        if (p.type === 'connector') {
+          if (p.from?.point) { p.from.point.x += dx; p.from.point.y += dy; }
+          if (p.to?.point) { p.to.point.x += dx; p.to.point.y += dy; }
+        }
+        return p;
+      }).filter(Boolean);
+
+      const previewMarkup = previews.map(p => renderObject(doc, p, false)).join('\n');
+      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
+      if (worldCloseIndex !== -1) {
+        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + previewMarkup + '\n' + sceneSvg.slice(worldCloseIndex);
+      }
+    }
+
+    // If a creation draft is in progress, insert it before world-layer closing
+    if (this.draftObject) {
       const draftSvg = renderObject(doc, this.draftObject, false);
       const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
       if (worldCloseIndex !== -1) {
@@ -5290,9 +5563,27 @@ class SaburaApp {
     // Shortcuts coordinator
     this.shortcuts = new ShortcutsCoordinator({
       onTriggerWheel: (x, y) => {
-        const worldPt = this.workspace.screenToWorld(x, y);
-        const hit = this.workspace.findObjectAt(worldPt);
-        this.wheel.open(x, y, hit ? 'object' : 'canvas', hit, this.doc.theme.palette, this.workspace.selectedIds.length);
+        if (this.wheel.isOpen) {
+          this.wheel.close();
+          return;
+        }
+        let hit = null;
+        let context = 'canvas';
+        if (this.workspace.selectedIds.length === 1) {
+          hit = this.doc.objects[this.workspace.selectedIds[0]];
+          context = 'object';
+        } else if (this.workspace.selectedIds.length > 1) {
+          context = 'multi';
+        } else {
+          const worldPt = this.workspace.screenToWorld(x, y);
+          hit = this.workspace.findObjectAt(worldPt);
+          if (hit) {
+            this.workspace.selectedIds = [hit.id];
+            this.workspace.render();
+            context = 'object';
+          }
+        }
+        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length);
       },
       onSelectTool: (tool) => this.workspace.setTool(tool),
       onSpaceHold: (held) => {
@@ -5453,7 +5744,14 @@ class SaburaApp {
     else if (actionId.startsWith('shape_')) {
       const type = actionId.replace('shape_', '');
       this.workspace.setTool(type);
-    } else if (actionId.startsWith('conn_')) {
+    } else if (actionId === 'conn_straight') {
+      this.workspace.setConnectorRouting('straight');
+      this.workspace.setTool('connector');
+    } else if (actionId === 'conn_elbow') {
+      this.workspace.setConnectorRouting('elbow');
+      this.workspace.setTool('connector');
+    } else if (actionId === 'conn_curved') {
+      this.workspace.setConnectorRouting('curved');
       this.workspace.setTool('connector');
     } else if (actionId === 'action_undo') {
       this.undo();

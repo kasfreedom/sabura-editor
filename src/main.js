@@ -129,9 +129,27 @@ export class SaburaApp {
     // Shortcuts coordinator
     this.shortcuts = new ShortcutsCoordinator({
       onTriggerWheel: (x, y) => {
-        const worldPt = this.workspace.screenToWorld(x, y);
-        const hit = this.workspace.findObjectAt(worldPt);
-        this.wheel.open(x, y, hit ? 'object' : 'canvas', hit, this.doc.theme.palette, this.workspace.selectedIds.length);
+        if (this.wheel.isOpen) {
+          this.wheel.close();
+          return;
+        }
+        let hit = null;
+        let context = 'canvas';
+        if (this.workspace.selectedIds.length === 1) {
+          hit = this.doc.objects[this.workspace.selectedIds[0]];
+          context = 'object';
+        } else if (this.workspace.selectedIds.length > 1) {
+          context = 'multi';
+        } else {
+          const worldPt = this.workspace.screenToWorld(x, y);
+          hit = this.workspace.findObjectAt(worldPt);
+          if (hit) {
+            this.workspace.selectedIds = [hit.id];
+            this.workspace.render();
+            context = 'object';
+          }
+        }
+        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length);
       },
       onSelectTool: (tool) => this.workspace.setTool(tool),
       onSpaceHold: (held) => {
@@ -292,7 +310,14 @@ export class SaburaApp {
     else if (actionId.startsWith('shape_')) {
       const type = actionId.replace('shape_', '');
       this.workspace.setTool(type);
-    } else if (actionId.startsWith('conn_')) {
+    } else if (actionId === 'conn_straight') {
+      this.workspace.setConnectorRouting('straight');
+      this.workspace.setTool('connector');
+    } else if (actionId === 'conn_elbow') {
+      this.workspace.setConnectorRouting('elbow');
+      this.workspace.setTool('connector');
+    } else if (actionId === 'conn_curved') {
+      this.workspace.setConnectorRouting('curved');
       this.workspace.setTool('connector');
     } else if (actionId === 'action_undo') {
       this.undo();

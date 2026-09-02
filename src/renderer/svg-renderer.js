@@ -310,7 +310,8 @@ export function renderObject(doc, obj, isSelected = false) {
       const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
       const fontWeight = textStyle.bold ? 'bold' : 'normal';
       const rawTextColor = textStyle.color || obj.stroke || '#1e1e1e';
-      const textColor = resolveContrastColor(rawTextColor, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
+      const shapeBg = (obj.fill && obj.fill !== 'none') ? obj.fill : (doc.theme?.background || '#ffffff');
+      const textColor = resolveContrastColor(rawTextColor, shapeBg, '#ffffff', '#1e1e1e');
 
       const lines = wrapText(obj.text, obj.width - 16, fontSize);
       const lineHeight = fontSize * 1.25;
@@ -359,14 +360,37 @@ export function renderSelectionOverlay(doc, selectedIds) {
   const selectedObjects = selectedIds.map(id => doc.objects[id]).filter(Boolean);
   if (selectedObjects.length === 0) return '';
 
+  const themeId = doc?.theme?.id || 'paper';
+  let selStroke = '#1971c2';
+  let selFill = 'rgba(25, 113, 194, 0.04)';
+  let handleFill = '#ffffff';
+  let handleStroke = '#1971c2';
+
+  if (themeId === 'blueprint') {
+    selStroke = '#38bdf8';
+    selFill = 'rgba(56, 189, 248, 0.08)';
+    handleFill = '#0c192e';
+    handleStroke = '#38bdf8';
+  } else if (themeId === 'night') {
+    selStroke = '#7aa2f7';
+    selFill = 'rgba(122, 162, 247, 0.08)';
+    handleFill = '#18181b';
+    handleStroke = '#7aa2f7';
+  } else if (themeId === 'high-contrast') {
+    selStroke = '#0000ff';
+    selFill = 'rgba(0, 0, 255, 0.08)';
+    handleFill = '#ffffff';
+    handleStroke = '#000000';
+  }
+
   const markup = [];
 
   // If single connector selected, render endpoint handles
   if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
     const conn = selectedObjects[0];
     const geom = resolveConnectorGeometry(doc, conn);
-    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
-    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="#1971c2" stroke="#ffffff" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
+    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
     return markup.join('\n');
   }
 
@@ -380,7 +404,7 @@ export function renderSelectionOverlay(doc, selectedIds) {
   const bh = unionBox.height + pad * 2;
 
   // Bounding rect: Concepts precision hairline dash with subtle accent wash
-  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(25, 113, 194, 0.03)" stroke="#1971c2" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
 
   // Only render 8 resize handles if single unlocked object or non-group selection
   const isSingle = selectedObjects.length === 1;
@@ -399,7 +423,7 @@ export function renderSelectionOverlay(doc, selectedIds) {
     ];
 
     for (const h of handles) {
-      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="#ffffff" stroke="#1971c2" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
     }
   }
 

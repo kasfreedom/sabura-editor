@@ -6,20 +6,109 @@ import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS } f
 import { cloneDocument, generateId, generateSeed } from './document.js';
 import { alignObjects, distributeObjects, measureText } from './geometry.js';
 
+export const SUPPORTED_COMMAND_TYPES = new Set([
+  'create_object',
+  'delete_objects',
+  'move_objects',
+  'resize_object',
+  'set_style',
+  'set_typography',
+  'set_text',
+  'change_shape',
+  'group_objects',
+  'ungroup_objects',
+  'lock_objects',
+  'reorder_objects',
+  'align_objects',
+  'distribute_objects',
+  'reconnect_connector',
+  'configure_connector',
+  'configure_connector_endpoints',
+  'duplicate_objects',
+  'set_board_theme',
+  'set_title',
+  'batch',
+  'noop'
+]);
+
 /**
  * Validates an individual command structure.
+ * Rejects unknown command types with a descriptive error.
  * @param {any} cmd 
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export function validateCommand(cmd) {
   const errors = [];
-  if (!cmd || typeof cmd !== 'object') {
+  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) {
     return { valid: false, errors: ['Command must be an object'] };
   }
   if (typeof cmd.type !== 'string' || !cmd.type.trim()) {
     errors.push('Command must have a non-empty type string');
+    return { valid: false, errors };
   }
+  if (!SUPPORTED_COMMAND_TYPES.has(cmd.type)) {
+    errors.push(`Unknown command type: "${cmd.type}". Supported command types are: ${Array.from(SUPPORTED_COMMAND_TYPES).join(', ')}`);
+    return { valid: false, errors };
+  }
+
+  // Type-specific field validations
+  if (cmd.type === 'create_object') {
+    if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object)) {
+      errors.push('create_object requires a valid object payload');
+    }
+  } else if (cmd.type === 'delete_objects') {
+    if (!Array.isArray(cmd.ids)) {
+      errors.push('delete_objects requires an array of ids');
+    }
+  } else if (cmd.type === 'move_objects') {
+    if (!Array.isArray(cmd.ids)) errors.push('move_objects requires an array of ids');
+    if (typeof cmd.dx !== 'number' || typeof cmd.dy !== 'number') {
+      errors.push('move_objects requires numeric dx and dy deltas');
+    }
+  } else if (cmd.type === 'resize_object') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('resize_object requires a string id');
+    if (!cmd.bounds || typeof cmd.bounds !== 'object') errors.push('resize_object requires a bounds object');
+  } else if (cmd.type === 'set_text') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_text requires a string id');
+    if (typeof cmd.text !== 'string') errors.push('set_text requires string text');
+  } else if (cmd.type === 'configure_connector') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector requires a string id');
+  } else if (cmd.type === 'set_board_theme') {
+    if (!cmd.theme && !cmd.themeId) errors.push('set_board_theme requires theme or themeId');
+  } else if (cmd.type === 'batch') {
+    if (!Array.isArray(cmd.commands)) {
+      errors.push('batch requires an array of commands');
+    } else {
+      for (let i = 0; i < cmd.commands.length; i++) {
+        const sub = validateCommand(cmd.commands[i]);
+        if (!sub.valid) {
+          errors.push(`batch command [${i}]: ${sub.errors.join(', ')}`);
+        }
+      }
+    }
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+function hexToLuminance(hex) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return 0.5;
+  let c = hex.slice(1);
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return 0.5;
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(hex1, hex2) {
+  const l1 = hexToLuminance(hex1);
+  const l2 = hexToLuminance(hex2);
+  const bright = Math.max(l1, l2);
+  const dark = Math.min(l1, l2);
+  return (bright + 0.05) / (dark + 0.05);
 }
 
 /**
@@ -123,6 +212,16 @@ export function applyCommand(doc, cmd) {
         dup.id = newId;
         dup.x += offset.x;
         dup.y += offset.y;
+        if (dup.type === 'connector') {
+          if (dup.from?.point) {
+            dup.from.point.x += offset.x;
+            dup.from.point.y += offset.y;
+          }
+          if (dup.to?.point) {
+            dup.to.point.x += offset.x;
+            dup.to.point.y += offset.y;
+          }
+        }
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
         newDoc.objects[newId] = dup;
@@ -655,7 +754,7 @@ export function applyCommand(doc, cmd) {
           }
         }
       } else {
-        // Update existing objects and connectors whose styling matches previous theme defaults
+        // Restyle complete existing board coherently across shapes, text, and connectors
         const oldStroke = prevTheme.defaultStroke;
         const newStroke = newDoc.theme.defaultStroke;
         const oldBg = prevTheme.background;
@@ -663,18 +762,46 @@ export function applyCommand(doc, cmd) {
 
         for (const [id, obj] of Object.entries(newDoc.objects)) {
           const styleBackup = {};
-          if (obj.stroke === oldStroke) {
+
+          // 1. Stroke (shapes & connectors)
+          const strokeLum = hexToLuminance(obj.stroke);
+          const bgLum = hexToLuminance(newBg);
+          const isDarkOnDark = bgLum < 0.25 && strokeLum < 0.15;
+          const isLightOnLight = bgLum > 0.75 && strokeLum > 0.85;
+          const matchesOldStroke = obj.stroke === oldStroke || obj.stroke === prevTheme.palette?.[0] || obj.stroke === '#1e1e1e';
+          if (matchesOldStroke || isDarkOnDark || isLightOnLight) {
             styleBackup.stroke = obj.stroke;
             obj.stroke = newStroke;
           }
+
+          // 2. Fill (shapes)
           if (obj.fill === oldBg) {
             styleBackup.fill = obj.fill;
             obj.fill = newBg;
+          } else if (prevTheme.defaultFill && obj.fill === prevTheme.defaultFill) {
+            styleBackup.fill = obj.fill;
+            obj.fill = newDoc.theme.defaultFill || 'none';
+          } else if (obj.fill && obj.fill !== 'none') {
+            const fillContrast = contrastRatio(obj.fill, newBg);
+            if (fillContrast < 1.15 && (obj.fill === '#ffffff' || obj.fill === '#0c192e' || obj.fill === '#18181b' || obj.fill === '#fcfaf6')) {
+              styleBackup.fill = obj.fill;
+              obj.fill = newBg;
+            }
           }
-          if (obj.textStyle?.color === oldStroke) {
-            styleBackup.textColor = obj.textStyle.color;
+
+          // 3. Text (standalone or inside shape)
+          const effectiveBg = (obj.fill && obj.fill !== 'none') ? obj.fill : newBg;
+          const curTextColor = obj.textStyle?.color || obj.stroke;
+          const textLum = hexToLuminance(curTextColor);
+          const effBgLum = hexToLuminance(effectiveBg);
+          const textDarkOnDark = effBgLum < 0.25 && textLum < 0.15;
+          const textLightOnLight = effBgLum > 0.75 && textLum > 0.85;
+          if (obj.textStyle?.color === oldStroke || textDarkOnDark || textLightOnLight) {
+            styleBackup.textColor = obj.textStyle?.color;
+            if (!obj.textStyle) obj.textStyle = {};
             obj.textStyle.color = newStroke;
           }
+
           if (Object.keys(styleBackup).length > 0) {
             prevObjectStyles[id] = styleBackup;
           }
@@ -709,17 +836,54 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'noop':
-    default:
       return { doc: newDoc, inverseCmd: { type: 'noop' } };
+
+    default:
+      throw new Error(`Unsupported command type: "${cmd.type}". Supported command types are: ${Array.from(SUPPORTED_COMMAND_TYPES).join(', ')}`);
   }
 }
 
 /**
- * Applies a batch of commands sequentially.
+ * Applies a batch of commands sequentially and atomically.
+ * Validates all commands first and rolls back completely on any error.
  * @param {Object} doc 
  * @param {Array<Object>} commands 
  * @returns {{ doc: Object, inverseBatch: Object }}
  */
 export function applyCommandBatch(doc, commands) {
-  return applyCommand(doc, { type: 'batch', commands });
+  if (!Array.isArray(commands)) {
+    throw new Error('Commands must be an array');
+  }
+
+  // Validate all commands upfront
+  for (let i = 0; i < commands.length; i++) {
+    const val = validateCommand(commands[i]);
+    if (!val.valid) {
+      throw new Error(`Validation failed for command [${i}] (${commands[i]?.type || 'unknown'}): ${val.errors.join(', ')}`);
+    }
+  }
+
+  const initialClone = cloneDocument(doc);
+  const inverseList = [];
+  let currentDoc = initialClone;
+
+  for (let i = 0; i < commands.length; i++) {
+    try {
+      const result = applyCommand(currentDoc, commands[i]);
+      currentDoc = result.doc;
+      if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
+        inverseList.push(result.inverseCmd);
+      }
+    } catch (err) {
+      // Abort without mutation
+      throw new Error(`Batch execution failed at command [${i}] (${commands[i]?.type || 'unknown'}): ${err.message}`);
+    }
+  }
+
+  inverseList.reverse();
+  const inverseCmd = {
+    type: 'batch',
+    commands: inverseList
+  };
+  return { doc: currentDoc, inverseCmd };
 }

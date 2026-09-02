@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDefaultDocument, createDefaultObject } from '../src/core/document.js';
-import { applyCommand, applyCommandBatch } from '../src/core/commands.js';
+import { applyCommand, applyCommandBatch, validateCommand } from '../src/core/commands.js';
 
 test('create_object and undo via delete_objects', () => {
   const doc = createDefaultDocument();
@@ -297,3 +297,98 @@ test('configure_connector updates route, arrows, and stacking with reversible un
   assert.strictEqual(doc3.objects['conn1'].endArrow, true);
   assert.strictEqual(doc3.objects['conn1'].stacking, 'auto');
 });
+
+test('validateCommand and applyCommand strictly reject unknown command types with clear errors', () => {
+  const badCmd = { type: 'unsupported_foo_action', id: '123' };
+  const val = validateCommand(badCmd);
+  assert.strictEqual(val.valid, false);
+  assert.ok(val.errors.length > 0);
+  assert.match(val.errors[0], /Unknown command type: "unsupported_foo_action"/);
+
+  const doc = createDefaultDocument();
+  assert.throws(() => {
+    applyCommand(doc, badCmd);
+  }, /Unsupported command type/);
+});
+
+test('applyCommandBatch executes atomically and rolls back completely on any error', () => {
+  const doc = createDefaultDocument();
+  const rect = createDefaultObject('rectangle', { id: 'r1', x: 100, y: 100 });
+  const { doc: doc1 } = applyCommand(doc, { type: 'create_object', object: rect });
+
+  const batchWithFail = [
+    { type: 'move_objects', ids: ['r1'], dx: 50, dy: 50 },
+    { type: 'invalid_nonexistent_command', foo: 'bar' }
+  ];
+
+  assert.throws(() => {
+    applyCommandBatch(doc1, batchWithFail);
+  }, /Validation failed/);
+
+  // Original document must remain 100% unchanged
+  assert.strictEqual(doc1.objects['r1'].x, 100);
+  assert.strictEqual(doc1.objects['r1'].y, 100);
+});
+
+test('duplicate_objects with custom offset moves objects and connectors, and is undone in one step', () => {
+  const doc = createDefaultDocument();
+  const rect = createDefaultObject('rectangle', { id: 'r1', x: 100, y: 100 });
+  const conn = createDefaultObject('connector', {
+    id: 'c1',
+    from: { point: { x: 100, y: 100 } },
+    to: { point: { x: 200, y: 200 } }
+  });
+  const { doc: doc1 } = applyCommand(doc, { type: 'create_object', object: rect });
+  const { doc: doc2 } = applyCommand(doc1, { type: 'create_object', object: conn });
+
+  // Duplicate with precise offset
+  const { doc: doc3, inverseCmd, duplicatedIds } = applyCommand(doc2, {
+    type: 'duplicate_objects',
+    ids: ['r1', 'c1'],
+    offset: { x: 75, y: 45 }
+  });
+
+  assert.strictEqual(duplicatedIds.length, 2);
+  const dupRectId = duplicatedIds[0];
+  const dupConnId = duplicatedIds[1];
+
+  // Original unchanged
+  assert.strictEqual(doc3.objects['r1'].x, 100);
+  assert.strictEqual(doc3.objects['r1'].y, 100);
+
+  // Duplicate at exact offset
+  assert.strictEqual(doc3.objects[dupRectId].x, 175);
+  assert.strictEqual(doc3.objects[dupRectId].y, 145);
+  assert.strictEqual(doc3.objects[dupConnId].from.point.x, 175);
+  assert.strictEqual(doc3.objects[dupConnId].to.point.x, 275);
+
+  // Single-step undo removes both duplicates and restores pristine document
+  const { doc: doc4 } = applyCommand(doc3, inverseCmd);
+  assert.strictEqual(doc4.objects[dupRectId], undefined);
+  assert.strictEqual(doc4.objects[dupConnId], undefined);
+  assert.strictEqual(doc4.order.length, 2);
+});
+
+test('set_board_theme restyles strokes, fills, text, and connectors coherently across all themes', () => {
+  const doc = createDefaultDocument(); // Paper theme
+  const rect = createDefaultObject('rectangle', { id: 'r1', stroke: '#1e1e1e', fill: '#fcfaf6', text: 'Hello', textStyle: { color: '#1e1e1e' } });
+  const conn = createDefaultObject('connector', { id: 'c1', stroke: '#1e1e1e' });
+  const { doc: doc1 } = applyCommand(doc, { type: 'create_object', object: rect });
+  const { doc: doc2 } = applyCommand(doc1, { type: 'create_object', object: conn });
+
+  // Switch to Night theme (dark obsidian #18181b, chalk white #f4f4f5)
+  const { doc: docNight } = applyCommand(doc2, { type: 'set_board_theme', themeId: 'night' });
+  assert.strictEqual(docNight.theme.id, 'night');
+  assert.strictEqual(docNight.objects['r1'].stroke, '#f4f4f5');
+  assert.strictEqual(docNight.objects['r1'].fill, '#18181b');
+  assert.strictEqual(docNight.objects['r1'].textStyle.color, '#f4f4f5');
+  assert.strictEqual(docNight.objects['c1'].stroke, '#f4f4f5');
+
+  // Switch to High Contrast theme (white #ffffff, black #000000)
+  const { doc: docHC } = applyCommand(docNight, { type: 'set_board_theme', themeId: 'high-contrast' });
+  assert.strictEqual(docHC.theme.id, 'high-contrast');
+  assert.strictEqual(docHC.objects['r1'].stroke, '#000000');
+  assert.strictEqual(docHC.objects['r1'].textStyle.color, '#000000');
+  assert.strictEqual(docHC.objects['c1'].stroke, '#000000');
+});
+
