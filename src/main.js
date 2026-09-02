@@ -950,6 +950,10 @@ export class SaburaApp {
       body.removeAttribute('class');
       const appEl = body.querySelector('#app');
       if (appEl) appEl.innerHTML = '';
+      const strayAnchors = body.querySelectorAll('a[download]');
+      for (const anchor of strayAnchors) {
+        anchor.remove();
+      }
     }
     return '<!DOCTYPE html>\n' + clone.outerHTML;
   }

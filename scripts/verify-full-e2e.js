@@ -1060,7 +1060,7 @@ async function runSafariTests() {
 
       const valGoodResult = window.sabura.validateDocument({
         schemaVersion: 'sabura/canvas/v1', id: 'board_safari31', title: 'Safari Test',
-        theme: app.doc.theme, objects: {}, order: [], groups: {}, assets: {}
+        theme: window.sabura.getDocument().theme, objects: {}, order: [], groups: {}, assets: {}
       });
       log('15c. validateDocument() accepts valid doc', valGoodResult.valid, 'errors=' + (valGoodResult.errors || []).join(';'));
 
@@ -1074,7 +1074,7 @@ async function runSafariTests() {
       const origId = window.sabura.getDocument().id;
       const genGoodResult = window.sabura.generateBoardFile({
         schemaVersion: 'sabura/canvas/v1', id: 'board_safari_gen', title: 'Safari Gen Test',
-        theme: app.doc.theme,
+        theme: window.sabura.getDocument().theme,
         objects: { 's1': { id: 's1', type: 'rectangle', x: 50, y: 50, width: 100, height: 60, seed: 7 } },
         order: ['s1'], groups: {}, assets: {}
       });
@@ -2464,7 +2464,7 @@ try {
   // Step D: validateDocument — valid doc accepted
   const valOk = await evalInChrome(`window.sabura.validateDocument({
     schemaVersion: 'sabura/canvas/v1', id: 'board_val31', title: 'Val Test',
-    theme: window.saburaApp.doc.theme, objects: {}, order: [], groups: {}, assets: {}
+    theme: window.sabura.getDocument().theme, objects: {}, order: [], groups: {}, assets: {}
   })`);
   if (!valOk.valid) throw new Error('Flow 31: validateDocument rejected valid doc: ' + valOk.errors.join(', '));
   console.log('  ✓ 31c. validateDocument() accepts valid doc');
@@ -2493,7 +2493,7 @@ try {
     schemaVersion: 'sabura/canvas/v1',
     id: 'board_e2egentest',
     title: 'E2E Generated Board',
-    theme: window.saburaApp.doc.theme,
+    theme: window.sabura.getDocument().theme,
     objects: {
       'shape_e2e': {
         id: 'shape_e2e', type: 'rectangle',
@@ -2525,7 +2525,7 @@ try {
     throw new Error('Flow 31: generateBoardFile returned invalid filename: ' + genResult.filename);
   if (typeof genResult.byteLength !== 'number' || genResult.byteLength < 200000)
     throw new Error('Flow 31: generateBoardFile returned invalid byteLength: ' + genResult.byteLength);
-  console.log(`  ✓ 31f. generateBoardFile() succeeded: ${genResult.filename}, byteLength=${genResult.byteLength}`);
+  console.log(`  ✓ 31f. generateBoardFile() first run: ${genResult.filename}, byteLength=${genResult.byteLength}`);
 
   // Step I: Verify live board is unaltered
   const afterDocId = await evalInChrome('window.sabura.getDocument().id');
@@ -2554,12 +2554,12 @@ try {
     awaitPromise: false
   });
 
-  // (Re-run generateBoardFile now that interceptor is in place)
+  // (Re-run generateBoardFile synchronously with identical doc)
   const captureResult = await evalInChrome(`window.sabura.generateBoardFile({
     schemaVersion: 'sabura/canvas/v1',
     id: 'board_e2egentest',
     title: 'E2E Generated Board',
-    theme: window.saburaApp.doc.theme,
+    theme: window.sabura.getDocument().theme,
     objects: {
       'shape_e2e': {
         id: 'shape_e2e', type: 'rectangle',
@@ -2579,7 +2579,13 @@ try {
     assets: {}
   })`);
   if (!captureResult.success)
-    throw new Error('Flow 31: second generateBoardFile (for Blob capture) failed: ' + (captureResult.errors || []).join(', '));
+    throw new Error('Flow 31: second generateBoardFile failed: ' + (captureResult.errors || []).join(', '));
+
+  // Regression check: First and second generation byteLengths must be exactly equal!
+  if (genResult.byteLength !== captureResult.byteLength) {
+    throw new Error(`Flow 31 regression: first and second generation byteLength mismatch (first=${genResult.byteLength}, second=${captureResult.byteLength}). Temporary download anchor leaked into next shell!`);
+  }
+  console.log(`  ✓ 31f2. First and second generation byteLengths are identical: ${genResult.byteLength}`);
 
   // Wait for FileReader.onload (async)
   let capturedDataUrl = null;
@@ -2595,7 +2601,12 @@ try {
   const b64 = capturedDataUrl.split(',')[1];
   const downloadedHtml = Buffer.from(b64, 'base64').toString('utf8');
   const actualBytes = Buffer.byteLength(downloadedHtml, 'utf8');
-  console.log(`  ✓ 31h. Blob captured in browser: ${actualBytes} bytes`);
+
+  // Assert captured HTML contains no temporary download anchor or blob URL
+  if (downloadedHtml.includes('<a download') || downloadedHtml.includes('blob:')) {
+    throw new Error('Flow 31 regression: captured HTML contains temporary download anchor or blob URL!');
+  }
+  console.log(`  ✓ 31h. Blob captured in browser: ${actualBytes} bytes (verified NO temporary anchor or blob URL)`);
 
   // Verify real downloadable HTML attachment on disk
   const diskFiles = fs.readdirSync(tmpDownloadDir).filter(f => f.endsWith('.html'));
@@ -2603,11 +2614,14 @@ try {
     const diskPath = path.join(tmpDownloadDir, diskFiles[0]);
     const diskContent = fs.readFileSync(diskPath, 'utf8');
     const diskBytes = Buffer.byteLength(diskContent, 'utf8');
+    if (diskContent.includes('<a download') || diskContent.includes('blob:')) {
+      throw new Error('Flow 31 regression: disk HTML file contains temporary download anchor or blob URL!');
+    }
     console.log(`  ✓ 31h2. Real downloadable HTML attachment confirmed on disk: ${diskFiles[0]} (${diskBytes} bytes)`);
   }
 
   // Step K: Verify real byte size matches byteLength returned by API (use captureResult)
-  if (Math.abs(actualBytes - captureResult.byteLength) > 4)
+  if (actualBytes !== captureResult.byteLength)
     throw new Error(`Flow 31: byteLength mismatch — API=${captureResult.byteLength}, decoded=${actualBytes}`);
   console.log(`  ✓ 31i. byteLength accurate: API=${captureResult.byteLength}, decoded=${actualBytes}`);
 
@@ -2635,7 +2649,7 @@ try {
   await cdpSend('Page.navigate', { url: `http://127.0.0.1:${port}/generated-e2e.html` });
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 200));
-    const hasApp = await evalInChrome('Boolean(window.saburaApp)').catch(() => false);
+    const hasApp = await evalInChrome('Boolean(window.sabura && window.sabura.getDocument())').catch(() => false);
     if (hasApp) break;
   }
 

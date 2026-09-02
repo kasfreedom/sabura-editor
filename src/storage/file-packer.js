@@ -96,11 +96,16 @@ export function triggerFileDownload(filename, htmlContent) {
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 200);
+  try {
+    a.click();
+  } finally {
+    if (a.parentNode) {
+      a.parentNode.removeChild(a);
+    }
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
   return byteLength;
 }
 

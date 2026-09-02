@@ -444,3 +444,121 @@ test('18. generateBoardFile operational failure when base shell is missing seam'
     globalThis.window = origWindow;
   }
 });
+
+// ── Test 19 ────────────────────────────────────────────────────────────────────
+
+test('19. Regression: synchronous repeated generateBoardFile calls produce identical byte size and leak no anchors', () => {
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument();
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.originalHtml = html;
+  app.subscribers = new Set();
+  app.undoStack = [];
+  app.redoStack = [];
+
+  const capturedBlobs = [];
+  const origWindow = globalThis.window;
+  const origDocument = globalThis.document;
+  const origURL = globalThis.URL;
+  const origBlob = globalThis.Blob;
+
+  try {
+    const liveBody = {
+      children: [],
+      appendChild: (node) => {
+        liveBody.children.push(node);
+      },
+      removeChild: (node) => {
+        const idx = liveBody.children.indexOf(node);
+        if (idx >= 0) liveBody.children.splice(idx, 1);
+      }
+    };
+
+    globalThis.window = {};
+    globalThis.document = {
+      body: liveBody,
+      createElement: (tag) => ({
+        tagName: tag.toUpperCase(),
+        download: '',
+        href: '',
+        click: () => {},
+        parentNode: liveBody
+      })
+    };
+
+    globalThis.URL = {
+      createObjectURL: (blob) => {
+        capturedBlobs.push(blob.content);
+        return 'blob:mock-download-url';
+      },
+      revokeObjectURL: () => {}
+    };
+
+    globalThis.Blob = class {
+      constructor(parts) {
+        this.content = parts.join('');
+        this.size = Buffer.byteLength(this.content, 'utf8');
+      }
+    };
+
+    // Use live body state to simulate DOM cloning
+    app.getCleanHtmlShell = () => {
+      const hasAnchors = liveBody.children.some(c => c.download !== undefined);
+      if (hasAnchors) {
+        return html.replace('</body>', '<a download="leaked" href="blob:leaked"></a></body>');
+      }
+      return html;
+    };
+
+    app.exposeApi();
+    const sabura = globalThis.window.sabura;
+
+    const testDoc = createDefaultDocument({ title: 'Synchronous Repetition Test', id: 'board_repeat' });
+    const rect = createDefaultObject('rectangle', { id: 'r1', text: 'Repeat Object' });
+    testDoc.objects['r1'] = rect;
+    testDoc.order = ['r1'];
+
+    // Call generateBoardFile twice synchronously with the same document
+    const res1 = sabura.generateBoardFile(testDoc);
+    const res2 = sabura.generateBoardFile(testDoc);
+
+    // 1. Both calls succeed
+    assert.equal(res1.success, true);
+    assert.equal(res2.success, true);
+
+    // 2. Both generated Blob contents have identical byte sizes
+    assert.equal(capturedBlobs.length, 2);
+    const blob1Bytes = Buffer.byteLength(capturedBlobs[0], 'utf8');
+    const blob2Bytes = Buffer.byteLength(capturedBlobs[1], 'utf8');
+    assert.equal(res1.byteLength, res2.byteLength, 'Returned byteLength must be identical');
+    assert.equal(blob1Bytes, blob2Bytes, 'Captured Blob contents must have identical byte sizes');
+
+    // 3. Neither generated HTML contains a temporary download anchor or blob URL
+    for (let i = 0; i < capturedBlobs.length; i++) {
+      const blobHtml = capturedBlobs[i];
+      assert.ok(!blobHtml.includes('<a download'), `Blob [${i}] must not contain temporary download anchor`);
+      assert.ok(!blobHtml.includes('blob:'), `Blob [${i}] must not contain blob: URL`);
+    }
+
+    // 4. CSS and JavaScript hashes remain identical
+    const cssHash1 = sha256(extractCss(capturedBlobs[0]));
+    const cssHash2 = sha256(extractCss(capturedBlobs[1]));
+    assert.equal(cssHash1, cssHash2, 'CSS hashes must remain identical');
+
+    const jsHash1 = sha256(extractJs(capturedBlobs[0]));
+    const jsHash2 = sha256(extractJs(capturedBlobs[1]));
+    assert.equal(jsHash1, jsHash2, 'JS bundle hashes must remain identical');
+
+    // 5. The second document remains valid
+    const extracted2 = extractDocumentFromHtml(capturedBlobs[1]);
+    assert.equal(extracted2.valid, true, 'Second generated document must be valid');
+    assert.equal(extracted2.document.id, 'board_repeat');
+    assert.equal(extracted2.document.objects['r1'].text, 'Repeat Object');
+  } finally {
+    globalThis.window = origWindow;
+    globalThis.document = origDocument;
+    globalThis.URL = origURL;
+    globalThis.Blob = origBlob;
+  }
+});
