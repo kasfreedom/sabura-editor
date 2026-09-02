@@ -283,8 +283,8 @@ html, body {
 /* Accessible on-screen Wheel Trigger Button - Excalidraw Sketchy FAB */
 .wheel-trigger-fab {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
+  bottom: 66px;
+  left: 16px;
   padding: 8px 16px;
   background: var(--ui-bg);
   backdrop-filter: blur(8px);
@@ -467,7 +467,8 @@ html, body {
 /* Presentation Mode states */
 body.in-presentation .sabura-topbar,
 body.in-presentation .wheel-trigger-fab,
-body.in-presentation .sabura-wheel {
+body.in-presentation .sabura-wheel,
+body.in-presentation .zoom-help-toolbar {
   display: none !important;
 }
 
@@ -479,6 +480,240 @@ body.in-presentation {
   cursor: none;
 }
 
+/* Compact Bottom-Left Zoom & Help Toolbar */
+.zoom-help-toolbar {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  background: var(--ui-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.12);
+  z-index: 40;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.zoom-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ui-text);
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 8px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.zoom-btn:hover {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+}
+
+.zoom-btn:active {
+  transform: scale(0.94);
+}
+
+.zoom-btn.zoom-percent {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 52px;
+}
+
+.zoom-btn.zoom-fit {
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+.zoom-btn.zoom-help {
+  font-size: 14px;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border: 1px dashed var(--ui-border);
+}
+
+/* Accessible Help & Shortcuts Modal Backdrop */
+.sabura-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.sabura-modal-backdrop.visible {
+  display: flex;
+  opacity: 1;
+}
+
+/* Modal Dialog Window */
+.sabura-modal-dialog {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  border: 2.5px solid var(--ui-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  max-width: 720px;
+  width: 92%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-hand);
+  animation: modalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.help-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.help-logo {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1971c2;
+  border: 1.5px solid #1971c2;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.help-header h2 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.help-close-btn {
+  background: transparent;
+  border: 1.5px solid var(--ui-border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ui-text);
+  transition: background 0.15s ease;
+}
+
+.help-close-btn:hover {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.help-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 18px 24px;
+  overflow-y: auto;
+}
+
+@media (max-width: 620px) {
+  .help-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.help-section {
+  margin-bottom: 18px;
+}
+
+.help-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1971c2;
+  border-bottom: 1px dashed var(--ui-border);
+  padding-bottom: 4px;
+}
+
+[data-ui-theme="dark"] .help-section-title {
+  color: #74c0fc;
+}
+
+.help-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.help-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  gap: 12px;
+}
+
+.help-desc {
+  font-weight: 500;
+}
+
+.kbd-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  color: var(--ui-text);
+  white-space: nowrap;
+}
+
+.help-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--ui-border);
+  font-size: 12px;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface);
+  text-align: center;
+}
+
+
   </style>
 </head>
 <body>
@@ -489,7 +724,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_hqnhuwcm970",
+  "id": "board_7mmta336068",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -505,7 +740,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 1985818760,
+      "seed": 238167821,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -536,7 +771,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1975378973,
+      "seed": 660317660,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -563,7 +798,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 993908362,
+      "seed": 563330551,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -590,7 +825,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 886968892,
+      "seed": 1207793223,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -4687,6 +4922,17 @@ class TopBar {
  * Sabura Keyboard Shortcuts Coordinator.
  */
 
+function getPlatform() {
+  if (typeof navigator === 'undefined') return { isMac: false, modKey: 'Ctrl', modSymbol: 'Ctrl' };
+  const isMac = (navigator.platform || '').toUpperCase().indexOf('MAC') >= 0 ||
+                (navigator.userAgent || '').toUpperCase().indexOf('MAC') >= 0;
+  return {
+    isMac,
+    modKey: isMac ? 'Cmd' : 'Ctrl',
+    modSymbol: isMac ? '⌘' : 'Ctrl'
+  };
+}
+
 class ShortcutsCoordinator {
   constructor(handlers) {
     this.handlers = handlers;
@@ -4713,38 +4959,111 @@ class ShortcutsCoordinator {
   }
 
   onKeyDown(e) {
-    // Ignore shortcuts when user is typing in input or textarea
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    // Check if user is typing in input, textarea, contenteditable, or in-place text editor
+    const activeEl = document.activeElement;
+    const isTyping = ['INPUT', 'TEXTAREA'].includes(activeEl?.tagName) ||
+      Boolean(activeEl?.isContentEditable) ||
+      Boolean(this.handlers.isTextEditing?.());
+
+    if (isTyping) {
+      // In text editing, Escape commits/cancels the text editor
+      if (e.key === 'Escape') {
+        this.handlers.onEscape?.();
+      }
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const { isMac } = getPlatform();
     const mod = isMac ? e.metaKey : e.ctrlKey;
 
-    if (e.key === ' ' && !this.isSpacePressed) {
+    // Temporary Space-to-Pan
+    if (e.key === ' ' && !this.isSpacePressed && !mod) {
       this.isSpacePressed = true;
       this.handlers.onSpaceHold?.(true);
       return;
     }
 
-    if (e.key.toLowerCase() === 'q' && !mod) {
+    // --- Tools & Navigation ---
+    if (e.key.toLowerCase() === 'q' && !mod && !e.altKey) {
       e.preventDefault();
       this.handlers.onTriggerWheel?.(this.lastPointerPos.x, this.lastPointerPos.y);
       return;
     }
 
-    if (e.key.toLowerCase() === 'h' && !mod) {
-      e.preventDefault();
-      this.handlers.onSelectTool?.('hand');
-      return;
-    }
-
-    if (e.key.toLowerCase() === 'v' && !mod) {
+    if (e.key.toLowerCase() === 'v' && !mod && !e.altKey) {
       e.preventDefault();
       this.handlers.onSelectTool?.('select');
       return;
     }
 
+    if (e.key.toLowerCase() === 'h' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('hand');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'r' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('rectangle');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'e' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('ellipse');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 't' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('text');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'c' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('connector');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'p' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('draw');
+      return;
+    }
+
+    // --- View Shortcuts ---
+    if ((e.key === '+' || e.key === '=') && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onZoomIn?.();
+      return;
+    }
+
+    if ((e.key === '-' || e.key === '_') && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onZoomOut?.();
+      return;
+    }
+
+    if (e.key === '0' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onResetZoom?.();
+      return;
+    }
+
+    if (e.key === '1' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onFitContent?.();
+      return;
+    }
+
+    if (e.key === '?' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onToggleHelp?.();
+      return;
+    }
+
+    // --- Editing Shortcuts ---
     if (mod && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       if (e.shiftKey) {
@@ -4755,7 +5074,7 @@ class ShortcutsCoordinator {
       return;
     }
 
-    if (mod && (e.key.toLowerCase() === 'y')) {
+    if (mod && e.key.toLowerCase() === 'y') {
       e.preventDefault();
       this.handlers.onRedo?.();
       return;
@@ -4767,7 +5086,7 @@ class ShortcutsCoordinator {
       return;
     }
 
-    if (e.key.toLowerCase() === 'd' && !mod) {
+    if (e.key.toLowerCase() === 'd' && !mod && !e.altKey) {
       this.handlers.onDHold?.(true);
     }
 
@@ -4816,6 +5135,239 @@ class ShortcutsCoordinator {
 
     if (e.key.toLowerCase() === 'd') {
       this.handlers.onDHold?.(false);
+    }
+  }
+}
+
+// --- Module: src/ui/zoom-toolbar.js ---
+/**
+ * Sabura Compact Zoom and Help Toolbar.
+ * 
+ * Positioned in the bottom-left corner with sketch-inspired styling.
+ * Contains: Zoom Out, Current Zoom Percentage, Zoom In, Fit, Help icon.
+ */
+
+class ZoomToolbar {
+  constructor(parentEl, handlers) {
+    this.parentEl = parentEl;
+    this.handlers = handlers || {};
+    this.zoom = 1.0;
+
+    this.toolbarEl = document.createElement('div');
+    this.toolbarEl.className = 'zoom-help-toolbar';
+    this.toolbarEl.id = 'zoom-help-toolbar';
+    this.parentEl.appendChild(this.toolbarEl);
+
+    this.render();
+  }
+
+  setZoom(zoom) {
+    if (typeof zoom === 'number' && !isNaN(zoom)) {
+      this.zoom = zoom;
+      const pctEl = this.toolbarEl.querySelector('#btn-zoom-reset');
+      if (pctEl) {
+        pctEl.textContent = `${Math.round(this.zoom * 100)}%`;
+      }
+    }
+  }
+
+  render() {
+    const pct = `${Math.round(this.zoom * 100)}%`;
+    this.toolbarEl.innerHTML = `
+      <button class="zoom-btn" id="btn-zoom-out" title="Zoom Out (-)" aria-label="Zoom Out">−</button>
+      <button class="zoom-btn zoom-percent" id="btn-zoom-reset" title="Reset Zoom to 100% (0)" aria-label="Reset Zoom to 100%">${pct}</button>
+      <button class="zoom-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">+</button>
+      <button class="zoom-btn zoom-fit" id="btn-zoom-fit" title="Fit All Content (1)" aria-label="Fit to Content">Fit</button>
+      <button class="zoom-btn zoom-help" id="btn-help-toggle" title="Help & Shortcuts (?)" aria-label="Help and Shortcuts">?</button>
+    `;
+
+    this.toolbarEl.querySelector('#btn-zoom-out').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onZoomOut?.();
+    });
+
+    this.toolbarEl.querySelector('#btn-zoom-reset').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onResetZoom?.();
+    });
+
+    this.toolbarEl.querySelector('#btn-zoom-in').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onZoomIn?.();
+    });
+
+    this.toolbarEl.querySelector('#btn-zoom-fit').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onFit?.();
+    });
+
+    this.toolbarEl.querySelector('#btn-help-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onOpenHelp?.();
+    });
+  }
+
+  destroy() {
+    if (this.toolbarEl && this.toolbarEl.parentNode) {
+      this.toolbarEl.parentNode.removeChild(this.toolbarEl);
+    }
+  }
+}
+
+// --- Module: src/ui/help-modal.js ---
+/**
+ * Sabura Integrated Help & Shortcuts Modal.
+ * 
+ * Provides scannable, offline documentation for tools, editing, connectors,
+ * view controls, and platform-specific keyboard shortcuts.
+ */
+
+
+
+class HelpModal {
+  constructor(parentEl) {
+    this.parentEl = parentEl;
+    this.isOpen = false;
+    this.modalEl = null;
+
+    this.initDOM();
+  }
+
+  initDOM() {
+    this.modalEl = document.createElement('div');
+    this.modalEl.className = 'sabura-modal-backdrop';
+    this.modalEl.id = 'help-modal';
+    this.modalEl.setAttribute('role', 'dialog');
+    this.modalEl.setAttribute('aria-modal', 'true');
+    this.modalEl.setAttribute('aria-labelledby', 'help-title');
+    this.modalEl.tabIndex = -1;
+
+    // Close on outside backdrop click
+    this.modalEl.addEventListener('click', (e) => {
+      if (e.target === this.modalEl) {
+        this.close();
+      }
+    });
+
+    this.parentEl.appendChild(this.modalEl);
+  }
+
+  render() {
+    const { modKey, modSymbol } = getPlatform();
+
+    this.modalEl.innerHTML = `
+      <div class="sabura-modal-dialog" role="document">
+        <div class="help-header">
+          <div class="help-title-group">
+            <span class="help-logo">Sabura</span>
+            <h2 id="help-title">Quick Guide & Shortcuts</h2>
+          </div>
+          <button class="help-close-btn" id="btn-close-help" title="Close Help (Escape)" aria-label="Close Help">✕</button>
+        </div>
+
+        <div class="help-body">
+          <!-- Column 1: Tools & Editing -->
+          <div class="help-column">
+            <section class="help-section">
+              <h3 class="help-section-title">Tools & Navigation</h3>
+              <ul class="help-list">
+                <li><span class="help-desc">Select</span> <kbd class="kbd-badge">V</kbd></li>
+                <li><span class="help-desc">Hand / Pan</span> <kbd class="kbd-badge">H</kbd></li>
+                <li><span class="help-desc">Temporary Pan</span> <kbd class="kbd-badge">Hold Space</kbd></li>
+                <li><span class="help-desc">Rectangle</span> <kbd class="kbd-badge">R</kbd></li>
+                <li><span class="help-desc">Ellipse</span> <kbd class="kbd-badge">E</kbd></li>
+                <li><span class="help-desc">Text</span> <kbd class="kbd-badge">T</kbd></li>
+                <li><span class="help-desc">Connector</span> <kbd class="kbd-badge">C</kbd></li>
+                <li><span class="help-desc">Free Drawing</span> <kbd class="kbd-badge">P</kbd></li>
+                <li><span class="help-desc">Contextual Wheel</span> <kbd class="kbd-badge">Q</kbd></li>
+              </ul>
+            </section>
+
+            <section class="help-section">
+              <h3 class="help-section-title">Editing & Modifiers</h3>
+              <ul class="help-list">
+                <li><span class="help-desc">Edit Text</span> <kbd class="kbd-badge">Enter</kbd> / <kbd class="kbd-badge">F2</kbd></li>
+                <li><span class="help-desc">Delete</span> <kbd class="kbd-badge">Delete</kbd> / <kbd class="kbd-badge">Backspace</kbd></li>
+                <li><span class="help-desc">Undo</span> <kbd class="kbd-badge">${modKey}+Z</kbd></li>
+                <li><span class="help-desc">Redo</span> <kbd class="kbd-badge">${modKey}+Shift+Z</kbd></li>
+                <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Duplicate</span> <kbd class="kbd-badge">${modKey}+D</kbd></li>
+                <li><span class="help-desc">Select All</span> <kbd class="kbd-badge">${modKey}+A</kbd></li>
+                <li><span class="help-desc">Nudge (10px)</span> <kbd class="kbd-badge">Arrows</kbd> (<kbd class="kbd-badge">Shift</kbd>)</li>
+                <li><span class="help-desc">Proportional Resize</span> <kbd class="kbd-badge">Shift</kbd> + resize handle</li>
+                <li><span class="help-desc">Centered Resize</span> <kbd class="kbd-badge">Alt / Option</kbd> + handle</li>
+              </ul>
+            </section>
+          </div>
+
+          <!-- Column 2: Connectors & View -->
+          <div class="help-column">
+            <section class="help-section">
+              <h3 class="help-section-title">Connectors</h3>
+              <ul class="help-list">
+                <li><span class="help-desc">Attached Endpoints</span> Drag endpoint onto any shape</li>
+                <li><span class="help-desc">Free Endpoints</span> Drag endpoint onto whitespace</li>
+                <li><span class="help-desc">Movable Points</span> Drag handle along shape boundary</li>
+                <li><span class="help-desc">Gentle Snapping</span> Snaps to side centers and corners</li>
+                <li><span class="help-desc">Auto Reset</span> Wheel &rarr; Points &rarr; Auto All/From/To</li>
+                <li><span class="help-desc">Routing & Arrows</span> Wheel &rarr; Route (Straight/Curved)</li>
+              </ul>
+            </section>
+
+            <section class="help-section">
+              <h3 class="help-section-title">View & Controls</h3>
+              <ul class="help-list">
+                <li><span class="help-desc">Zoom In / Out</span> <kbd class="kbd-badge">+</kbd> / <kbd class="kbd-badge">−</kbd></li>
+                <li><span class="help-desc">Pointer Zoom</span> <kbd class="kbd-badge">${modKey}+Wheel</kbd> / Pinch</li>
+                <li><span class="help-desc">Reset 100%</span> <kbd class="kbd-badge">0</kbd> or click %</li>
+                <li><span class="help-desc">Fit All Content</span> <kbd class="kbd-badge">1</kbd> or click Fit</li>
+                <li><span class="help-desc">Toggle Help</span> <kbd class="kbd-badge">?</kbd></li>
+                <li><span class="help-desc">Cancel / Dismiss</span> <kbd class="kbd-badge">Escape</kbd></li>
+                <li><span class="help-desc">Grid & Snapping</span> Top bar controls</li>
+                <li><span class="help-desc">Presentation</span> Laser pointer mode</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <div class="help-footer">
+          <span class="help-hint">Tip: Press <kbd class="kbd-badge">Escape</kbd> or click anywhere outside to return to the board.</span>
+        </div>
+      </div>
+    `;
+
+    this.modalEl.querySelector('#btn-close-help').addEventListener('click', () => {
+      this.close();
+    });
+  }
+
+  open() {
+    this.render();
+    this.isOpen = true;
+    this.modalEl.classList.add('visible');
+    // Focus close button for accessibility
+    setTimeout(() => {
+      const closeBtn = this.modalEl.querySelector('#btn-close-help');
+      if (closeBtn && typeof closeBtn.focus === 'function') closeBtn.focus();
+    }, 20);
+  }
+
+  close() {
+    this.isOpen = false;
+    this.modalEl.classList.remove('visible');
+  }
+
+  toggle() {
+    if (this.isOpen) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+
+  destroy() {
+    if (this.modalEl && this.modalEl.parentNode) {
+      this.modalEl.parentNode.removeChild(this.modalEl);
     }
   }
 }
@@ -4930,6 +5482,30 @@ class Workspace {
     this.camera.zoom = newZoom;
 
     this.render();
+  }
+
+  zoomIn() {
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1.2);
+  }
+
+  zoomOut() {
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1 / 1.2);
+  }
+
+  resetZoom() {
+    if (this.camera.zoom === 1.0) return;
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1.0 / this.camera.zoom);
+  }
+
+  getViewportCenter() {
+    const rect = this.container.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
   }
 
   fitToContent(padding = 60) {
@@ -5751,6 +6327,7 @@ class Workspace {
     }
 
     this.container.innerHTML = sceneSvg;
+    this.callbacks.onZoomChange?.(this.camera.zoom);
   }
 
   setSnapGrid(enabled) {
@@ -5774,6 +6351,8 @@ class Workspace {
  * Coordinates the functional core, SVG renderer, contextual circular tool wheel,
  * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
  */
+
+
 
 
 
@@ -5854,6 +6433,9 @@ class SaburaApp {
         if (!obj.locked && obj.type !== 'connector') {
           this.textEditor.open(obj, this.workspace.camera);
         }
+      },
+      onZoomChange: (zoom) => {
+        this.zoomToolbar?.setZoom(zoom);
       }
     });
 
@@ -5896,8 +6478,21 @@ class SaburaApp {
       onSaveCopy: () => this.saveCopy()
     });
 
+    // Help Modal
+    this.helpModal = new HelpModal(document.getElementById('app'));
+
+    // Zoom Toolbar
+    this.zoomToolbar = new ZoomToolbar(document.getElementById('app'), {
+      onZoomOut: () => this.workspace.zoomOut(),
+      onZoomIn: () => this.workspace.zoomIn(),
+      onResetZoom: () => this.workspace.resetZoom(),
+      onFit: () => this.workspace.fitToContent(60),
+      onOpenHelp: () => this.helpModal.toggle()
+    });
+
     // Shortcuts coordinator
     this.shortcuts = new ShortcutsCoordinator({
+      isTextEditing: () => Boolean(this.textEditor?.activeEditor),
       onTriggerWheel: (x, y) => {
         if (this.wheel.isOpen) {
           this.wheel.close();
@@ -5970,16 +6565,27 @@ class SaburaApp {
           });
         }
       },
+      onZoomIn: () => this.workspace.zoomIn(),
+      onZoomOut: () => this.workspace.zoomOut(),
+      onResetZoom: () => this.workspace.resetZoom(),
+      onFitContent: () => this.workspace.fitToContent(60),
+      onToggleHelp: () => this.helpModal.toggle(),
       onEscape: () => {
-        if (this.inPresentation) {
+        if (this.helpModal?.isOpen) {
+          this.helpModal.close();
+        } else if (this.inPresentation) {
           this.exitPresentation();
-        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
-          this.workspace.cancelGesture();
         } else if (this.wheel.isOpen) {
           this.wheel.close();
+        } else if (this.textEditor?.activeEditor) {
+          this.textEditor.close(true);
+        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
+          this.workspace.cancelGesture();
         } else if (this.workspace.selectedIds.length > 0) {
           this.workspace.selectedIds = [];
           this.workspace.render();
+        } else if (this.workspace.activeTool !== 'hand') {
+          this.workspace.setTool('hand');
         }
       }
     });
@@ -6291,9 +6897,11 @@ class SaburaApp {
   }
 
   enterPresentation() {
+    this.prePresentationCamera = { ...this.workspace.camera };
     this.textEditor.close(true);
     this.workspace.selectedIds = [];
     this.wheel.close();
+    this.helpModal?.close();
     this.inPresentation = true;
     document.body.classList.add('in-presentation');
 
@@ -6314,6 +6922,11 @@ class SaburaApp {
     this.laser.stop();
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
+    }
+    // Restore previous zoom and viewport
+    if (this.prePresentationCamera) {
+      this.workspace.camera = { ...this.prePresentationCamera };
+      this.prePresentationCamera = null;
     }
     // Return to Hand/Pan mode
     this.workspace.setTool('hand');

@@ -14,6 +14,8 @@ import { ToolWheel } from './ui/wheel.js';
 import { TopBar } from './ui/topbar.js';
 import { TextEditor } from './ui/text-editor.js';
 import { ShortcutsCoordinator } from './ui/shortcuts.js';
+import { ZoomToolbar } from './ui/zoom-toolbar.js';
+import { HelpModal } from './ui/help-modal.js';
 import { LaserPointer } from './renderer/laser.js';
 
 export class SaburaApp {
@@ -84,6 +86,9 @@ export class SaburaApp {
         if (!obj.locked && obj.type !== 'connector') {
           this.textEditor.open(obj, this.workspace.camera);
         }
+      },
+      onZoomChange: (zoom) => {
+        this.zoomToolbar?.setZoom(zoom);
       }
     });
 
@@ -126,8 +131,21 @@ export class SaburaApp {
       onSaveCopy: () => this.saveCopy()
     });
 
+    // Help Modal
+    this.helpModal = new HelpModal(document.getElementById('app'));
+
+    // Zoom Toolbar
+    this.zoomToolbar = new ZoomToolbar(document.getElementById('app'), {
+      onZoomOut: () => this.workspace.zoomOut(),
+      onZoomIn: () => this.workspace.zoomIn(),
+      onResetZoom: () => this.workspace.resetZoom(),
+      onFit: () => this.workspace.fitToContent(60),
+      onOpenHelp: () => this.helpModal.toggle()
+    });
+
     // Shortcuts coordinator
     this.shortcuts = new ShortcutsCoordinator({
+      isTextEditing: () => Boolean(this.textEditor?.activeEditor),
       onTriggerWheel: (x, y) => {
         if (this.wheel.isOpen) {
           this.wheel.close();
@@ -200,16 +218,27 @@ export class SaburaApp {
           });
         }
       },
+      onZoomIn: () => this.workspace.zoomIn(),
+      onZoomOut: () => this.workspace.zoomOut(),
+      onResetZoom: () => this.workspace.resetZoom(),
+      onFitContent: () => this.workspace.fitToContent(60),
+      onToggleHelp: () => this.helpModal.toggle(),
       onEscape: () => {
-        if (this.inPresentation) {
+        if (this.helpModal?.isOpen) {
+          this.helpModal.close();
+        } else if (this.inPresentation) {
           this.exitPresentation();
-        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
-          this.workspace.cancelGesture();
         } else if (this.wheel.isOpen) {
           this.wheel.close();
+        } else if (this.textEditor?.activeEditor) {
+          this.textEditor.close(true);
+        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
+          this.workspace.cancelGesture();
         } else if (this.workspace.selectedIds.length > 0) {
           this.workspace.selectedIds = [];
           this.workspace.render();
+        } else if (this.workspace.activeTool !== 'hand') {
+          this.workspace.setTool('hand');
         }
       }
     });
@@ -521,9 +550,11 @@ export class SaburaApp {
   }
 
   enterPresentation() {
+    this.prePresentationCamera = { ...this.workspace.camera };
     this.textEditor.close(true);
     this.workspace.selectedIds = [];
     this.wheel.close();
+    this.helpModal?.close();
     this.inPresentation = true;
     document.body.classList.add('in-presentation');
 
@@ -544,6 +575,11 @@ export class SaburaApp {
     this.laser.stop();
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
+    }
+    // Restore previous zoom and viewport
+    if (this.prePresentationCamera) {
+      this.workspace.camera = { ...this.prePresentationCamera };
+      this.prePresentationCamera = null;
     }
     // Return to Hand/Pan mode
     this.workspace.setTool('hand');

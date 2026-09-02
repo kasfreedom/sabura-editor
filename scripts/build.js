@@ -29,6 +29,8 @@ const moduleFiles = [
   'src/ui/text-editor.js',
   'src/ui/topbar.js',
   'src/ui/shortcuts.js',
+  'src/ui/zoom-toolbar.js',
+  'src/ui/help-modal.js',
   'src/ui/workspace.js',
   'src/main.js'
 ];

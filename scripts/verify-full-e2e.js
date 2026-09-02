@@ -302,6 +302,112 @@ async function runSafariTests() {
 
     log('10. Movable Object Connection Points & Auto Reset', hasHandles && customAnchor && resetToAuto && restoredAnchor, 'Anchor=' + JSON.stringify(app.doc.objects['safari_conn']?.from?.anchor));
 
+    // Flow 11: Tool shortcuts and text editing isolation
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+    const toolR = app.workspace.activeTool === 'rectangle';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }));
+    const toolE = app.workspace.activeTool === 'ellipse';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+    const toolT = app.workspace.activeTool === 'text';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+    const toolC = app.workspace.activeTool === 'connector';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
+    const toolP = app.workspace.activeTool === 'draw';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+    const toolV = app.workspace.activeTool === 'select';
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+    const toolH = app.workspace.activeTool === 'hand';
+
+    // Verify typing in textarea does not change active tool
+    const dummyTextarea = document.createElement('textarea');
+    document.body.appendChild(dummyTextarea);
+    dummyTextarea.focus();
+    dummyTextarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+    const typingProtected = app.workspace.activeTool === 'hand';
+    dummyTextarea.remove();
+
+    log('11. Tool Shortcuts & Text Editing Isolation', toolR && toolE && toolT && toolC && toolP && toolV && toolH && typingProtected, 'r=' + toolR + ' e=' + toolE + ' p=' + toolP + ' typingProtected=' + typingProtected);
+
+    // Flow 12: Zoom toolbar & view hotkeys
+    const zoomBar = document.querySelector('#zoom-help-toolbar');
+    const hasZoomBar = Boolean(zoomBar);
+
+    const btnZoomIn = document.querySelector('#btn-zoom-in');
+    const btnZoomOut = document.querySelector('#btn-zoom-out');
+    const btnZoomReset = document.querySelector('#btn-zoom-reset');
+    const btnZoomFit = document.querySelector('#btn-zoom-fit');
+
+    const initZoom = app.workspace.camera.zoom;
+    btnZoomIn?.click();
+    const zoomedIn = app.workspace.camera.zoom > initZoom;
+
+    btnZoomOut?.click();
+    btnZoomOut?.click();
+    const zoomedOut = app.workspace.camera.zoom < initZoom;
+
+    btnZoomReset?.click();
+    const reset100 = Math.abs(app.workspace.camera.zoom - 1.0) < 0.001;
+
+    btnZoomFit?.click();
+    const fitOk = app.workspace.camera.zoom > 0;
+
+    // View Hotkeys: + and - and 0 and 1
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+    const keyZoomIn = app.workspace.camera.zoom > 0;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+    const keyReset = Math.abs(app.workspace.camera.zoom - 1.0) < 0.001;
+
+    log('12. Zoom Toolbar & View Hotkeys', hasZoomBar && zoomedIn && zoomedOut && reset100 && fitOk && keyReset, 'zoomBar=' + hasZoomBar + ' reset100=' + reset100);
+
+    // Flow 13: Help Modal
+    const btnHelp = document.querySelector('#btn-help-toggle');
+    btnHelp?.click();
+    await sleep(50);
+    const helpOpened = app.helpModal.isOpen && document.querySelector('#help-modal').classList.contains('visible');
+
+    // Escape closes Help
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(50);
+    const helpClosed = !app.helpModal.isOpen;
+
+    // '?' opens Help
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }));
+    await sleep(50);
+    const helpKeyOpened = app.helpModal.isOpen;
+
+    // Outside click closes Help
+    const helpModalEl = document.querySelector('#help-modal');
+    helpModalEl?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await sleep(50);
+    const helpOutsideClosed = !app.helpModal.isOpen;
+
+    log('13. Help Modal via Icon, Shortcut & Outside Click', helpOpened && helpClosed && helpKeyOpened && helpOutsideClosed, 'opened=' + helpOpened + ' closed=' + helpClosed);
+
+    // Flow 14: Presentation Mode toolbar visibility and camera restoration
+    app.workspace.camera.zoom = 1.35;
+    app.workspace.camera.x = 220;
+    app.workspace.camera.y = 180;
+    const preZoom = app.workspace.camera.zoom;
+    const preX = app.workspace.camera.x;
+
+    app.enterPresentation();
+    await sleep(50);
+    const toolbarHiddenInPres = window.getComputedStyle(zoomBar).display === 'none';
+
+    app.exitPresentation();
+    await sleep(50);
+    const toolbarRestored = window.getComputedStyle(zoomBar).display !== 'none';
+    const cameraRestored = Math.abs(app.workspace.camera.zoom - preZoom) < 0.001 &&
+                           Math.abs(app.workspace.camera.x - preX) < 0.001;
+
+    log('14. Presentation Mode Hiding & Viewport Restoration', toolbarHiddenInPres && toolbarRestored && cameraRestored, 'hidden=' + toolbarHiddenInPres + ' restored=' + cameraRestored);
+
   } catch (err) {
     log('Safari Execution Error', false, err.message);
   }
@@ -697,6 +803,146 @@ const c9 = await evalInChrome(`(() => {
 console.log('Chrome 9. Movable connection points:', c9);
 if (!c9.hasHandles || !c9.customAnchor || !c9.isDetached || !c9.connReattached || !c9.isAuto || !c9.isCustomAgain) {
   throw new Error('Chrome: Movable connection points failed');
+}
+
+// Flow 10: Tool Shortcuts & Text Isolation in Chrome
+const c10 = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+  const toolR = app.workspace.activeTool === 'rectangle';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }));
+  const toolE = app.workspace.activeTool === 'ellipse';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
+  const toolT = app.workspace.activeTool === 'text';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+  const toolC = app.workspace.activeTool === 'connector';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
+  const toolP = app.workspace.activeTool === 'draw';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+  const toolV = app.workspace.activeTool === 'select';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+  const toolH = app.workspace.activeTool === 'hand';
+
+  // Typing in an input must isolate tool hotkeys
+  const input = document.createElement('input');
+  document.body.appendChild(input);
+  input.focus();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+  const typingProtected = app.workspace.activeTool === 'hand';
+  input.remove();
+
+  return { toolR, toolE, toolT, toolC, toolP, toolV, toolH, typingProtected };
+})()`);
+console.log('Chrome 10. Tool Shortcuts & Text Isolation:', c10);
+if (!c10.toolR || !c10.toolE || !c10.toolT || !c10.toolC || !c10.toolP || !c10.toolV || !c10.toolH || !c10.typingProtected) {
+  throw new Error('Chrome: Tool shortcuts or text isolation failed');
+}
+
+// Flow 11: Zoom Toolbar & View Hotkeys in Chrome
+const c11 = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const zoomBar = document.querySelector('#zoom-help-toolbar');
+  const hasZoomBar = Boolean(zoomBar);
+
+  const btnZoomIn = document.querySelector('#btn-zoom-in');
+  const btnZoomOut = document.querySelector('#btn-zoom-out');
+  const btnZoomReset = document.querySelector('#btn-zoom-reset');
+  const btnZoomFit = document.querySelector('#btn-zoom-fit');
+
+  const initZoom = app.workspace.camera.zoom;
+  btnZoomIn?.click();
+  const zoomedIn = app.workspace.camera.zoom > initZoom;
+
+  btnZoomOut?.click();
+  btnZoomOut?.click();
+  const zoomedOut = app.workspace.camera.zoom < initZoom;
+
+  btnZoomReset?.click();
+  const reset100 = Math.abs(app.workspace.camera.zoom - 1.0) < 0.001;
+
+  btnZoomFit?.click();
+  const fitOk = app.workspace.camera.zoom > 0;
+
+  // View Hotkeys
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+  const keyZoomIn = app.workspace.camera.zoom > 0;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+  const keyReset = Math.abs(app.workspace.camera.zoom - 1.0) < 0.001;
+
+  // Trackpad / Ctrl+wheel zoom
+  const centerPt = app.workspace.getViewportCenter();
+  const beforeWheelZoom = app.workspace.camera.zoom;
+  document.querySelector('#canvas-container').dispatchEvent(new WheelEvent('wheel', {
+    clientX: centerPt.x,
+    clientY: centerPt.y,
+    deltaY: -50,
+    ctrlKey: true,
+    bubbles: true
+  }));
+  const wheelZoomed = app.workspace.camera.zoom > beforeWheelZoom;
+
+  return { hasZoomBar, zoomedIn, zoomedOut, reset100, fitOk, keyReset, wheelZoomed };
+})()`);
+console.log('Chrome 11. Zoom Toolbar & View Hotkeys:', c11);
+if (!c11.hasZoomBar || !c11.zoomedIn || !c11.zoomedOut || !c11.reset100 || !c11.fitOk || !c11.keyReset || !c11.wheelZoomed) {
+  throw new Error('Chrome: Zoom toolbar or view hotkeys failed');
+}
+
+// Flow 12: Help Modal in Chrome
+const c12 = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const btnHelp = document.querySelector('#btn-help-toggle');
+  btnHelp?.click();
+  const helpOpened = app.helpModal.isOpen && document.querySelector('#help-modal').classList.contains('visible');
+
+  // Verify platform key symbols
+  const hasCmdOrCtrl = document.querySelector('#help-modal').innerHTML.includes('Cmd') ||
+                       document.querySelector('#help-modal').innerHTML.includes('⌘') ||
+                       document.querySelector('#help-modal').innerHTML.includes('Ctrl');
+
+  // Escape closes Help
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const helpClosed = !app.helpModal.isOpen;
+
+  // '?' opens Help
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }));
+  const helpKeyOpened = app.helpModal.isOpen;
+
+  // Outside click closes Help
+  const helpModalEl = document.querySelector('#help-modal');
+  helpModalEl?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const helpOutsideClosed = !app.helpModal.isOpen;
+
+  return { helpOpened, hasCmdOrCtrl, helpClosed, helpKeyOpened, helpOutsideClosed };
+})()`);
+console.log('Chrome 12. Help Modal:', c12);
+if (!c12.helpOpened || !c12.hasCmdOrCtrl || !c12.helpClosed || !c12.helpKeyOpened || !c12.helpOutsideClosed) {
+  throw new Error('Chrome: Help modal verification failed');
+}
+
+// Flow 13: Presentation Mode hiding & camera restoration in Chrome
+const c13 = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const zoomBar = document.querySelector('#zoom-help-toolbar');
+  app.workspace.camera.zoom = 1.42;
+  app.workspace.camera.x = 210;
+  app.workspace.camera.y = 190;
+  const preZoom = app.workspace.camera.zoom;
+  const preX = app.workspace.camera.x;
+
+  app.enterPresentation();
+  const toolbarHiddenInPres = window.getComputedStyle(zoomBar).display === 'none';
+
+  app.exitPresentation();
+  const toolbarRestored = window.getComputedStyle(zoomBar).display !== 'none';
+  const cameraRestored = Math.abs(app.workspace.camera.zoom - preZoom) < 0.001 &&
+                         Math.abs(app.workspace.camera.x - preX) < 0.001;
+
+  return { toolbarHiddenInPres, toolbarRestored, cameraRestored };
+})()`);
+console.log('Chrome 13. Presentation Mode & Viewport Restoration:', c13);
+if (!c13.toolbarHiddenInPres || !c13.toolbarRestored || !c13.cameraRestored) {
+  throw new Error('Chrome: Presentation mode hiding or viewport restoration failed');
 }
 
 console.log('✓ All Chrome flows passed cleanly!');

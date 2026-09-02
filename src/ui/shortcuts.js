@@ -2,6 +2,17 @@
  * Sabura Keyboard Shortcuts Coordinator.
  */
 
+export function getPlatform() {
+  if (typeof navigator === 'undefined') return { isMac: false, modKey: 'Ctrl', modSymbol: 'Ctrl' };
+  const isMac = (navigator.platform || '').toUpperCase().indexOf('MAC') >= 0 ||
+                (navigator.userAgent || '').toUpperCase().indexOf('MAC') >= 0;
+  return {
+    isMac,
+    modKey: isMac ? 'Cmd' : 'Ctrl',
+    modSymbol: isMac ? '⌘' : 'Ctrl'
+  };
+}
+
 export class ShortcutsCoordinator {
   constructor(handlers) {
     this.handlers = handlers;
@@ -28,38 +39,111 @@ export class ShortcutsCoordinator {
   }
 
   onKeyDown(e) {
-    // Ignore shortcuts when user is typing in input or textarea
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    // Check if user is typing in input, textarea, contenteditable, or in-place text editor
+    const activeEl = document.activeElement;
+    const isTyping = ['INPUT', 'TEXTAREA'].includes(activeEl?.tagName) ||
+      Boolean(activeEl?.isContentEditable) ||
+      Boolean(this.handlers.isTextEditing?.());
+
+    if (isTyping) {
+      // In text editing, Escape commits/cancels the text editor
+      if (e.key === 'Escape') {
+        this.handlers.onEscape?.();
+      }
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const { isMac } = getPlatform();
     const mod = isMac ? e.metaKey : e.ctrlKey;
 
-    if (e.key === ' ' && !this.isSpacePressed) {
+    // Temporary Space-to-Pan
+    if (e.key === ' ' && !this.isSpacePressed && !mod) {
       this.isSpacePressed = true;
       this.handlers.onSpaceHold?.(true);
       return;
     }
 
-    if (e.key.toLowerCase() === 'q' && !mod) {
+    // --- Tools & Navigation ---
+    if (e.key.toLowerCase() === 'q' && !mod && !e.altKey) {
       e.preventDefault();
       this.handlers.onTriggerWheel?.(this.lastPointerPos.x, this.lastPointerPos.y);
       return;
     }
 
-    if (e.key.toLowerCase() === 'h' && !mod) {
-      e.preventDefault();
-      this.handlers.onSelectTool?.('hand');
-      return;
-    }
-
-    if (e.key.toLowerCase() === 'v' && !mod) {
+    if (e.key.toLowerCase() === 'v' && !mod && !e.altKey) {
       e.preventDefault();
       this.handlers.onSelectTool?.('select');
       return;
     }
 
+    if (e.key.toLowerCase() === 'h' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('hand');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'r' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('rectangle');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'e' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('ellipse');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 't' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('text');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'c' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('connector');
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'p' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onSelectTool?.('draw');
+      return;
+    }
+
+    // --- View Shortcuts ---
+    if ((e.key === '+' || e.key === '=') && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onZoomIn?.();
+      return;
+    }
+
+    if ((e.key === '-' || e.key === '_') && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onZoomOut?.();
+      return;
+    }
+
+    if (e.key === '0' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onResetZoom?.();
+      return;
+    }
+
+    if (e.key === '1' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onFitContent?.();
+      return;
+    }
+
+    if (e.key === '?' && !mod && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onToggleHelp?.();
+      return;
+    }
+
+    // --- Editing Shortcuts ---
     if (mod && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       if (e.shiftKey) {
@@ -70,7 +154,7 @@ export class ShortcutsCoordinator {
       return;
     }
 
-    if (mod && (e.key.toLowerCase() === 'y')) {
+    if (mod && e.key.toLowerCase() === 'y') {
       e.preventDefault();
       this.handlers.onRedo?.();
       return;
@@ -82,7 +166,7 @@ export class ShortcutsCoordinator {
       return;
     }
 
-    if (e.key.toLowerCase() === 'd' && !mod) {
+    if (e.key.toLowerCase() === 'd' && !mod && !e.altKey) {
       this.handlers.onDHold?.(true);
     }
 

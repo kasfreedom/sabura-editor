@@ -109,6 +109,30 @@ export class Workspace {
     this.render();
   }
 
+  zoomIn() {
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1.2);
+  }
+
+  zoomOut() {
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1 / 1.2);
+  }
+
+  resetZoom() {
+    if (this.camera.zoom === 1.0) return;
+    const center = this.getViewportCenter();
+    this.zoomAt(center.x, center.y, 1.0 / this.camera.zoom);
+  }
+
+  getViewportCenter() {
+    const rect = this.container.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }
+
   fitToContent(padding = 60) {
     const doc = this.callbacks.getDocument();
     const allObjects = Object.values(doc.objects || {});
@@ -928,6 +952,7 @@ export class Workspace {
     }
 
     this.container.innerHTML = sceneSvg;
+    this.callbacks.onZoomChange?.(this.camera.zoom);
   }
 
   setSnapGrid(enabled) {

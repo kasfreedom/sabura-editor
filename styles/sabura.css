@@ -276,8 +276,8 @@ html, body {
 /* Accessible on-screen Wheel Trigger Button - Excalidraw Sketchy FAB */
 .wheel-trigger-fab {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
+  bottom: 66px;
+  left: 16px;
   padding: 8px 16px;
   background: var(--ui-bg);
   backdrop-filter: blur(8px);
@@ -460,7 +460,8 @@ html, body {
 /* Presentation Mode states */
 body.in-presentation .sabura-topbar,
 body.in-presentation .wheel-trigger-fab,
-body.in-presentation .sabura-wheel {
+body.in-presentation .sabura-wheel,
+body.in-presentation .zoom-help-toolbar {
   display: none !important;
 }
 
@@ -471,3 +472,237 @@ body.in-presentation #laser-canvas {
 body.in-presentation {
   cursor: none;
 }
+
+/* Compact Bottom-Left Zoom & Help Toolbar */
+.zoom-help-toolbar {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  background: var(--ui-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--ui-border);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.12);
+  z-index: 40;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.zoom-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ui-text);
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 8px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.zoom-btn:hover {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+}
+
+.zoom-btn:active {
+  transform: scale(0.94);
+}
+
+.zoom-btn.zoom-percent {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 52px;
+}
+
+.zoom-btn.zoom-fit {
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+.zoom-btn.zoom-help {
+  font-size: 14px;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border: 1px dashed var(--ui-border);
+}
+
+/* Accessible Help & Shortcuts Modal Backdrop */
+.sabura-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.sabura-modal-backdrop.visible {
+  display: flex;
+  opacity: 1;
+}
+
+/* Modal Dialog Window */
+.sabura-modal-dialog {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  border: 2.5px solid var(--ui-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  max-width: 720px;
+  width: 92%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-hand);
+  animation: modalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.help-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.help-logo {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1971c2;
+  border: 1.5px solid #1971c2;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.help-header h2 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.help-close-btn {
+  background: transparent;
+  border: 1.5px solid var(--ui-border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ui-text);
+  transition: background 0.15s ease;
+}
+
+.help-close-btn:hover {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.help-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 18px 24px;
+  overflow-y: auto;
+}
+
+@media (max-width: 620px) {
+  .help-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.help-section {
+  margin-bottom: 18px;
+}
+
+.help-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1971c2;
+  border-bottom: 1px dashed var(--ui-border);
+  padding-bottom: 4px;
+}
+
+[data-ui-theme="dark"] .help-section-title {
+  color: #74c0fc;
+}
+
+.help-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.help-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  gap: 12px;
+}
+
+.help-desc {
+  font-weight: 500;
+}
+
+.kbd-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  color: var(--ui-text);
+  white-space: nowrap;
+}
+
+.help-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--ui-border);
+  font-size: 12px;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface);
+  text-align: center;
+}
+
