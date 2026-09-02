@@ -486,10 +486,16 @@ export function resolveConnectorGeometry(doc, connector) {
     const dist = Math.hypot(dx, dy);
     const normal = dist > 0 ? { x: -dy / dist, y: dx / dist } : { x: 0, y: 0 };
     const curveAmount = Math.min(60, dist * 0.2);
-    const cpX = (start.x + end.x) / 2 + normal.x * curveAmount;
-    const cpY = (start.y + end.y) / 2 + normal.y * curveAmount;
+    const side = connector.curveSide === -1 ? -1 : 1;
+    const cpX = (start.x + end.x) / 2 + normal.x * curveAmount * side;
+    const cpY = (start.y + end.y) / 2 + normal.y * curveAmount * side;
+    const curveMidpoint = {
+      x: 0.25 * start.x + 0.5 * cpX + 0.25 * end.x,
+      y: 0.25 * start.y + 0.5 * cpY + 0.25 * end.y
+    };
     points = [start, { x: cpX, y: cpY }, end];
     pathStr = `M ${start.x} ${start.y} Q ${cpX} ${cpY} ${end.x} ${end.y}`;
+    return { start, end, points, path: pathStr, cp: { x: cpX, y: cpY }, curveMidpoint, side };
   } else {
     // Straight
     points = [start, end];

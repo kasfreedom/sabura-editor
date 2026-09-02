@@ -477,3 +477,55 @@ test('grouped objects move together atomically and restore on undo', () => {
   assert.equal(doc.objects.r2.y, 150);
 });
 
+test('curved connector curveSide flipping, reflection geometry, and atomic undo/redo', () => {
+  let doc = createDefaultDocument();
+  doc.objects = {
+    c1: createDefaultObject('connector', {
+      from: { point: { x: 100, y: 100 } },
+      to: { point: { x: 300, y: 100 } },
+      routing: 'curved'
+    })
+  };
+  doc.order = ['c1'];
+
+  // 1. Default geometry (curveSide defaults to 1)
+  const geomDefault = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomDefault.side, 1);
+  assert.equal(geomDefault.cp.x, 200);
+  assert.ok(geomDefault.cp.y > 100);
+  assert.ok(geomDefault.curveMidpoint.y > 100);
+
+  // 2. Flip curveSide to -1
+  const flipCmd = {
+    type: 'configure_connector',
+    id: 'c1',
+    curveSide: -1
+  };
+  const flipRes = applyCommand(doc, flipCmd);
+  doc = flipRes.doc;
+  assert.equal(doc.objects.c1.curveSide, -1);
+
+  // 3. Flipped geometry reflects across chord
+  const geomFlipped = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomFlipped.side, -1);
+  assert.equal(geomFlipped.cp.x, 200);
+  assert.ok(geomFlipped.cp.y < 100);
+  // Symmetric reflection: chord y is 100
+  assert.equal(Math.round(geomDefault.cp.y - 100), Math.round(100 - geomFlipped.cp.y));
+  assert.equal(Math.round(geomDefault.curveMidpoint.y - 100), Math.round(100 - geomFlipped.curveMidpoint.y));
+
+  // 4. Single-step Undo restores curveSide: 1
+  const undoRes = applyCommand(doc, flipRes.inverseCmd);
+  doc = undoRes.doc;
+  assert.equal(doc.objects.c1.curveSide, 1);
+  const geomUndone = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomUndone.cp.y, geomDefault.cp.y);
+
+  // 5. Redo restores curveSide: -1
+  const redoRes = applyCommand(doc, undoRes.inverseCmd);
+  doc = redoRes.doc;
+  assert.equal(doc.objects.c1.curveSide, -1);
+  const geomRedone = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomRedone.cp.y, geomFlipped.cp.y);
+});
+

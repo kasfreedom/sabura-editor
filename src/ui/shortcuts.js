@@ -170,6 +170,11 @@ export class ShortcutsCoordinator {
       this.handlers.onDHold?.(true);
     }
 
+    if (e.key.toLowerCase() === 'f' && !mod && !e.altKey) {
+      this.handlers.onFlipCurve?.();
+      return;
+    }
+
     if (mod && e.key.toLowerCase() === 'c') {
       e.preventDefault();
       this.handlers.onCopy?.();

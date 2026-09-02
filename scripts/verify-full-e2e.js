@@ -346,6 +346,55 @@ async function runSafariTests() {
       log('22. Real Move Grouped Objects Together with Pointer Drag & 1-Step Undo', isGroupedNow && deselected && clickedGroupSelected && groupMovedTogether && groupUndoOk, 'together=' + groupMovedTogether + ' delta=(' + dxIntro + ',' + dyIntro + ') undo=' + groupUndoOk);
     }
 
+    // Flow 23: Interactive Curved Connector Flipping via Arc Handle & F Key
+    {
+      app.workspace.selectedIds = ['conn_1'];
+      app.workspace.render();
+      await sleep(50);
+
+      const curveHandle = document.querySelector('[data-handle="conn-curve"]');
+      const hasCurveHandle = Boolean(curveHandle);
+
+      const connObj = app.doc.objects['conn_1'];
+      const initialSide = connObj?.curveSide !== undefined ? connObj.curveSide : 1;
+
+      if (curveHandle) {
+        const hRect = curveHandle.getBoundingClientRect();
+        curveHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+        await sleep(50);
+      }
+
+      const flippedClick = app.doc.objects['conn_1']?.curveSide === -1;
+
+      // 1-step undo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoClick = (app.doc.objects['conn_1']?.curveSide !== undefined ? app.doc.objects['conn_1'].curveSide : 1) === initialSide;
+
+      // 1-step redo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+      await sleep(100);
+      const redoClick = app.doc.objects['conn_1']?.curveSide === -1;
+
+      // Reset back to initial
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+
+      // Press F hotkey -> flips curveSide to -1
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', bubbles: true }));
+      await sleep(100);
+      const fKeyFlip = app.doc.objects['conn_1']?.curveSide === -1;
+
+      // Undo F hotkey
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoF = (app.doc.objects['conn_1']?.curveSide !== undefined ? app.doc.objects['conn_1'].curveSide : 1) === 1;
+
+      log('23. Interactive Curved Connector Flipping via Arc Handle & F Key', hasCurveHandle && flippedClick && undoClick && redoClick && fKeyFlip && undoF, 'hasHandle=' + hasCurveHandle + ' clickFlip=' + flippedClick + ' undoClick=' + undoClick + ' redoClick=' + redoClick + ' fKey=' + fKeyFlip + ' undoF=' + undoF);
+    }
+
     // Flow 1: Create a curved connector through the wheel
     const fab = document.querySelector('.wheel-trigger-fab');
     if (!fab) throw new Error('Wheel FAB not found');
@@ -1636,6 +1685,64 @@ const c22 = await evalInChrome(`(async () => {
 console.log('Chrome 22. Real Move Grouped Objects Together with Pointer Drag & 1-Step Undo:', c22);
 if (!c22.isGroupedNow || !c22.deselected || !c22.clickedGroupSelected || !c22.groupMovedTogether || !c22.groupUndoOk) {
   throw new Error('Chrome: Moving grouped objects together failed');
+}
+
+// Flow 23: Interactive Curved Connector Flipping via Arc Handle & F Key
+const c23 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  app.workspace.selectedIds = ['conn_1'];
+  app.workspace.render();
+  await sleep(50);
+
+  const curveHandle = document.querySelector('[data-handle="conn-curve"]');
+  const hasCurveHandle = Boolean(curveHandle);
+
+  const connObj = app.doc.objects['conn_1'];
+  const initialSide = connObj?.curveSide !== undefined ? connObj.curveSide : 1;
+
+  if (curveHandle) {
+    const hRect = curveHandle.getBoundingClientRect();
+    curveHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+    await sleep(50);
+  }
+
+  const flippedClick = app.doc.objects['conn_1']?.curveSide === -1;
+
+  // 1-step undo
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoClick = (app.doc.objects['conn_1']?.curveSide !== undefined ? app.doc.objects['conn_1'].curveSide : 1) === initialSide;
+
+  // 1-step redo
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(100);
+  const redoClick = app.doc.objects['conn_1']?.curveSide === -1;
+
+  // Reset back to initial
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+
+  // Press F hotkey -> flips curveSide to -1
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', bubbles: true }));
+  await sleep(100);
+  const fKeyFlip = app.doc.objects['conn_1']?.curveSide === -1;
+
+  // Undo F hotkey
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoF = (app.doc.objects['conn_1']?.curveSide !== undefined ? app.doc.objects['conn_1'].curveSide : 1) === 1;
+
+  return { hasCurveHandle, flippedClick, undoClick, redoClick, fKeyFlip, undoF };
+})()`);
+console.log('Chrome 23. Interactive Curved Connector Flipping via Arc Handle & F Key:', c23);
+if (!c23.hasCurveHandle || !c23.flippedClick || !c23.undoClick || !c23.redoClick || !c23.fKeyFlip || !c23.undoF) {
+  throw new Error('Chrome: Interactive curved connector flipping failed');
 }
 
 console.log('✓ All Chrome flows passed cleanly!');

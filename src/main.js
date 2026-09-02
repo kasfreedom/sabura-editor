@@ -212,6 +212,15 @@ export class SaburaApp {
       onCopy: () => this.copy(),
       onCut: () => this.cut(),
       onPaste: () => this.paste(),
+      onFlipCurve: () => {
+        for (const id of this.workspace.selectedIds) {
+          const conn = this.doc.objects[id];
+          if (conn && conn.type === 'connector' && conn.routing === 'curved') {
+            const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
+            this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+          }
+        }
+      },
       onGroup: () => {
         if (this.workspace.selectedIds.length > 1) {
           this.dispatchCommand({ type: 'group_objects', ids: this.workspace.selectedIds });
@@ -482,6 +491,14 @@ export class SaburaApp {
       const routing = payload.routing || actionId.replace('conn_route_', '');
       for (const id of selectedIds) {
         this.dispatchCommand({ type: 'configure_connector', id, routing });
+      }
+    } else if (actionId === 'conn_curve_flip') {
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector') {
+          const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
+          this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+        }
       }
     } else if (actionId.startsWith('conn_arrows_')) {
       for (const id of selectedIds) {

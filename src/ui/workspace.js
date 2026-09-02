@@ -32,6 +32,8 @@ export class Workspace {
     this.isCreating = false;
     this.isReconnecting = false;
     this.reconnectSnapIndicator = null;
+    this.isCurvingConnector = false;
+    this.curvingConnectorData = null;
     this.isMarquee = false;
     this.spaceHeld = false;
 
@@ -230,11 +232,20 @@ export class Workspace {
       }
     }
 
+    if (this.isCurvingConnector && this.curvingConnectorData) {
+      const conn = doc.objects[this.curvingConnectorData.connectorId];
+      if (conn) {
+        conn.curveSide = this.curvingConnectorData.initialSide;
+      }
+    }
+
     this.isPanning = false;
     this.isDraggingSelection = false;
     this.isResizing = false;
     this.isCreating = false;
     this.isReconnecting = false;
+    this.isCurvingConnector = false;
+    this.curvingConnectorData = null;
     this.isMarquee = false;
     this.activeHandle = null;
     this.resizeOriginalBounds = null;
@@ -323,7 +334,18 @@ export class Workspace {
     if (handleEl) {
       clearTimeout(this.longPressTimer);
       const handleId = handleEl.getAttribute('data-handle');
-      if (handleId.startsWith('conn-')) {
+      if (handleId === 'conn-curve') {
+        this.isCurvingConnector = true;
+        const doc = this.callbacks.getDocument();
+        const conn = doc.objects[this.selectedIds[0]];
+        this.curvingConnectorData = {
+          connectorId: this.selectedIds[0],
+          initialSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
+          currentSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
+          startPt: { ...worldPt }
+        };
+        return;
+      } else if (handleId.startsWith('conn-')) {
         this.isReconnecting = true;
         this.reconnectingData = {
           connectorId: this.selectedIds[0],
@@ -651,6 +673,30 @@ export class Workspace {
       return;
     }
 
+    if (this.isCurvingConnector && this.curvingConnectorData) {
+      const doc = this.callbacks.getDocument();
+      const conn = doc.objects[this.curvingConnectorData.connectorId];
+      if (conn && conn.routing === 'curved') {
+        const geom = resolveConnectorGeometry(doc, conn);
+        const dx = geom.end.x - geom.start.x;
+        const dy = geom.end.y - geom.start.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+          const normal = { x: -dy / dist, y: dx / dist };
+          const midX = (geom.start.x + geom.end.x) / 2;
+          const midY = (geom.start.y + geom.end.y) / 2;
+          const dot = (worldPt.x - midX) * normal.x + (worldPt.y - midY) * normal.y;
+          const newSide = dot >= 0 ? 1 : -1;
+          if (newSide !== conn.curveSide) {
+            conn.curveSide = newSide;
+            this.curvingConnectorData.currentSide = newSide;
+            this.render();
+          }
+        }
+      }
+      return;
+    }
+
     if (this.isReconnecting && this.reconnectingData) {
       const doc = this.callbacks.getDocument();
       const connId = this.reconnectingData.connectorId;
@@ -829,6 +875,40 @@ export class Workspace {
       this.dragInitialPositions = null;
       this.dragAccumulatedDelta = null;
       this.render();
+    }
+
+    if (this.isCurvingConnector) {
+      this.isCurvingConnector = false;
+      const data = this.curvingConnectorData;
+      this.curvingConnectorData = null;
+
+      if (data) {
+        const doc = this.callbacks.getDocument();
+        const conn = doc.objects[data.connectorId];
+        const worldPt = this.screenToWorld(e.clientX, e.clientY);
+        const dragDist = Math.hypot(worldPt.x - data.startPt.x, worldPt.y - data.startPt.y);
+
+        let finalSide = data.currentSide;
+        // If static click (little or no drag movement), toggle the curve side
+        if (dragDist < 5) {
+          finalSide = data.initialSide === -1 ? 1 : -1;
+        }
+
+        // Restore initial side before applying command so undo history records clean change
+        if (conn) {
+          conn.curveSide = data.initialSide;
+        }
+
+        if (finalSide !== data.initialSide) {
+          this.callbacks.onCommand({
+            type: 'configure_connector',
+            id: data.connectorId,
+            curveSide: finalSide
+          });
+        }
+      }
+      this.render();
+      return;
     }
 
     if (this.isResizing) {

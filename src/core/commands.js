@@ -778,12 +778,14 @@ export function applyCommand(doc, cmd) {
       }
       const prevConfig = {
         routing: conn.routing,
+        curveSide: conn.curveSide !== undefined ? conn.curveSide : 1,
         startArrow: conn.startArrow,
         endArrow: conn.endArrow,
         stacking: conn.stacking
       };
 
       if (cmd.routing !== undefined) conn.routing = cmd.routing;
+      if (cmd.curveSide !== undefined) conn.curveSide = cmd.curveSide;
       if (cmd.startArrow !== undefined) conn.startArrow = cmd.startArrow;
       if (cmd.endArrow !== undefined) conn.endArrow = cmd.endArrow;
       if (cmd.stacking !== undefined) conn.stacking = cmd.stacking;

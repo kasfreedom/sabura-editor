@@ -99,6 +99,7 @@ export class HelpModal {
                 <li><span class="help-desc">Gentle Snapping</span> Snaps to side centers and corners</li>
                 <li><span class="help-desc">Auto Reset</span> Wheel &rarr; Points &rarr; Auto All/From/To</li>
                 <li><span class="help-desc">Routing & Arrows</span> Wheel &rarr; Route (Straight/Curved)</li>
+                <li><span class="help-desc">Flip Curve</span> Drag/click arc handle, or press <kbd class="kbd-badge">F</kbd></li>
               </ul>
             </section>
 

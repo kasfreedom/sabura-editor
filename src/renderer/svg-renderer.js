@@ -409,6 +409,18 @@ export function renderSelectionOverlay(doc, selectedIds) {
       <circle cx="${geom.end.x}" cy="${geom.end.y}" r="14" fill="transparent" />
       <circle cx="${geom.end.x}" cy="${geom.end.y}" r="6.5" fill="${selStroke}" stroke="${handleFill}" stroke-width="2.5" pointer-events="none" />
     </g>`);
+
+    // If curved connector, render arc handle at curve midpoint for interactive flipping/curving
+    if (conn.routing === 'curved' && geom.curveMidpoint) {
+      const mx = geom.curveMidpoint.x;
+      const my = geom.curveMidpoint.y;
+      markup.push(`<g data-handle="conn-curve" style="cursor: pointer;" title="Flip or drag curve">
+        <circle cx="${mx}" cy="${my}" r="14" fill="transparent" />
+        <circle cx="${mx}" cy="${my}" r="5.5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2.5" pointer-events="none" />
+        <circle cx="${mx}" cy="${my}" r="2" fill="${selStroke}" pointer-events="none" />
+      </g>`);
+    }
+
     return markup.join('\n');
   }
 

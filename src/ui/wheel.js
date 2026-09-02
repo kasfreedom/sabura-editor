@@ -265,16 +265,21 @@ export class ToolWheel {
       const curRoughness = conn?.roughness === 0 ? 'clean' : 'sketch';
       const curStrokeStyle = conn?.strokeStyle || 'solid';
 
+      const routeSub = [
+        { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight', isActive: curRouting === 'straight' },
+        { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow', isActive: curRouting === 'elbow' },
+        { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved', isActive: curRouting === 'curved' }
+      ];
+      if (curRouting === 'curved') {
+        routeSub.push({ id: 'conn_curve_flip', label: 'Flip Curve', icon: '⇄' });
+      }
+
       // 1. Route
       items.push({
         id: 'menu_route',
         label: 'Route',
         icon: '↝',
-        subItems: [
-          { id: 'conn_route_straight', label: 'Straight', icon: '—', routing: 'straight', isActive: curRouting === 'straight' },
-          { id: 'conn_route_elbow', label: 'Elbow', icon: '⌐', routing: 'elbow', isActive: curRouting === 'elbow' },
-          { id: 'conn_route_curved', label: 'Curved', icon: '~', routing: 'curved', isActive: curRouting === 'curved' }
-        ]
+        subItems: routeSub
       });
 
       // 2. Arrow ends

@@ -98,6 +98,7 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     baseObject.from = overrides.from || { point: { x: overrides.x !== undefined ? overrides.x : 0, y: overrides.y !== undefined ? overrides.y : 0 } };
     baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
     baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
+    baseObject.curveSide = overrides.curveSide !== undefined ? overrides.curveSide : 1;
     baseObject.startArrow = overrides.startArrow || false;
     baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
   } else {
@@ -190,6 +191,9 @@ export function validateDocument(doc) {
           errors.push(`Connector "${objId}" must have a valid "to" definition`);
         } else if (obj.to.anchor && (typeof obj.to.anchor.x !== 'number' || typeof obj.to.anchor.y !== 'number')) {
           errors.push(`Connector "${objId}" to.anchor must have numeric x and y`);
+        }
+        if (obj.curveSide !== undefined && obj.curveSide !== 1 && obj.curveSide !== -1) {
+          errors.push(`Connector "${objId}" curveSide must be 1 or -1`);
         }
       }
     }
