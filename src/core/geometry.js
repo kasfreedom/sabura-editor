@@ -615,6 +615,35 @@ export function distanceToConnector(point, connector, doc) {
 }
 
 /**
+ * Computes shortest distance from a world point to a path object.
+ * Evaluates line segments or closed polygon perimeter.
+ * 
+ * @param {{ x: number, y: number }} point 
+ * @param {Object} pathObj 
+ * @returns {number}
+ */
+export function distanceToPath(point, pathObj) {
+  if (!pathObj.points || pathObj.points.length === 0) return Infinity;
+  const vertices = pathObj.points.map(pt => Array.isArray(pt)
+    ? { x: pathObj.x + pt[0], y: pathObj.y + pt[1] }
+    : { x: pathObj.x + pt.x, y: pathObj.y + pt.y });
+
+  if (vertices.length === 1) {
+    return Math.hypot(point.x - vertices[0].x, point.y - vertices[0].y);
+  }
+
+  let minDist = Infinity;
+  const count = pathObj.closed ? vertices.length : vertices.length - 1;
+  for (let i = 0; i < count; i++) {
+    const p1 = vertices[i];
+    const p2 = vertices[(i + 1) % vertices.length];
+    const d = distanceToSegment(point.x, point.y, p1.x, p1.y, p2.x, p2.y);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+/**
  * Calculates resize transformations for 8 handles.
  * Supports:
  * - keepAspect (preserves aspect ratio)

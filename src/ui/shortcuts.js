@@ -106,15 +106,18 @@ export class ShortcutsCoordinator {
       return;
     }
 
-    if (e.key.toLowerCase() === 'p' && !mod && !e.altKey) {
+    if ((e.key.toLowerCase() === 'l' || e.key.toLowerCase() === 'p') && !mod && !e.altKey) {
       e.preventDefault();
-      this.handlers.onSelectTool?.('draw');
+      this.handlers.onSelectTool?.('line');
       return;
     }
 
     // --- View Shortcuts ---
     if ((e.key === '+' || e.key === '=') && !mod && !e.altKey) {
       e.preventDefault();
+      if (e.key === '=' && this.handlers.onEqualSides?.()) {
+        return;
+      }
       this.handlers.onZoomIn?.();
       return;
     }
@@ -164,6 +167,13 @@ export class ShortcutsCoordinator {
       e.preventDefault();
       this.handlers.onEditText?.();
       return;
+    }
+
+    if (e.key.toLowerCase() === 's' && !mod && !e.altKey) {
+      if (this.handlers.onEqualSides?.()) {
+        e.preventDefault();
+        return;
+      }
     }
 
     if (e.key.toLowerCase() === 'd' && !mod && !e.altKey) {
@@ -251,6 +261,11 @@ export class ShortcutsCoordinator {
       if (e.key === 'ArrowUp') dy = -step;
       if (e.key === 'ArrowDown') dy = step;
       this.handlers.onNudge?.(dx, dy);
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      this.handlers.onEnter?.();
       return;
     }
 

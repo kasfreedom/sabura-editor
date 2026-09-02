@@ -54,6 +54,17 @@ function bundleModules() {
     // Strip default exports: export default ...
     code = code.replace(/export\s+default\s+/g, '');
 
+    // Strip block comments (JSDoc and multi-line comments)
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // Strip single-line comments (lines starting with //)
+    code = code.split('\n')
+      .filter(line => !line.trim().startsWith('//'))
+      .join('\n');
+
+    // Collapse multiple empty lines
+    code = code.replace(/\n\s*\n\s*\n/g, '\n\n');
+
     codeBlocks.push(`// --- Module: ${relPath} ---\n${code.trim()}`);
   }
 
@@ -125,17 +136,37 @@ function createSampleBoard() {
   return doc;
 }
 
-function build() {
-  console.log('Building Sabura self-contained distribution...');
+const AI_CONTRACT = `  <!-- SABURA AI CONTRACT
+  schemaVersion: "sabura/canvas/v1"
+  The diagram document is canonical JSON stored in the script element below with id="sabura-document".
+  Do not modify any HTML, CSS, or JavaScript outside this script tag seam.
+  Required top-level keys:
+  - schemaVersion: "sabura/canvas/v1"
+  - id: non-empty string board identifier
+  - title: string
+  - theme: { background: string, palette: string[], ... }
+  - objects: map of { [objectId]: object } where key === object.id
+  - order: array of object IDs defining bottom-to-top paint order / z-index
+  - groups: map of { [groupId]: { id: groupId, name: string } }
+  - assets: map of { [assetId]: asset }
+  Supported object types: rectangle, ellipse, diamond, triangle, text, connector, path.
+  Object fields:
+  - Common: id, type, stroke, strokeWidth, strokeStyle ("solid"|"dashed"|"dotted"), fill, opacity (0..1), roughness (>=0), seed (int), locked (bool), groupId (string|null), text, textStyle ({ size, resolvedSize, fontFamily, bold, align, color })
+  - Shape text: stored directly in the object's text and textStyle fields
+  - Grouping: set object.groupId to an existing group in top-level groups record
+  - Shapes & Text: require numeric x, y, width, height
+  - Connectors: require from and to endpoints, each formatted as either:
+    { "id": "target_id" }
+    { "id": "target_id", "anchor": { "x": 0..1, "y": 0..1 } }
+    { "point": { "x": number, "y": number } }
+    routing: "straight" | "elbow" | "curved", curveSide (1 | -1), startArrow (bool), endArrow (bool)
+  - Paths: require points array of [{x,y}, ...] or [[x,y], ...], closed (bool), curveStyle ("sharp"|"curved"), startArrow (bool), endArrow (bool)
+  - Extensions: unknown properties are strictly rejected unless namespaced with "ext:*" (e.g. "ext:myMeta")
+  - Escaping: every literal "<" in JSON text must be encoded as "\\u003C" to prevent HTML parsing breaks
+  -->`;
 
-  const cssPath = path.join(rootDir, 'styles/sabura.css');
-  const css = fs.readFileSync(cssPath, 'utf8');
-
-  const bundledJs = bundleModules();
-  const sampleDoc = createSampleBoard();
-  const serializedDoc = canonicalJson(sampleDoc);
-
-  const htmlContent = `<!DOCTYPE html>
+function generateHtml(css, bundledJs, serializedDoc) {
+  return `<!DOCTYPE html>
 <html lang="en" data-ui-theme="system">
 <head>
   <meta charset="UTF-8">
@@ -148,6 +179,7 @@ ${css}
 <body>
   <div id="app"></div>
 
+${AI_CONTRACT}
   <!-- Sabura Persisted Document Seam -->
   <script type="application/json" id="sabura-document">
 ${serializedDoc}
@@ -159,18 +191,57 @@ ${bundledJs}
   </script>
 </body>
 </html>`;
+}
+
+function build() {
+  console.log('Building Sabura self-contained distribution...');
+
+  const cssPath = path.join(rootDir, 'styles/sabura.css');
+  const css = fs.readFileSync(cssPath, 'utf8');
+
+  const bundledJs = bundleModules();
+  const sampleDoc = createSampleBoard();
+  const serializedSample = canonicalJson(sampleDoc);
+
+  const emptyDoc = createDefaultDocument({ title: 'Untitled Board' });
+  const serializedEmpty = canonicalJson(emptyDoc);
+
+  const sampleHtml = generateHtml(css, bundledJs, serializedSample);
+  const emptyHtml = generateHtml(css, bundledJs, serializedEmpty);
 
   const outputPath = path.join(rootDir, 'sabura.html');
-  fs.writeFileSync(outputPath, htmlContent, 'utf8');
+  fs.writeFileSync(outputPath, sampleHtml, 'utf8');
 
   // Verify built file integrity
-  const extracted = extractDocumentFromHtml(htmlContent);
+  const extracted = extractDocumentFromHtml(sampleHtml);
   if (!extracted.valid) {
     throw new Error(`Build verification failed: ${extracted.errors.join(', ')}`);
   }
 
-  const stat = fs.statSync(outputPath);
-  console.log(`✓ Successfully created sabura.html (${(stat.size / 1024).toFixed(1)} KB)`);
+  // Exact byte measurements
+  const sampleTotalBytes = Buffer.byteLength(sampleHtml, 'utf8');
+  const samplePayloadBytes = Buffer.byteLength(serializedSample, 'utf8');
+  const emptyTotalBytes = Buffer.byteLength(emptyHtml, 'utf8');
+  const emptyPayloadBytes = Buffer.byteLength(serializedEmpty, 'utf8');
+  const aiContractBytes = Buffer.byteLength(AI_CONTRACT, 'utf8');
+  const fixedShellBytes = sampleTotalBytes - samplePayloadBytes - aiContractBytes;
+
+  console.log('\n=== Sabura Artifact Byte Report ===');
+  console.log(`- Fixed Shell:              ${fixedShellBytes.toLocaleString()} bytes`);
+  console.log(`- Embedded AI Contract:     ${aiContractBytes.toLocaleString()} bytes`);
+  console.log(`- Empty Document Payload:   ${emptyPayloadBytes.toLocaleString()} bytes`);
+  console.log(`- Sample Document Payload:  ${samplePayloadBytes.toLocaleString()} bytes`);
+  console.log(`- Empty-Board Total:        ${emptyTotalBytes.toLocaleString()} bytes (${(emptyTotalBytes / 1024).toFixed(1)} KiB)`);
+  console.log(`- Representative Sample:    ${sampleTotalBytes.toLocaleString()} bytes (${(sampleTotalBytes / 1024).toFixed(1)} KiB)`);
+  console.log(`- 300 KiB Budget Target:    307,200 bytes`);
+  console.log(`- Budget Headroom:          ${(307200 - emptyTotalBytes).toLocaleString()} bytes under budget\n`);
+
+  if (emptyTotalBytes > 307200) {
+    throw new Error(`Empty board size (${emptyTotalBytes} bytes) exceeds the 307,200-byte (300 KiB) limit!`);
+  }
+
+  console.log(`✓ Successfully created sabura.html (${(sampleTotalBytes / 1024).toFixed(1)} KiB)`);
 }
 
 build();
+

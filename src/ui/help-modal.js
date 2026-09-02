@@ -61,7 +61,7 @@ export class HelpModal {
                 <li><span class="help-desc">Ellipse</span> <kbd class="kbd-badge">E</kbd></li>
                 <li><span class="help-desc">Text</span> <kbd class="kbd-badge">T</kbd></li>
                 <li><span class="help-desc">Connector</span> <kbd class="kbd-badge">C</kbd></li>
-                <li><span class="help-desc">Free Drawing</span> <kbd class="kbd-badge">P</kbd></li>
+                <li><span class="help-desc">Line / Poly</span> <kbd class="kbd-badge">L</kbd> / <kbd class="kbd-badge">P</kbd></li>
                 <li><span class="help-desc">Contextual Wheel</span> <kbd class="kbd-badge">Q</kbd></li>
               </ul>
             </section>
@@ -78,6 +78,7 @@ export class HelpModal {
                 <li><span class="help-desc">Paste</span> <kbd class="kbd-badge">${modKey}+V</kbd></li>
                 <li><span class="help-desc">Duplicate</span> <kbd class="kbd-badge">${modKey}+D</kbd></li>
                 <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Equal Sides (Square/Circle)</span> <kbd class="kbd-badge">S</kbd> / <kbd class="kbd-badge">=</kbd></li>
                 <li><span class="help-desc">Group / Ungroup</span> <kbd class="kbd-badge">${modKey}+G</kbd> / <kbd class="kbd-badge">Shift</kbd></li>
                 <li><span class="help-desc">Arrange Front/Back</span> <kbd class="kbd-badge">${modKey}+]</kbd> / <kbd class="kbd-badge">[</kbd></li>
                 <li><span class="help-desc">Select All</span> <kbd class="kbd-badge">${modKey}+A</kbd></li>

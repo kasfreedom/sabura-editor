@@ -51,7 +51,7 @@ async function runSafariTests() {
     app.workspace.setTool('select');
     app.workspace.selectedIds = [];
     app.workspace.render();
-    await sleep(50);
+    await sleep(600);
 
     const canvasEl = document.querySelector('#canvas-container');
     const boundsRect = canvasEl.getBoundingClientRect();
@@ -252,9 +252,8 @@ async function runSafariTests() {
     await sleep(30);
     window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 275, clientY: boundsRect.top + 345, button: 0, buttons: 0 }));
     await sleep(30);
-
     document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', code: 'KeyD', bubbles: true }));
-    await sleep(100);
+    await sleep(50);
 
     const ddragIds = [...app.workspace.selectedIds];
     const ddragCreated = ddragIds.length === 2 && ddragIds.every(id => id !== 'shape_idea' && id !== 'shape_core');
@@ -472,6 +471,177 @@ async function runSafariTests() {
       await sleep(50);
 
       log('25. Elbow U-Bypass Loop Dragging & 1-Step Undo', hasElbowHandle && hasBypass && flippedBypass && undoFlipBypass && undoBypassOk, 'handle=' + hasElbowHandle + ' bypass=' + hasBypass + ' flipped=' + flippedBypass + ' undo=' + undoBypassOk);
+    }
+
+    // Flow 26: Point-by-Point Line & Polygon Tool, Smooth Curves, Vertex Dragging & Undo
+    {
+      app.workspace.setTool('line');
+      await sleep(50);
+
+      const cRect = app.workspace.container.getBoundingClientRect();
+      const p1 = { x: cRect.left + 500, y: cRect.top + 300 };
+      const p2 = { x: cRect.left + 650, y: cRect.top + 320 };
+      const p3 = { x: cRect.left + 600, y: cRect.top + 450 };
+
+      // Point 1 click
+      app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p1.x, clientY: p1.y, button: 0 }));
+      await sleep(30);
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p2.x, clientY: p2.y, button: 0 }));
+      await sleep(30);
+
+      // Point 2 click
+      app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p2.x, clientY: p2.y, button: 0 }));
+      await sleep(30);
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p3.x, clientY: p3.y, button: 0 }));
+      await sleep(30);
+
+      // Point 3 click
+      app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p3.x, clientY: p3.y, button: 0 }));
+      await sleep(30);
+
+      // Move close to P1 to trigger close snap
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p1.x + 3, clientY: p1.y + 3, button: 0 }));
+      await sleep(30);
+
+      // Click near P1 to close into polygon
+      app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p1.x + 3, clientY: p1.y + 3, button: 0 }));
+      await sleep(80);
+
+      const createdObj = app.doc.objects[app.workspace.selectedIds[0]];
+      const isClosedPolygon = createdObj && createdObj.type === 'path' && createdObj.closed === true;
+
+      // Toggle to smooth curve via command/wheel
+      app.dispatchCommand({ type: 'set_style', ids: [createdObj.id], updates: { curveStyle: 'curved' } });
+      await sleep(50);
+      const isCurved = app.doc.objects[createdObj.id]?.curveStyle === 'curved';
+
+      // Drag a vertex handle
+      const vHandle = document.querySelector('[data-handle="vertex-1"]');
+      const hasVertexHandle = Boolean(vHandle);
+      if (vHandle) {
+        const vRect = vHandle.getBoundingClientRect();
+        vHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: vRect.left + vRect.width / 2, clientY: vRect.top + vRect.height / 2, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: vRect.left + vRect.width / 2 + 50, clientY: vRect.top + vRect.height / 2 + 30, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: vRect.left + vRect.width / 2 + 50, clientY: vRect.top + vRect.height / 2 + 30, button: 0, buttons: 0 }));
+        await sleep(50);
+      }
+
+      // 1-step undo vertex drag
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+
+      // 1-step undo curve toggle
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoCurvedOk = app.doc.objects[createdObj.id]?.curveStyle === 'sharp';
+
+      // 1-step undo polygon creation
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoCreationOk = app.doc.objects[createdObj.id] === undefined;
+
+      // Clean up workspace
+      app.workspace.setTool('hand');
+      app.workspace.selectedIds = [];
+      app.workspace.render();
+
+      log('26. Point-by-Point Line & Polygon Tool, Smooth Curves, Vertex Dragging & Undo', isClosedPolygon && isCurved && hasVertexHandle && undoCurvedOk && undoCreationOk, 'closed=' + isClosedPolygon + ' curved=' + isCurved + ' vertex=' + hasVertexHandle + ' undoCurved=' + undoCurvedOk + ' undoCreate=' + undoCreationOk);
+
+      // Flow 27: Test None Fill in Wheel on Shape
+      const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+      app.workspace.selectedIds = [testBox.id];
+      app.workspace.render();
+      await sleep(100);
+
+      const shapeCenter = { x: testBox.x + testBox.width / 2, y: testBox.y + testBox.height / 2 };
+      app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+      await sleep(150);
+
+      const fillWedge = document.querySelector('.wheel-wedge[data-item-id="menu_fill"]');
+      if (fillWedge) fillWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const noneWedge = document.querySelector('.wheel-sub-wedge[data-sub-id="fill_none"]');
+      if (noneWedge) noneWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const fillAfterNone = app.doc.objects[testBox.id].fill;
+      const isNoneApplied = fillAfterNone === 'none';
+
+      // 1-step undo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoFillOk = app.doc.objects[testBox.id].fill !== 'none';
+
+      log('27. None Fill via Wheel, Solid Wedge Hit Testing & Undo', isNoneApplied && undoFillOk, 'noneApplied=' + isNoneApplied + ' undoOk=' + undoFillOk);
+
+      // Flow 28: Test Stroke Thickness via Ring 3 in Style
+      app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+      await sleep(150);
+
+      const styleWedge = document.querySelector('.wheel-wedge[data-item-id="menu_style"]');
+      if (styleWedge) styleWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const width4Wedge = document.querySelector('.wheel-sub-wedge[data-sub-id="width_4"]');
+      if (width4Wedge) width4Wedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const isWidth4Applied = app.doc.objects[testBox.id].strokeWidth === 4;
+
+      // 1-step undo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoWidthOk = app.doc.objects[testBox.id].strokeWidth !== 4;
+
+      log('28. Stroke Thickness via Ring 3 in Style & 1-Step Undo', isWidth4Applied && undoWidthOk, 'width4Applied=' + isWidth4Applied + ' undoOk=' + undoWidthOk);
+
+      // Flow 29: Type & Shape Ring 3 Partitioning
+      app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+      await sleep(150);
+
+      const typeWedge = document.querySelector('.wheel-wedge[data-item-id="menu_type"]');
+      if (typeWedge) typeWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const sizeXLWedge = document.querySelector('.wheel-sub-wedge[data-sub-id="type_xl"]');
+      if (sizeXLWedge) sizeXLWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(150);
+
+      const isXLApplied = app.doc.objects[testBox.id].textStyle?.size === 'xl';
+
+      // 1-step undo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoXLOk = app.doc.objects[testBox.id].textStyle?.size !== 'xl';
+
+      log('29. Type & Shape Ring 3 Partitioning & 1-Step Undo', isXLApplied && undoXLOk, 'xlApplied=' + isXLApplied + ' undoOk=' + undoXLOk);
+    }
+
+    // Flow 30: Keyboard Shortcut S for Equal Sides & 1-Step Undo
+    {
+      const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+      const origW = testBox.width;
+      const origH = testBox.height;
+      app.workspace.selectedIds = [testBox.id];
+      app.workspace.render();
+      await sleep(100);
+
+      // Press S to square
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', bubbles: true }));
+      await sleep(100);
+
+      const boxSquared = app.doc.objects[testBox.id].width === Math.max(origW, origH) &&
+                         app.doc.objects[testBox.id].height === Math.max(origW, origH);
+
+      // 1-step undo
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoSquareOk = app.doc.objects[testBox.id].height === origH;
+
+      log('30. Keyboard Shortcut S for Equal Sides & 1-Step Undo', boxSquared && undoSquareOk, 'squared=' + boxSquared + ' undoOk=' + undoSquareOk);
     }
 
     // Flow 1: Create a curved connector through the wheel
@@ -756,8 +926,11 @@ async function runSafariTests() {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
     const toolC = app.workspace.activeTool === 'connector';
 
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+    const toolL = app.workspace.activeTool === 'line';
+
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
-    const toolP = app.workspace.activeTool === 'draw';
+    const toolP = app.workspace.activeTool === 'line';
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
     const toolV = app.workspace.activeTool === 'select';
@@ -773,7 +946,7 @@ async function runSafariTests() {
     const typingProtected = app.workspace.activeTool === 'hand';
     dummyTextarea.remove();
 
-    log('11. Tool Shortcuts & Text Editing Isolation', toolR && toolE && toolT && toolC && toolP && toolV && toolH && typingProtected, 'r=' + toolR + ' e=' + toolE + ' p=' + toolP + ' typingProtected=' + typingProtected);
+    log('11. Tool Shortcuts & Text Editing Isolation', toolR && toolE && toolT && toolC && toolL && toolP && toolV && toolH && typingProtected, 'r=' + toolR + ' e=' + toolE + ' l=' + toolL + ' p=' + toolP + ' typingProtected=' + typingProtected);
 
     // Flow 12: Zoom toolbar & view hotkeys
     const zoomBar = document.querySelector('#zoom-help-toolbar');
@@ -1259,8 +1432,10 @@ const c10 = await evalInChrome(`(() => {
   const toolT = app.workspace.activeTool === 'text';
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
   const toolC = app.workspace.activeTool === 'connector';
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+  const toolL = app.workspace.activeTool === 'line';
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
-  const toolP = app.workspace.activeTool === 'draw';
+  const toolP = app.workspace.activeTool === 'line';
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
   const toolV = app.workspace.activeTool === 'select';
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
@@ -1274,10 +1449,10 @@ const c10 = await evalInChrome(`(() => {
   const typingProtected = app.workspace.activeTool === 'hand';
   input.remove();
 
-  return { toolR, toolE, toolT, toolC, toolP, toolV, toolH, typingProtected };
+  return { toolR, toolE, toolT, toolC, toolL, toolP, toolV, toolH, typingProtected };
 })()`);
 console.log('Chrome 10. Tool Shortcuts & Text Isolation:', c10);
-if (!c10.toolR || !c10.toolE || !c10.toolT || !c10.toolC || !c10.toolP || !c10.toolV || !c10.toolH || !c10.typingProtected) {
+if (!c10.toolR || !c10.toolE || !c10.toolT || !c10.toolC || !c10.toolL || !c10.toolP || !c10.toolV || !c10.toolH || !c10.typingProtected) {
   throw new Error('Chrome: Tool shortcuts or text isolation failed');
 }
 
@@ -1921,6 +2096,228 @@ if (!c25.hasElbowHandle || !c25.hasBypass || !c25.flippedBypass || !c25.undoFlip
   throw new Error('Chrome: Elbow U-Bypass loop dragging failed');
 }
 
+// Flow 26: Point-by-Point Line & Polygon Tool, Smooth Curves, Vertex Dragging & Undo
+const c26 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  app.workspace.setTool('line');
+  await sleep(50);
+
+  const cRect = app.workspace.container.getBoundingClientRect();
+  const p1 = { x: cRect.left + 500, y: cRect.top + 300 };
+  const p2 = { x: cRect.left + 650, y: cRect.top + 320 };
+  const p3 = { x: cRect.left + 600, y: cRect.top + 450 };
+
+  // Point 1 click
+  app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p1.x, clientY: p1.y, button: 0 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p2.x, clientY: p2.y, button: 0 }));
+  await sleep(30);
+
+  // Point 2 click
+  app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p2.x, clientY: p2.y, button: 0 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p3.x, clientY: p3.y, button: 0 }));
+  await sleep(30);
+
+  // Point 3 click
+  app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p3.x, clientY: p3.y, button: 0 }));
+  await sleep(30);
+
+  // Move close to P1 to trigger close snap
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: p1.x + 3, clientY: p1.y + 3, button: 0 }));
+  await sleep(30);
+
+  // Click near P1 to close into polygon
+  app.workspace.container.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: p1.x + 3, clientY: p1.y + 3, button: 0 }));
+  await sleep(80);
+
+  const createdObj = app.doc.objects[app.workspace.selectedIds[0]];
+  const isClosedPolygon = createdObj && createdObj.type === 'path' && createdObj.closed === true;
+
+  // Toggle to smooth curve via command/wheel
+  app.dispatchCommand({ type: 'set_style', ids: [createdObj.id], updates: { curveStyle: 'curved' } });
+  await sleep(50);
+  const isCurved = app.doc.objects[createdObj.id]?.curveStyle === 'curved';
+
+  // Drag a vertex handle
+  const vHandle = document.querySelector('[data-handle="vertex-1"]');
+  const hasVertexHandle = Boolean(vHandle);
+  if (vHandle) {
+    const vRect = vHandle.getBoundingClientRect();
+    vHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: vRect.left + vRect.width / 2, clientY: vRect.top + vRect.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: vRect.left + vRect.width / 2 + 50, clientY: vRect.top + vRect.height / 2 + 30, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: vRect.left + vRect.width / 2 + 50, clientY: vRect.top + vRect.height / 2 + 30, button: 0, buttons: 0 }));
+    await sleep(50);
+  }
+
+  // 1-step undo vertex drag
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+
+  // 1-step undo curve toggle
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoCurvedOk = app.doc.objects[createdObj.id]?.curveStyle === 'sharp';
+
+  // 1-step undo polygon creation
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoCreationOk = app.doc.objects[createdObj.id] === undefined;
+
+  // Clean up workspace
+  app.workspace.setTool('hand');
+  app.workspace.selectedIds = [];
+  app.workspace.render();
+
+  return { isClosedPolygon, isCurved, hasVertexHandle, undoCurvedOk, undoCreationOk };
+})()`);
+console.log('Chrome 26. Point-by-Point Line & Polygon Tool, Smooth Curves, Vertex Dragging & Undo:', c26);
+if (!c26.isClosedPolygon || !c26.isCurved || !c26.hasVertexHandle || !c26.undoCurvedOk || !c26.undoCreationOk) {
+  throw new Error('Chrome: Line & Polygon tool, smooth curves, vertex dragging, or undo failed');
+}
+
+// Flow 27: None Fill via Wheel
+const c27 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+  app.workspace.selectedIds = [testBox.id];
+  app.workspace.render();
+  await new Promise(r => setTimeout(r, 100));
+
+  const shapeCenter = { x: testBox.x + testBox.width / 2, y: testBox.y + testBox.height / 2 };
+  app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+  await new Promise(r => setTimeout(r, 150));
+
+  const fillWedge = document.querySelector('.wheel-wedge[data-item-id="menu_fill"]');
+  if (fillWedge) fillWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const noneWedge = document.querySelector('.wheel-sub-wedge[data-sub-id="fill_none"]');
+  if (noneWedge) noneWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const isNoneApplied = app.doc.objects[testBox.id].fill === 'none';
+
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+  const undoFillOk = app.doc.objects[testBox.id].fill !== 'none';
+
+  return { isNoneApplied, undoFillOk };
+})()`);
+console.log('Chrome 27. None Fill via Wheel, Solid Wedge Hit Testing & Undo:', c27);
+if (!c27.isNoneApplied || !c27.undoFillOk) {
+  throw new Error('Chrome: None Fill via Wheel failed');
+}
+
+// Flow 28: Stroke Thickness via Ring 3 in Style
+const c28 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+  app.workspace.selectedIds = [testBox.id];
+  app.workspace.render();
+  await new Promise(r => setTimeout(r, 100));
+
+  const shapeCenter = { x: testBox.x + testBox.width / 2, y: testBox.y + testBox.height / 2 };
+  app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+  await new Promise(r => setTimeout(r, 150));
+
+  const styleWedge = document.querySelector('.wheel-wedge[data-item-id="menu_style"]');
+  if (styleWedge) styleWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const width4Wedge = document.querySelector('.wheel-sub-wedge[data-sub-id="width_4"]');
+  if (width4Wedge) width4Wedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const isWidth4Applied = app.doc.objects[testBox.id].strokeWidth === 4;
+
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+  const undoWidthOk = app.doc.objects[testBox.id].strokeWidth !== 4;
+
+  return { isWidth4Applied, undoWidthOk };
+})()`);
+console.log('Chrome 28. Stroke Thickness via Ring 3 in Style & 1-Step Undo:', c28);
+if (!c28.isWidth4Applied || !c28.undoWidthOk) {
+  throw new Error('Chrome: Stroke Thickness via Ring 3 failed');
+}
+
+// Flow 29: Type & Shape Ring 3 Partitioning
+const c29 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+  app.workspace.selectedIds = [testBox.id];
+  app.workspace.render();
+  await new Promise(r => setTimeout(r, 100));
+
+  const shapeCenter = { x: testBox.x + testBox.width / 2, y: testBox.y + testBox.height / 2 };
+  app.wheel.open(shapeCenter.x, shapeCenter.y, 'object', testBox, app.doc.theme.palette, 1, [testBox]);
+  await new Promise(r => setTimeout(r, 150));
+
+  const typeWedge = document.querySelector('.wheel-wedge[data-item-id="menu_type"]');
+  if (typeWedge) typeWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const sizeXLWedge = document.querySelector('.wheel-sub-wedge[data-sub-id="type_xl"]');
+  if (sizeXLWedge) sizeXLWedge.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 150));
+
+  const isXLApplied = app.doc.objects[testBox.id].textStyle?.size === 'xl';
+
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+  const undoXLOk = app.doc.objects[testBox.id].textStyle?.size !== 'xl';
+
+  return { isXLApplied, undoXLOk };
+})()`);
+console.log('Chrome 29. Type & Shape Ring 3 Partitioning & 1-Step Undo:', c29);
+if (!c29.isXLApplied || !c29.undoXLOk) {
+  throw new Error('Chrome: Type & Shape Ring 3 Partitioning failed');
+}
+
+// Flow 30: Keyboard Shortcut S for Equal Sides & 1-Step Undo
+const c30 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const testBox = Object.values(app.doc.objects).find(o => o.type === 'rectangle');
+  const origW = testBox.width;
+  const origH = testBox.height;
+  app.workspace.selectedIds = [testBox.id];
+  app.workspace.render();
+  await new Promise(r => setTimeout(r, 100));
+
+  // Press S to square
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+
+  const boxSquared = app.doc.objects[testBox.id].width === Math.max(origW, origH) &&
+                     app.doc.objects[testBox.id].height === Math.max(origW, origH);
+
+  // 1-step undo
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+  const undoSquareOk = app.doc.objects[testBox.id].height === origH;
+
+  return { boxSquared, undoSquareOk };
+})()`);
+console.log('Chrome 30. Keyboard Shortcut S for Equal Sides & 1-Step Undo:', c30);
+if (!c30.boxSquared || !c30.undoSquareOk) {
+  throw new Error('Chrome: Keyboard Shortcut S for Equal Sides failed');
+}
+
 console.log('✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
@@ -1936,7 +2333,7 @@ console.log('Launching Safari with automated test harness...');
 exec(`open -a Safari "http://127.0.0.1:${port}/sabura-safari.html"`);
 
 // Wait for Safari callback report
-const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 60 seconds')), 60000));
+const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 120 seconds')), 120000));
 const safariData = await Promise.race([safariPromise, timeout]);
 
 console.log('\nSafari Test Results:');

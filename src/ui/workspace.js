@@ -5,7 +5,7 @@
 
 import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
 import { createDefaultObject, cloneDocument } from '../core/document.js';
-import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, getClosestBoundaryPoint, getShapeSnapPoints } from '../core/geometry.js';
+import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, distanceToPath, getClosestBoundaryPoint, getShapeSnapPoints } from '../core/geometry.js';
 
 export class Workspace {
   constructor(svgContainer, callbacks) {
@@ -53,6 +53,9 @@ export class Workspace {
   }
 
   setTool(tool) {
+    if (this.isDrawingLine && tool !== 'line') {
+      this.cancelLine();
+    }
     this.activeTool = tool;
     this.updateCursor();
     this.render();
@@ -71,7 +74,7 @@ export class Workspace {
       this.container.style.cursor = this.isPanning ? 'grabbing' : 'grab';
     } else if (this.activeTool === 'select') {
       this.container.style.cursor = 'default';
-    } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'draw'].includes(this.activeTool)) {
+    } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'line'].includes(this.activeTool)) {
       this.container.style.cursor = 'crosshair';
     } else {
       this.container.style.cursor = 'default';
@@ -246,6 +249,20 @@ export class Workspace {
       }
     }
 
+    if (this.isDrawingLine) {
+      this.cancelLine();
+    }
+
+    if (this.isDraggingVertex && this.draggingVertexData) {
+      const doc = this.callbacks.getDocument();
+      const obj = doc.objects[this.draggingVertexData.objId];
+      if (obj) {
+        obj.points = cloneDocument(this.draggingVertexData.initialPoints);
+      }
+      this.isDraggingVertex = false;
+      this.draggingVertexData = null;
+    }
+
     this.isPanning = false;
     this.isDraggingSelection = false;
     this.isResizing = false;
@@ -269,6 +286,72 @@ export class Workspace {
     this.render();
   }
 
+  finishLine(closed = false) {
+    if (!this.isDrawingLine || !this.linePoints || this.linePoints.length < 2) {
+      this.cancelLine();
+      return;
+    }
+
+    const rawPts = [...this.linePoints];
+    if (closed && rawPts.length > 2) {
+      const p0 = rawPts[0];
+      const pLast = rawPts[rawPts.length - 1];
+      if (Math.hypot(pLast.x - p0.x, pLast.y - p0.y) < 16) {
+        rawPts.pop();
+      }
+    }
+
+    if (rawPts.length < 2) {
+      this.cancelLine();
+      return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of rawPts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+
+    const width = Math.max(16, maxX - minX);
+    const height = Math.max(16, maxY - minY);
+    const points = rawPts.map(p => [Math.round(p.x - minX), Math.round(p.y - minY)]);
+
+    const doc = this.callbacks.getDocument();
+    const newObj = createDefaultObject('path', {
+      x: minX,
+      y: minY,
+      width,
+      height,
+      points,
+      closed,
+      curveStyle: 'sharp'
+    }, doc.theme);
+
+    this.isDrawingLine = false;
+    this.linePoints = null;
+    this.lineRubberband = null;
+    this.lineCloseSnapped = false;
+
+    this.callbacks.onCommand({
+      type: 'create_object',
+      object: newObj
+    });
+
+    this.selectedIds = [newObj.id];
+    this.setTool('select');
+    this.render();
+  }
+
+  cancelLine() {
+    this.isDrawingLine = false;
+    this.linePoints = null;
+    this.lineRubberband = null;
+    this.lineCloseSnapped = false;
+    this.render();
+  }
+
   findObjectAt(worldPoint) {
     const doc = this.callbacks.getDocument();
     // Search backwards from topmost (end of doc.order) to bottom
@@ -280,6 +363,13 @@ export class Workspace {
       if (obj.type === 'connector') {
         // Precision hit test: close to the actual line with zoom-adaptive comfortable hit area
         const dist = distanceToConnector(worldPoint, obj, doc);
+        const hitThreshold = Math.max(12, 14 / this.camera.zoom);
+        if (dist <= hitThreshold) {
+          return obj;
+        }
+      } else if (obj.type === 'path' && !obj.closed) {
+        // Precision hit test for open lines
+        const dist = distanceToPath(worldPoint, obj);
         const hitThreshold = Math.max(12, 14 / this.camera.zoom);
         if (dist <= hitThreshold) {
           return obj;
@@ -318,6 +408,10 @@ export class Workspace {
   }
 
   onDblClick(e) {
+    if (this.isDrawingLine && this.linePoints && this.linePoints.length >= 2) {
+      this.finishLine(false);
+      return;
+    }
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     const hitObj = this.findObjectAt(worldPt);
     if (hitObj) {
@@ -378,6 +472,20 @@ export class Workspace {
         this.reconnectOriginalTarget = conn ? JSON.parse(JSON.stringify(conn[this.reconnectingData.endpoint])) : null;
         this.latestReconnectTarget = null;
         this.reconnectSnapIndicator = null;
+      } else if (handleId.startsWith('vertex-')) {
+        const vertexIndex = parseInt(handleId.replace('vertex-', ''), 10);
+        const doc = this.callbacks.getDocument();
+        const obj = doc.objects[this.selectedIds[0]];
+        if (obj && obj.type === 'path' && Array.isArray(obj.points) && !obj.locked) {
+          this.isDraggingVertex = true;
+          this.draggingVertexData = {
+            objId: obj.id,
+            vertexIndex,
+            initialPoints: cloneDocument(obj.points),
+            startPt: { ...worldPt }
+          };
+          return;
+        }
       } else {
         this.isResizing = true;
         this.activeHandle = handleId;
@@ -502,14 +610,41 @@ export class Workspace {
       return;
     }
 
-    // Creation tools
-    if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'draw'].includes(this.activeTool)) {
+    // Line / Polygon tool
+    if (this.activeTool === 'line') {
+      clearTimeout(this.longPressTimer);
+      if (!this.isDrawingLine) {
+        this.isDrawingLine = true;
+        this.linePoints = [{ x: worldPt.x, y: worldPt.y }];
+        this.lineRubberband = { x: worldPt.x, y: worldPt.y };
+        this.lineCloseSnapped = false;
+        this.render();
+      } else {
+        const p0 = this.linePoints[0];
+        const distToStart = Math.hypot(worldPt.x - p0.x, worldPt.y - p0.y);
+        const snapDist = Math.max(14, 16 / this.camera.zoom);
+        if (this.linePoints.length >= 3 && (this.lineCloseSnapped || distToStart <= snapDist)) {
+          this.finishLine(true);
+        } else {
+          const lastPt = this.linePoints[this.linePoints.length - 1];
+          if (Math.hypot(worldPt.x - lastPt.x, worldPt.y - lastPt.y) > 3) {
+            this.linePoints.push({ x: worldPt.x, y: worldPt.y });
+            this.lineRubberband = { x: worldPt.x, y: worldPt.y };
+            this.render();
+          }
+        }
+      }
+      return;
+    }
+
+    // Standard shape & connector creation tools
+    if (['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector'].includes(this.activeTool)) {
       clearTimeout(this.longPressTimer);
       this.isCreating = true;
       this.dragStart = { ...worldPt };
 
       const doc = this.callbacks.getDocument();
-      const type = this.activeTool === 'draw' ? 'path' : this.activeTool;
+      const type = this.activeTool;
 
       this.draftObject = createDefaultObject(type, {
         x: worldPt.x,
@@ -519,9 +654,7 @@ export class Workspace {
         routing: type === 'connector' ? (this.connectorRouting || 'straight') : undefined
       }, doc.theme);
 
-      if (type === 'path') {
-        this.draftObject.points = [[0, 0]];
-      } else if (type === 'connector') {
+      if (type === 'connector') {
         const startHit = this.findObjectAt(worldPt);
         this.draftObject.from = startHit ? { id: startHit.id } : { point: { ...worldPt } };
         this.draftObject.to = { point: { ...worldPt } };
@@ -803,13 +936,36 @@ export class Workspace {
       return;
     }
 
-    if (this.isCreating && this.draftObject) {
-      if (this.draftObject.type === 'path') {
-        const relX = worldPt.x - this.draftObject.x;
-        const relY = worldPt.y - this.draftObject.y;
-        this.draftObject.points.push([relX, relY]);
+    if (this.isDraggingVertex && this.draggingVertexData) {
+      const doc = this.callbacks.getDocument();
+      const obj = doc.objects[this.draggingVertexData.objId];
+      if (obj && obj.type === 'path' && Array.isArray(obj.points)) {
+        const idx = this.draggingVertexData.vertexIndex;
+        const relX = worldPt.x - obj.x;
+        const relY = worldPt.y - obj.y;
+        obj.points[idx] = [Math.round(relX), Math.round(relY)];
         this.render();
-      } else if (this.draftObject.type === 'connector') {
+      }
+      return;
+    }
+
+    if (this.isDrawingLine && this.linePoints && this.linePoints.length > 0) {
+      const p0 = this.linePoints[0];
+      const distToStart = Math.hypot(worldPt.x - p0.x, worldPt.y - p0.y);
+      const snapDist = Math.max(14, 16 / this.camera.zoom);
+      if (this.linePoints.length >= 3 && distToStart <= snapDist) {
+        this.lineCloseSnapped = true;
+        this.lineRubberband = { ...p0 };
+      } else {
+        this.lineCloseSnapped = false;
+        this.lineRubberband = { ...worldPt };
+      }
+      this.render();
+      return;
+    }
+
+    if (this.isCreating && this.draftObject) {
+      if (this.draftObject.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
         this.draftObject.to = hit && hit.id !== this.draftObject.from?.id ? { id: hit.id } : { point: { ...worldPt } };
         this.draftObject.width = worldPt.x - this.draftObject.x;
@@ -987,6 +1143,43 @@ export class Workspace {
       return;
     }
 
+    if (this.isDraggingVertex && this.draggingVertexData) {
+      this.isDraggingVertex = false;
+      const data = this.draggingVertexData;
+      this.draggingVertexData = null;
+
+      const doc = this.callbacks.getDocument();
+      const obj = doc.objects[data.objId];
+      if (obj && obj.type === 'path') {
+        const finalPoints = cloneDocument(obj.points);
+        obj.points = cloneDocument(data.initialPoints);
+
+        const worldPts = finalPoints.map(p => ({
+          x: obj.x + (Array.isArray(p) ? p[0] : p.x),
+          y: obj.y + (Array.isArray(p) ? p[1] : p.y)
+        }));
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of worldPts) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+        const width = Math.max(16, maxX - minX);
+        const height = Math.max(16, maxY - minY);
+        const normalizedPoints = worldPts.map(p => [Math.round(p.x - minX), Math.round(p.y - minY)]);
+
+        this.callbacks.onCommand({
+          type: 'update_path_points',
+          id: data.objId,
+          points: normalizedPoints,
+          bounds: { x: minX, y: minY, width, height }
+        });
+      }
+      this.render();
+      return;
+    }
+
     if (this.isResizing) {
       this.isResizing = false;
       const doc = this.callbacks.getDocument();
@@ -1050,15 +1243,7 @@ export class Workspace {
 
       const worldPt = this.screenToWorld(e.clientX, e.clientY);
 
-      if (obj.type === 'path') {
-        if (obj.points && obj.points.length > 1) {
-          this.callbacks.onCommand({
-            type: 'create_object',
-            object: obj
-          });
-          this.selectedIds = [obj.id];
-        }
-      } else if (obj.type === 'connector') {
+      if (obj.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
         if (hit && (!obj.from.id || hit.id !== obj.from.id)) {
           obj.to = { id: hit.id };
@@ -1172,6 +1357,38 @@ export class Workspace {
       const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
       if (worldCloseIndex !== -1) {
         sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + draftSvg + '\n' + sceneSvg.slice(worldCloseIndex);
+      }
+    }
+
+    // If line drafting is in progress, insert interactive preview before world-layer closing
+    if (this.isDrawingLine && this.linePoints && this.linePoints.length > 0) {
+      const stroke = doc.theme?.defaultStroke || '#1e1e1e';
+      const p0 = this.linePoints[0];
+      let d = `M ${p0.x} ${p0.y}`;
+      for (let i = 1; i < this.linePoints.length; i++) {
+        d += ` L ${this.linePoints[i].x} ${this.linePoints[i].y}`;
+      }
+      if (this.lineRubberband) {
+        d += ` L ${this.lineRubberband.x} ${this.lineRubberband.y}`;
+      }
+      const circles = this.linePoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${stroke}" pointer-events="none" />`).join('\n');
+      let snapMarker = '';
+      if (this.lineCloseSnapped && this.linePoints.length >= 3) {
+        snapMarker = `
+          <circle cx="${p0.x}" cy="${p0.y}" r="9" fill="none" stroke="#2f9e44" stroke-width="2.5" pointer-events="none" />
+          <text x="${p0.x}" y="${p0.y - 12}" font-size="11" font-weight="bold" font-family="-apple-system, sans-serif" fill="#2f9e44" text-anchor="middle" pointer-events="none">Click to close</text>
+        `;
+      }
+      const lineMarkup = `
+        <g class="draft-line-preview" pointer-events="none">
+          <path d="${d}" stroke="${stroke}" stroke-width="2" stroke-dasharray="4,4" fill="none" />
+          ${circles}
+          ${snapMarker}
+        </g>
+      `;
+      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
+      if (worldCloseIndex !== -1) {
+        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + lineMarkup + '\n' + sceneSvg.slice(worldCloseIndex);
       }
     }
 

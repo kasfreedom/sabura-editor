@@ -298,13 +298,11 @@ export function renderObject(doc, obj, isSelected = false) {
       markup.push('</text>');
     }
   } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'path'].includes(obj.type)) {
-    // Shape base background for fill (organic marker wash in sketch mode)
+    // Shape base background for fill (solid fill controlled by object opacity)
     if (fill !== 'none') {
       const fillPath = generateClosedFillPath(obj);
       if (fillPath) {
-        const isWhite = fill.toLowerCase() === '#ffffff' || fill.toLowerCase() === '#fff' || fill.toLowerCase() === '#18181b';
-        const fillOpacity = isSketch ? (isWhite ? 0.95 : 0.42) : 1.0;
-        markup.push(`<path d="${fillPath}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="none" />`);
+        markup.push(`<path d="${fillPath}" fill="${fill}" fill-opacity="1.0" stroke="none" />`);
       }
     }
 
@@ -312,6 +310,32 @@ export function renderObject(doc, obj, isSelected = false) {
     const strokePath = generateSketchPath(obj);
     if (strokePath) {
       markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+    }
+
+    // Arrowheads for open paths (lines)
+    if (obj.type === 'path' && !obj.closed && obj.points && obj.points.length >= 2) {
+      const n = obj.points.length;
+      const pFirst = obj.points[0];
+      const pSecond = obj.points[1];
+      const pLast = obj.points[n - 1];
+      const pPrev = obj.points[n - 2];
+
+      const fX = obj.x + (Array.isArray(pFirst) ? pFirst[0] : pFirst.x);
+      const fY = obj.y + (Array.isArray(pFirst) ? pFirst[1] : pFirst.y);
+      const sX = obj.x + (Array.isArray(pSecond) ? pSecond[0] : pSecond.x);
+      const sY = obj.y + (Array.isArray(pSecond) ? pSecond[1] : pSecond.y);
+
+      const lX = obj.x + (Array.isArray(pLast) ? pLast[0] : pLast.x);
+      const lY = obj.y + (Array.isArray(pLast) ? pLast[1] : pLast.y);
+      const prX = obj.x + (Array.isArray(pPrev) ? pPrev[0] : pPrev.x);
+      const prY = obj.y + (Array.isArray(pPrev) ? pPrev[1] : pPrev.y);
+
+      if (obj.startArrow) {
+        markup.push(renderArrowhead(fX, fY, sX, sY, 14, stroke, strokeWidth, isSketch));
+      }
+      if (obj.endArrow) {
+        markup.push(renderArrowhead(lX, lY, prX, prY, 14, stroke, strokeWidth, isSketch));
+      }
     }
 
     // Text inside shape
@@ -480,6 +504,19 @@ export function renderSelectionOverlay(doc, selectedIds) {
 
     for (const h of handles) {
       markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+    }
+
+    // If single path object, also render interactive vertex handles at each point
+    if (selectedObjects[0].type === 'path' && Array.isArray(selectedObjects[0].points)) {
+      const pObj = selectedObjects[0];
+      pObj.points.forEach((pt, idx) => {
+        const vx = pObj.x + (Array.isArray(pt) ? pt[0] : pt.x);
+        const vy = pObj.y + (Array.isArray(pt) ? pt[1] : pt.y);
+        markup.push(`<g data-handle="vertex-${idx}" style="cursor: move;" title="Drag vertex">
+          <circle cx="${vx}" cy="${vy}" r="14" fill="transparent" />
+          <circle cx="${vx}" cy="${vy}" r="5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2" pointer-events="none" />
+        </g>`);
+      });
     }
   }
 

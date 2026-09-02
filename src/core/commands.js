@@ -27,6 +27,7 @@ export const SUPPORTED_COMMAND_TYPES = new Set([
   'duplicate_objects',
   'set_board_theme',
   'set_title',
+  'update_path_points',
   'batch',
   'noop'
 ]);
@@ -83,6 +84,9 @@ export function validateCommand(cmd) {
     }
   } else if (cmd.type === 'set_board_theme') {
     if (!cmd.theme && !cmd.themeId) errors.push('set_board_theme requires theme or themeId');
+  } else if (cmd.type === 'update_path_points') {
+    if (!cmd.id) errors.push('update_path_points requires an id');
+    if (!Array.isArray(cmd.points)) errors.push('update_path_points requires an array of points');
   } else if (cmd.type === 'batch') {
     if (!Array.isArray(cmd.commands)) {
       errors.push('batch requires an array of commands');
@@ -492,7 +496,11 @@ export function applyCommand(doc, cmd) {
           strokeWidth: obj.strokeWidth,
           strokeStyle: obj.strokeStyle,
           opacity: obj.opacity,
-          roughness: obj.roughness
+          roughness: obj.roughness,
+          curveStyle: obj.curveStyle,
+          closed: obj.closed,
+          startArrow: obj.startArrow,
+          endArrow: obj.endArrow
         };
 
         if (cmd.updates.fill !== undefined) obj.fill = cmd.updates.fill;
@@ -501,6 +509,10 @@ export function applyCommand(doc, cmd) {
         if (cmd.updates.strokeStyle !== undefined) obj.strokeStyle = cmd.updates.strokeStyle;
         if (cmd.updates.opacity !== undefined) obj.opacity = cmd.updates.opacity;
         if (cmd.updates.roughness !== undefined) obj.roughness = cmd.updates.roughness;
+        if (cmd.updates.curveStyle !== undefined) obj.curveStyle = cmd.updates.curveStyle;
+        if (cmd.updates.closed !== undefined) obj.closed = cmd.updates.closed;
+        if (cmd.updates.startArrow !== undefined) obj.startArrow = cmd.updates.startArrow;
+        if (cmd.updates.endArrow !== undefined) obj.endArrow = cmd.updates.endArrow;
 
         // If stroke is changed and textStyle color matches previous stroke, update text color
         if (cmd.updates.stroke !== undefined && obj.textStyle && obj.textStyle.color === prevStyles[id].stroke) {
@@ -527,7 +539,11 @@ export function applyCommand(doc, cmd) {
           strokeWidth: obj.strokeWidth,
           strokeStyle: obj.strokeStyle,
           opacity: obj.opacity,
-          roughness: obj.roughness
+          roughness: obj.roughness,
+          curveStyle: obj.curveStyle,
+          closed: obj.closed,
+          startArrow: obj.startArrow,
+          endArrow: obj.endArrow
         };
         Object.assign(obj, style);
       }
@@ -825,6 +841,31 @@ export function applyCommand(doc, cmd) {
           id: cmd.id,
           from: prevFrom,
           to: prevTo
+        }
+      };
+    }
+
+    case 'update_path_points': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.type !== 'path' || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const prevPoints = cloneDocument(obj.points);
+      const prevBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+      obj.points = cloneDocument(cmd.points);
+      if (cmd.bounds) {
+        obj.x = cmd.bounds.x;
+        obj.y = cmd.bounds.y;
+        obj.width = cmd.bounds.width;
+        obj.height = cmd.bounds.height;
+      }
+      return {
+        doc: newDoc,
+        inverseCmd: {
+          type: 'update_path_points',
+          id: cmd.id,
+          points: prevPoints,
+          bounds: prevBounds
         }
       };
     }

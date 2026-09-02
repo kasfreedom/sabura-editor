@@ -5,7 +5,7 @@
  * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
  */
 
-import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument, cloneDocument, generateId, generateSeed } from './core/document.js';
+import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument, normalizeDocument, cloneDocument, generateId, generateSeed } from './core/document.js';
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
 import { THEME_PRESETS, FONT_SIZES } from './core/types.js';
 import { resolveConnectorGeometry } from './core/geometry.js';
@@ -23,15 +23,23 @@ export class SaburaApp {
   constructor() {
     this.doc = null;
     this.status = 'Clean'; // 'Clean' | 'Changed' | 'Preparing copy' | 'Copy requested' | 'Error'
-    this.interfaceTheme = localStorage.getItem('sabura_ui_theme') || 'system';
+    this.interfaceTheme = (typeof localStorage !== 'undefined' ? localStorage.getItem('sabura_ui_theme') : null) || 'system';
     this.undoStack = [];
     this.redoStack = [];
     this.subscribers = new Set();
     this.inPresentation = false;
     this.clipboard = null;
     this.pasteCount = 0;
+    this.originalHtml = '';
+    this.isCorrupted = false;
+    this.loadErrors = [];
 
     this.initDocument();
+    if (this.isCorrupted) {
+      this.renderCorruptedState();
+      this.exposeApi();
+      return;
+    }
     this.initDOM();
     this.initServices();
     this.applyInterfaceTheme(this.interfaceTheme);
@@ -39,22 +47,61 @@ export class SaburaApp {
   }
 
   initDocument() {
+    this.originalHtml = (typeof document !== 'undefined' && document.documentElement) ? document.documentElement.outerHTML : '';
     const seamScript = document.getElementById('sabura-document');
     if (seamScript && seamScript.textContent.trim()) {
       try {
         const parsed = JSON.parse(seamScript.textContent);
         const val = validateDocument(parsed);
         if (val.valid) {
-          this.doc = parsed;
+          this.doc = normalizeDocument(parsed);
           return;
         }
+        this.isCorrupted = true;
+        this.loadErrors = val.errors;
         console.warn('Embedded document validation failed:', val.errors);
+        return;
       } catch (err) {
+        this.isCorrupted = true;
+        this.loadErrors = [`JSON parse error in document seam: ${err.message}`];
         console.error('Failed to parse embedded document seam:', err);
+        return;
       }
     }
-    // Fallback to initial default board
+    // Fallback to initial default board only if no seam tag or empty
     this.doc = createDefaultDocument({ title: 'Sabura Board' });
+  }
+
+  renderCorruptedState() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const escape = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const errorsList = this.loadErrors.map(e => `<li style="margin-bottom: 4px;">${escape(e)}</li>`).join('');
+    app.innerHTML = `
+      <div class="sabura-corrupted-overlay" style="display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; background: #18181b; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; box-sizing: border-box;">
+        <div class="sabura-error-panel" style="max-width: 680px; width: 100%; background: #27272a; border: 1px solid #ef4444; border-radius: 8px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <h2 style="margin: 0; font-size: 18px; font-weight: 600; color: #fca5a5;">Document Validation Error</h2>
+          </div>
+          <p style="margin: 0 0 14px 0; font-size: 14px; line-height: 1.5; color: #d4d4d8;">
+            The embedded document in this file is corrupted or contains invalid data. To protect the integrity of your board, the canvas visual editor was not initialized and <strong>Save Copy</strong> has been disabled.
+          </p>
+          <div style="max-height: 260px; overflow-y: auto; background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; padding: 14px; margin-bottom: 14px;">
+            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #f87171; line-height: 1.6; font-family: 'SF Mono', Menlo, monospace;">
+              ${errorsList}
+            </ul>
+          </div>
+          <p style="margin: 0; font-size: 12px; color: #a1a1aa;">
+            The original file content has been preserved unmodified in memory.
+          </p>
+        </div>
+      </div>
+    `;
   }
 
   initDOM() {
@@ -229,6 +276,31 @@ export class SaburaApp {
           }
         }
       },
+      onEqualSides: () => {
+        const shapeTypes = ['rectangle', 'ellipse', 'diamond', 'triangle'];
+        const targetIds = this.workspace.selectedIds.filter(id => {
+          const obj = this.doc.objects[id];
+          return obj && shapeTypes.includes(obj.type) && !obj.locked;
+        });
+        if (targetIds.length === 0) return false;
+
+        const commands = targetIds.map(id => {
+          const obj = this.doc.objects[id];
+          const maxDim = Math.max(obj.width, obj.height);
+          return {
+            type: 'resize_object',
+            id,
+            bounds: { x: obj.x, y: obj.y, width: maxDim, height: maxDim }
+          };
+        });
+
+        if (commands.length === 1) {
+          this.dispatchCommand(commands[0]);
+        } else if (commands.length > 1) {
+          this.dispatchCommandBatch(commands);
+        }
+        return true;
+      },
       onGroup: () => {
         if (this.workspace.selectedIds.length > 1) {
           this.dispatchCommand({ type: 'group_objects', ids: this.workspace.selectedIds });
@@ -282,8 +354,15 @@ export class SaburaApp {
       onResetZoom: () => this.workspace.resetZoom(),
       onFitContent: () => this.workspace.fitToContent(60),
       onToggleHelp: () => this.helpModal.toggle(),
+      onEnter: () => {
+        if (this.workspace.isDrawingLine) {
+          this.workspace.finishLine(false);
+        }
+      },
       onEscape: () => {
-        if (this.helpModal?.isOpen) {
+        if (this.workspace.isDrawingLine) {
+          this.workspace.cancelLine();
+        } else if (this.helpModal?.isOpen) {
           this.helpModal.close();
         } else if (this.inPresentation) {
           this.exitPresentation();
@@ -291,7 +370,7 @@ export class SaburaApp {
           this.wheel.close();
         } else if (this.textEditor?.activeEditor) {
           this.textEditor.close(true);
-        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
+        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating || this.workspace.isDraggingVertex) {
           this.workspace.cancelGesture();
         } else if (this.workspace.activeGroupId) {
           const gId = this.workspace.activeGroupId;
@@ -407,7 +486,7 @@ export class SaburaApp {
     // Creation & Mode Tools
     if (actionId === 'tool_select') this.workspace.setTool('select');
     else if (actionId === 'tool_hand') this.workspace.setTool('hand');
-    else if (actionId === 'tool_draw') this.workspace.setTool('draw');
+    else if (actionId === 'tool_line') this.workspace.setTool('line');
     else if (actionId === 'tool_text') this.workspace.setTool('text');
     else if (actionId.startsWith('shape_')) {
       const type = actionId.replace('shape_', '');
@@ -481,6 +560,9 @@ export class SaburaApp {
     } else if (actionId.startsWith('opacity_')) {
       const val = payload.value;
       this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { opacity: val } });
+    } else if (actionId.startsWith('width_')) {
+      const val = payload.value;
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { strokeWidth: val } });
     } else if (actionId.startsWith('type_')) {
       if (payload.size) {
         this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { size: payload.size } });
@@ -578,17 +660,45 @@ export class SaburaApp {
       if (selectedIds.length === 1 && this.doc.objects[selectedIds[0]]?.type === 'connector') {
         this.workspace.render();
       }
+    } else if (actionId === 'path_curve_sharp') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { curveStyle: 'sharp' } });
+    } else if (actionId === 'path_curve_curved') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { curveStyle: 'curved' } });
+    } else if (actionId === 'path_toggle_close') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { closed: true } });
+    } else if (actionId === 'path_toggle_open') {
+      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { closed: false } });
+    } else if (actionId.startsWith('path_arrows_')) {
+      this.dispatchCommand({
+        type: 'set_style',
+        ids: selectedIds,
+        updates: {
+          startArrow: payload.startArrow,
+          endArrow: payload.endArrow
+        }
+      });
     } else if (actionId.startsWith('to_')) {
       if (actionId === 'to_equal_sides') {
-        for (const id of selectedIds) {
+        const shapeTypes = ['rectangle', 'ellipse', 'diamond', 'triangle'];
+        const targetIds = selectedIds.filter(id => {
           const obj = this.doc.objects[id];
-          if (!obj) continue;
-          const maxDim = Math.max(obj.width, obj.height);
-          this.dispatchCommand({
-            type: 'resize_object',
-            id,
-            bounds: { x: obj.x, y: obj.y, width: maxDim, height: maxDim }
+          return obj && shapeTypes.includes(obj.type) && !obj.locked;
+        });
+        if (targetIds.length > 0) {
+          const commands = targetIds.map(id => {
+            const obj = this.doc.objects[id];
+            const maxDim = Math.max(obj.width, obj.height);
+            return {
+              type: 'resize_object',
+              id,
+              bounds: { x: obj.x, y: obj.y, width: maxDim, height: maxDim }
+            };
           });
+          if (commands.length === 1) {
+            this.dispatchCommand(commands[0]);
+          } else {
+            this.dispatchCommandBatch(commands);
+          }
         }
       } else {
         const newType = actionId.replace('to_', '');
@@ -834,6 +944,10 @@ export class SaburaApp {
   }
 
   saveCopy() {
+    if (this.isCorrupted) {
+      console.error('Cannot save copy: document is corrupted or invalid.');
+      return;
+    }
     this.status = 'Preparing copy';
     this.updateUI();
 
@@ -885,8 +999,15 @@ export class SaburaApp {
 
   exposeApi() {
     window.sabura = {
-      getDocument: () => cloneDocument(this.doc),
+      isCorrupted: () => this.isCorrupted,
+      getLoadErrors: () => [...this.loadErrors],
+      getOriginalHtml: () => this.originalHtml,
+      getDocument: () => this.doc ? cloneDocument(this.doc) : null,
+      saveCopy: () => this.saveCopy(),
       applyCommands: (commands) => {
+        if (this.isCorrupted) {
+          return { success: false, errors: ['Document is corrupted and in safe failure mode'] };
+        }
         if (!Array.isArray(commands)) {
           return { success: false, errors: ['Commands must be an array'] };
         }
@@ -919,7 +1040,7 @@ export class SaburaApp {
           return { success: false, errors: [err.message] };
         }
       },
-      exportCanonicalJson: () => canonicalJson(this.doc),
+      exportCanonicalJson: () => this.doc ? canonicalJson(this.doc) : '',
       undo: () => this.undo(),
       redo: () => this.redo(),
       subscribe: (listener) => {

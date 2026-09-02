@@ -97,6 +97,7 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
   coordinator.onKeyDown({ key: 'e', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 't', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'c', preventDefault: () => {} });
+  coordinator.onKeyDown({ key: 'l', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'p', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'v', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'h', preventDefault: () => {} });
@@ -115,7 +116,8 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
     ['tool', 'ellipse'],
     ['tool', 'text'],
     ['tool', 'connector'],
-    ['tool', 'draw'],
+    ['tool', 'line'],
+    ['tool', 'line'],
     ['tool', 'select'],
     ['tool', 'hand'],
     ['wheel'],
@@ -194,3 +196,47 @@ test('HelpModal opens, renders scannable sections, and toggles cleanly', () => {
   modal.toggle();
   assert.equal(modal.isOpen, true);
 });
+
+test('ShortcutsCoordinator triggers onEqualSides on S or =, and protects text editing', () => {
+  let equalTriggered = 0;
+  let zoomInTriggered = 0;
+  let hasShapes = true;
+
+  const coordinator = new ShortcutsCoordinator({
+    onEqualSides: () => {
+      if (hasShapes) {
+        equalTriggered++;
+        return true;
+      }
+      return false;
+    },
+    onZoomIn: () => {
+      zoomInTriggered++;
+    },
+    isTextEditing: () => false
+  });
+
+  // Tapping S when shapes exist
+  coordinator.onKeyDown({ key: 's', preventDefault: () => {} });
+  assert.equal(equalTriggered, 1);
+
+  // Tapping = when shapes exist
+  coordinator.onKeyDown({ key: '=', preventDefault: () => {} });
+  assert.equal(equalTriggered, 2);
+  assert.equal(zoomInTriggered, 0);
+
+  // Tapping = when NO shapes exist -> falls back to Zoom In
+  hasShapes = false;
+  coordinator.onKeyDown({ key: '=', preventDefault: () => {} });
+  assert.equal(equalTriggered, 2);
+  assert.equal(zoomInTriggered, 1);
+
+  // Tapping S when editing text -> strictly ignored
+  const typingCoordinator = new ShortcutsCoordinator({
+    onEqualSides: () => { equalTriggered++; return true; },
+    isTextEditing: () => true
+  });
+  typingCoordinator.onKeyDown({ key: 's', preventDefault: () => {} });
+  assert.equal(equalTriggered, 2, 'Typing S inside text editor must not trigger equal sides');
+});
+

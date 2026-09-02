@@ -66,5 +66,8 @@ test('canonicalJson produces deterministic sorted-key JSON and escapes script ta
   const textWithScript = { text: 'Hello </script><script>alert(1)</script>' };
   const jsonStr = canonicalJson(textWithScript);
   assert.ok(!jsonStr.includes('</script>'));
-  assert.ok(jsonStr.includes('<\\/script>'));
+  assert.ok(!jsonStr.includes('<'));
+  assert.ok(jsonStr.includes('\\u003C/script>'));
+  assert.equal(JSON.parse(jsonStr).text, textWithScript.text);
 });
+

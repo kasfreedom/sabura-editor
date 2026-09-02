@@ -116,6 +116,74 @@ export function sketchPolygon(vertices, prng, roughness = 1, closePath = true) {
 }
 
 /**
+ * Generates smooth Catmull-Rom spline SVG path for a list of vertices.
+ * Converts to cubic Bezier curves with continuous C1 tangency.
+ * 
+ * @param {Array<[number, number]>} vertices 
+ * @param {() => number} prng 
+ * @param {number} roughness 
+ * @param {boolean} closePath 
+ * @returns {string}
+ */
+export function sketchSpline(vertices, prng, roughness = 1, closePath = false) {
+  if (!vertices || vertices.length < 2) return '';
+  if (vertices.length === 2) {
+    return sketchPolygon(vertices, prng, roughness, false);
+  }
+
+  const n = vertices.length;
+  const segments = [];
+  const count = closePath ? n : n - 1;
+
+  for (let i = 0; i < count; i++) {
+    const p0 = vertices[(i - 1 + n) % n];
+    const p1 = vertices[i];
+    const p2 = vertices[(i + 1) % n];
+    const p3 = vertices[(i + 2) % n];
+
+    const prev = (!closePath && i === 0) ? [2 * p1[0] - p2[0], 2 * p1[1] - p2[1]] : p0;
+    const next = (!closePath && i === count - 1) ? [2 * p2[0] - p1[0], 2 * p2[1] - p1[1]] : p3;
+
+    const cp1x = p1[0] + (p2[0] - prev[0]) / 6;
+    const cp1y = p1[1] + (p2[1] - prev[1]) / 6;
+    const cp2x = p2[0] - (next[0] - p1[0]) / 6;
+    const cp2y = p2[1] - (next[1] - p1[1]) / 6;
+
+    segments.push({ p1, cp1: [cp1x, cp1y], cp2: [cp2x, cp2y], p2 });
+  }
+
+  if (segments.length === 0) return '';
+
+  if (roughness <= 0) {
+    let d = `M ${segments[0].p1[0].toFixed(1)} ${segments[0].p1[1].toFixed(1)}`;
+    for (const seg of segments) {
+      d += ` C ${seg.cp1[0].toFixed(1)} ${seg.cp1[1].toFixed(1)}, ${seg.cp2[0].toFixed(1)} ${seg.cp2[1].toFixed(1)}, ${seg.p2[0].toFixed(1)} ${seg.p2[1].toFixed(1)}`;
+    }
+    if (closePath) d += ' Z';
+    return d;
+  }
+
+  const paths = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const wobble = Math.min(2, roughness * 1.5);
+    const passWobble = () => (pass === 0 ? 0 : randomRange(prng, -wobble, wobble));
+    let d = `M ${(segments[0].p1[0] + passWobble()).toFixed(1)} ${(segments[0].p1[1] + passWobble()).toFixed(1)}`;
+    for (const seg of segments) {
+      const c1x = (seg.cp1[0] + passWobble()).toFixed(1);
+      const c1y = (seg.cp1[1] + passWobble()).toFixed(1);
+      const c2x = (seg.cp2[0] + passWobble()).toFixed(1);
+      const c2y = (seg.cp2[1] + passWobble()).toFixed(1);
+      const p2x = (seg.p2[0] + (pass === 1 && !closePath ? passWobble() : 0)).toFixed(1);
+      const p2y = (seg.p2[1] + (pass === 1 && !closePath ? passWobble() : 0)).toFixed(1);
+      d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2x} ${p2y}`;
+    }
+    if (closePath) d += ' Z';
+    paths.push(d);
+  }
+  return paths.join(' ');
+}
+
+/**
  * Generates sketchy SVG path for an ellipse.
  * Uses two slightly offset 4-point cubic bezier loops.
  * 
@@ -220,8 +288,12 @@ export function generateSketchPath(obj) {
 
     case 'path': {
       if (!obj.points || obj.points.length === 0) return '';
-      const vertices = obj.points.map(([px, py]) => [obj.x + px, obj.y + py]);
-      return sketchPolygon(vertices, prng, roughness, false);
+      const vertices = obj.points.map(pt => Array.isArray(pt) ? [obj.x + pt[0], obj.y + pt[1]] : [obj.x + pt.x, obj.y + pt.y]);
+      const isClosed = Boolean(obj.closed);
+      if (obj.curveStyle === 'curved') {
+        return sketchSpline(vertices, prng, roughness, isClosed);
+      }
+      return sketchPolygon(vertices, prng, roughness, isClosed);
     }
 
     default:
@@ -280,7 +352,10 @@ export function generateClosedFillPath(obj) {
     ];
   } else if (obj.type === 'path') {
     if (!obj.points || obj.points.length < 3) return '';
-    vertices = obj.points.map(([px, py]) => [obj.x + px, obj.y + py]);
+    vertices = obj.points.map(pt => Array.isArray(pt) ? [obj.x + pt[0], obj.y + pt[1]] : [obj.x + pt.x, obj.y + pt.y]);
+    if (obj.curveStyle === 'curved') {
+      return sketchSpline(vertices, prng, 0, true);
+    }
   } else {
     return '';
   }

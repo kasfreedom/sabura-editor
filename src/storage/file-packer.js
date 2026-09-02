@@ -2,10 +2,10 @@
  * Sabura File Packer: Single-file HTML packaging, canonical seam embedding, and save/download coordinator.
  */
 
-import { canonicalJson, validateDocument } from '../core/document.js';
+import { canonicalJson, validateDocument, normalizeDocument } from '../core/document.js';
 
 export const DOCUMENT_SEAM_ID = 'sabura-document';
-export const DOCUMENT_SCRIPT_REGEX = new RegExp('<script\\s+type=["\']application\\/json["\']\\s+id=["\']sabura-document["\']>([\\s\\S]*?)<\\/' + 'script>', 'i');
+export const DOCUMENT_SCRIPT_REGEX = /<script\s+(?:type=["']application\/json["']\s+id=["']sabura-document["']|id=["']sabura-document["']\s+type=["']application\/json["'])>([\s\S]*?)<\/script>/i;
 
 /**
  * Extracts and validates the embedded Sabura document from an HTML string.
@@ -34,7 +34,7 @@ export function extractDocumentFromHtml(htmlContent) {
     return { valid: false, document: parsed, errors: validation.errors };
   }
 
-  return { valid: true, document: parsed, errors: [] };
+  return { valid: true, document: normalizeDocument(parsed), errors: [] };
 }
 
 /**
