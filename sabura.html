@@ -489,7 +489,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_3jo1gnhg2s1",
+  "id": "board_hqnhuwcm970",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -505,7 +505,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 1165554774,
+      "seed": 1985818760,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -536,7 +536,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1664693695,
+      "seed": 1975378973,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -563,7 +563,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 806783853,
+      "seed": 993908362,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -590,7 +590,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1828088434,
+      "seed": 886968892,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -3806,12 +3806,18 @@ function renderSelectionOverlay(doc, selectedIds) {
 
   const markup = [];
 
-  // If single connector selected, render endpoint handles
+  // If single connector selected, render endpoint handles with comfortable hit targets
   if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
     const conn = selectedObjects[0];
     const geom = resolveConnectorGeometry(doc, conn);
-    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
-    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    markup.push(`<g data-handle="conn-from" style="cursor: grab;">
+      <circle cx="${geom.start.x}" cy="${geom.start.y}" r="14" fill="transparent" />
+      <circle cx="${geom.start.x}" cy="${geom.start.y}" r="6.5" fill="${selStroke}" stroke="${handleFill}" stroke-width="2.5" pointer-events="none" />
+    </g>`);
+    markup.push(`<g data-handle="conn-to" style="cursor: grab;">
+      <circle cx="${geom.end.x}" cy="${geom.end.y}" r="14" fill="transparent" />
+      <circle cx="${geom.end.x}" cy="${geom.end.y}" r="6.5" fill="${selStroke}" stroke="${handleFill}" stroke-width="2.5" pointer-events="none" />
+    </g>`);
     return markup.join('\n');
   }
 
@@ -5052,9 +5058,10 @@ class Workspace {
       if (!obj) continue;
 
       if (obj.type === 'connector') {
-        // Precision hit test: close to the actual line rather than broad bounding box
+        // Precision hit test: close to the actual line with zoom-adaptive comfortable hit area
         const dist = distanceToConnector(worldPoint, obj, doc);
-        if (dist <= 10) {
+        const hitThreshold = Math.max(12, 14 / this.camera.zoom);
+        if (dist <= hitThreshold) {
           return obj;
         }
       } else {
@@ -5134,6 +5141,7 @@ class Workspace {
     // 2. If middle click or space held or activeTool === 'hand', start panning
     if (e.button === 1 || this.spaceHeld || this.activeTool === 'hand') {
       this.isPanning = true;
+      this.panMoved = false;
       this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
       this.updateCursor();
       return;
@@ -5241,6 +5249,9 @@ class Workspace {
     }
 
     if (this.isPanning) {
+      if (this.pointerStartScreen && Math.hypot(e.clientX - this.pointerStartScreen.x, e.clientY - this.pointerStartScreen.y) > 3) {
+        this.panMoved = true;
+      }
       this.camera.x = e.clientX - this.dragStart.x;
       this.camera.y = e.clientY - this.dragStart.y;
       this.render();
@@ -5478,6 +5489,19 @@ class Workspace {
     if (this.isPanning) {
       this.isPanning = false;
       this.updateCursor();
+      if (!this.panMoved && e.button === 0 && !this.spaceHeld) {
+        // Static click while in Hand mode: if clicked an object, select it and switch to select tool!
+        const hit = this.findObjectAt(worldPt);
+        if (hit) {
+          this.selectedIds = [hit.id];
+          this.setTool('select');
+          this.render();
+          return;
+        } else if (this.selectedIds.length > 0) {
+          this.selectedIds = [];
+          this.render();
+        }
+      }
     }
 
     if (this.isMarquee) {

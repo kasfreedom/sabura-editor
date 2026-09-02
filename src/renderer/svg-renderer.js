@@ -397,12 +397,18 @@ export function renderSelectionOverlay(doc, selectedIds) {
 
   const markup = [];
 
-  // If single connector selected, render endpoint handles
+  // If single connector selected, render endpoint handles with comfortable hit targets
   if (selectedObjects.length === 1 && selectedObjects[0].type === 'connector') {
     const conn = selectedObjects[0];
     const geom = resolveConnectorGeometry(doc, conn);
-    markup.push(`<circle cx="${geom.start.x}" cy="${geom.start.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-from" style="cursor: grab;" />`);
-    markup.push(`<circle cx="${geom.end.x}" cy="${geom.end.y}" r="6" fill="${selStroke}" stroke="${handleFill}" stroke-width="2" data-handle="conn-to" style="cursor: grab;" />`);
+    markup.push(`<g data-handle="conn-from" style="cursor: grab;">
+      <circle cx="${geom.start.x}" cy="${geom.start.y}" r="14" fill="transparent" />
+      <circle cx="${geom.start.x}" cy="${geom.start.y}" r="6.5" fill="${selStroke}" stroke="${handleFill}" stroke-width="2.5" pointer-events="none" />
+    </g>`);
+    markup.push(`<g data-handle="conn-to" style="cursor: grab;">
+      <circle cx="${geom.end.x}" cy="${geom.end.y}" r="14" fill="transparent" />
+      <circle cx="${geom.end.x}" cy="${geom.end.y}" r="6.5" fill="${selStroke}" stroke="${handleFill}" stroke-width="2.5" pointer-events="none" />
+    </g>`);
     return markup.join('\n');
   }
 

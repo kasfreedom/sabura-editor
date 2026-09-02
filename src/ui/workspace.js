@@ -235,9 +235,10 @@ export class Workspace {
       if (!obj) continue;
 
       if (obj.type === 'connector') {
-        // Precision hit test: close to the actual line rather than broad bounding box
+        // Precision hit test: close to the actual line with zoom-adaptive comfortable hit area
         const dist = distanceToConnector(worldPoint, obj, doc);
-        if (dist <= 10) {
+        const hitThreshold = Math.max(12, 14 / this.camera.zoom);
+        if (dist <= hitThreshold) {
           return obj;
         }
       } else {
@@ -317,6 +318,7 @@ export class Workspace {
     // 2. If middle click or space held or activeTool === 'hand', start panning
     if (e.button === 1 || this.spaceHeld || this.activeTool === 'hand') {
       this.isPanning = true;
+      this.panMoved = false;
       this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
       this.updateCursor();
       return;
@@ -424,6 +426,9 @@ export class Workspace {
     }
 
     if (this.isPanning) {
+      if (this.pointerStartScreen && Math.hypot(e.clientX - this.pointerStartScreen.x, e.clientY - this.pointerStartScreen.y) > 3) {
+        this.panMoved = true;
+      }
       this.camera.x = e.clientX - this.dragStart.x;
       this.camera.y = e.clientY - this.dragStart.y;
       this.render();
@@ -661,6 +666,19 @@ export class Workspace {
     if (this.isPanning) {
       this.isPanning = false;
       this.updateCursor();
+      if (!this.panMoved && e.button === 0 && !this.spaceHeld) {
+        // Static click while in Hand mode: if clicked an object, select it and switch to select tool!
+        const hit = this.findObjectAt(worldPt);
+        if (hit) {
+          this.selectedIds = [hit.id];
+          this.setTool('select');
+          this.render();
+          return;
+        } else if (this.selectedIds.length > 0) {
+          this.selectedIds = [];
+          this.render();
+        }
+      }
     }
 
     if (this.isMarquee) {
