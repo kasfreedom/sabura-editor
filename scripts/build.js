@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { minify } from 'terser';
 import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument } from '../src/core/document.js';
 import { extractDocumentFromHtml } from '../src/storage/file-packer.js';
 
@@ -35,199 +36,18 @@ const moduleFiles = [
   'src/main.js'
 ];
 
-export function stripCommentsSyntaxSafe(code) {
-  let out = '';
-  let i = 0;
-  const len = code.length;
-  const stack = [];
-
-  while (i < len) {
-    const ch = code[i];
-    const next = i + 1 < len ? code[i + 1] : '';
-
-    // Single-quoted string
-    if (ch === '\'') {
-      out += ch;
-      i++;
-      while (i < len) {
-        const c = code[i];
-        out += c;
-        if (c === '\\') {
-          i++;
-          if (i < len) { out += code[i]; i++; }
-        } else if (c === '\'') {
-          i++;
-          break;
-        } else {
-          i++;
-        }
-      }
-      continue;
+export async function minifyJs(code) {
+  const result = await minify(code, {
+    compress: false,
+    mangle: false,
+    format: {
+      comments: false
     }
-
-    // Double-quoted string
-    if (ch === '"') {
-      out += ch;
-      i++;
-      while (i < len) {
-        const c = code[i];
-        out += c;
-        if (c === '\\') {
-          i++;
-          if (i < len) { out += code[i]; i++; }
-        } else if (c === '"') {
-          i++;
-          break;
-        } else {
-          i++;
-        }
-      }
-      continue;
-    }
-
-    // Template literal
-    if (ch === '`') {
-      out += ch;
-      i++;
-      while (i < len) {
-        const c = code[i];
-        if (c === '\\') {
-          out += c;
-          i++;
-          if (i < len) { out += code[i]; i++; }
-        } else if (c === '$' && i + 1 < len && code[i + 1] === '{') {
-          out += '${';
-          i += 2;
-          stack.push('TEMPLATE_EXPR');
-          break;
-        } else if (c === '`') {
-          out += c;
-          i++;
-          break;
-        } else {
-          out += c;
-          i++;
-        }
-      }
-      continue;
-    }
-
-    // Handle braces for template expressions
-    if (ch === '{') {
-      out += ch;
-      i++;
-      if (stack.length > 0) {
-        stack.push('BLOCK');
-      }
-      continue;
-    }
-
-    if (ch === '}') {
-      out += ch;
-      i++;
-      if (stack.length > 0) {
-        const top = stack.pop();
-        if (top === 'TEMPLATE_EXPR') {
-          while (i < len) {
-            const c = code[i];
-            if (c === '\\') {
-              out += c;
-              i++;
-              if (i < len) { out += code[i]; i++; }
-            } else if (c === '$' && i + 1 < len && code[i + 1] === '{') {
-              out += '${';
-              i += 2;
-              stack.push('TEMPLATE_EXPR');
-              break;
-            } else if (c === '`') {
-              out += c;
-              i++;
-              break;
-            } else {
-              out += c;
-              i++;
-            }
-          }
-        }
-      }
-      continue;
-    }
-
-    // Line comment
-    if (ch === '/' && next === '/') {
-      i += 2;
-      while (i < len && code[i] !== '\n' && code[i] !== '\r') {
-        i++;
-      }
-      continue;
-    }
-
-    // Block comment
-    if (ch === '/' && next === '*') {
-      i += 2;
-      while (i < len) {
-        if (code[i] === '*' && i + 1 < len && code[i + 1] === '/') {
-          i += 2;
-          break;
-        }
-        if (code[i] === '\n') {
-          out += '\n'; // Preserve newline
-        }
-        i++;
-      }
-      continue;
-    }
-
-    // Regex literal vs division
-    if (ch === '/') {
-      let prevIdx = out.length - 1;
-      while (prevIdx >= 0 && /\s/.test(out[prevIdx])) {
-        prevIdx--;
-      }
-      const prevChar = prevIdx >= 0 ? out[prevIdx] : '';
-      const isRegex = prevIdx < 0 || /[=(:;,\[!&|?~^{]/.test(prevChar) || (
-        /\b(return|case|delete|throw|typeof|instanceof|void|yield)$/.test(out.slice(Math.max(0, prevIdx - 15), prevIdx + 1))
-      );
-
-      if (isRegex) {
-        out += ch;
-        i++;
-        let inCharClass = false;
-        while (i < len) {
-          const c = code[i];
-          out += c;
-          if (c === '\\') {
-            i++;
-            if (i < len) { out += code[i]; i++; }
-          } else if (c === '[') {
-            inCharClass = true;
-            i++;
-          } else if (c === ']' && inCharClass) {
-            inCharClass = false;
-            i++;
-          } else if (c === '/' && !inCharClass) {
-            i++;
-            while (i < len && /[a-z]/i.test(code[i])) {
-              out += code[i];
-              i++;
-            }
-            break;
-          } else {
-            i++;
-          }
-        }
-        continue;
-      }
-    }
-
-    out += ch;
-    i++;
-  }
-
-  return out;
+  });
+  return result.code;
 }
 
-function bundleModules() {
+export async function bundleModules() {
   const codeBlocks = [];
 
   for (const relPath of moduleFiles) {
@@ -246,19 +66,15 @@ function bundleModules() {
     // Strip default exports: export default ...
     code = code.replace(/export\s+default\s+/g, '');
 
-    // Syntax-safe comment stripping
-    code = stripCommentsSyntaxSafe(code);
-
-    // Strip trailing whitespace on lines
-    code = code.replace(/[ \t]+$/gm, '');
-
-    // Collapse excessive empty lines
-    code = code.replace(/\n\s*\n\s*\n/g, '\n\n');
-
     codeBlocks.push(`// --- Module: ${relPath} ---\n${code.trim()}`);
   }
 
-  return `(() => {\n'use strict';\n\n${codeBlocks.join('\n\n')}\n})();`;
+  const rawBundle = `(() => {\n'use strict';\n\n${codeBlocks.join('\n\n')}\n})();`;
+
+  // Syntax-safe minification using proven AST-based parser (Terser).
+  // Retains original variable and function names (mangle: false) and no compression (compress: false)
+  // while safely stripping comments and unnecessary whitespace without regex or heuristic pitfalls.
+  return await minifyJs(rawBundle);
 }
 
 function createSampleBoard() {
@@ -383,13 +199,13 @@ ${bundledJs}
 </html>`;
 }
 
-function build() {
+async function build() {
   console.log('Building Sabura self-contained distribution...');
 
   const cssPath = path.join(rootDir, 'styles/sabura.css');
   const css = fs.readFileSync(cssPath, 'utf8');
 
-  const bundledJs = bundleModules();
+  const bundledJs = await bundleModules();
   const sampleDoc = createSampleBoard();
   const serializedSample = canonicalJson(sampleDoc);
 
@@ -408,8 +224,8 @@ function build() {
     throw new Error(`Build verification failed: ${extracted.errors.join(', ')}`);
   }
 
-  // Exact byte measurements
-  const sampleTotalBytes = Buffer.byteLength(sampleHtml, 'utf8');
+  // Exact byte measurements directly from output file
+  const sampleTotalBytes = fs.statSync(outputPath).size;
   const samplePayloadBytes = Buffer.byteLength(serializedSample, 'utf8');
   const emptyTotalBytes = Buffer.byteLength(emptyHtml, 'utf8');
   const emptyPayloadBytes = Buffer.byteLength(serializedEmpty, 'utf8');
@@ -434,5 +250,8 @@ function build() {
 }
 
 if (process.argv[1] && import.meta.filename && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-  build();
+  build().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
 }

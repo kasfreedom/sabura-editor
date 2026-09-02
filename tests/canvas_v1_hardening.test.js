@@ -13,7 +13,7 @@ import {
   extractDocumentFromHtml
 } from '../src/storage/file-packer.js';
 import { CANVAS_SCHEMA_VERSION, OBJECT_TYPES } from '../src/core/types.js';
-import { stripCommentsSyntaxSafe } from '../scripts/build.js';
+import { minifyJs } from '../scripts/build.js';
 
 test('valid empty and representative documents pass strict validation', () => {
   const emptyDoc = createDefaultDocument({ title: 'Empty Canvas' });
@@ -552,30 +552,133 @@ test('missing or empty sabura-document seam is treated as corrupted', () => {
   assert.ok(extractWhitespace.errors.some(e => e.includes('seam is empty')));
 });
 
-test('stripCommentsSyntaxSafe preserves strings, template literals, and regexes while removing comments', () => {
-  const inputCode = `
-    const str1 = 'http://example.com/*not a comment*/';
-    const str2 = "also // not a comment /* still not */";
-    const tpl = \`value: \${ 1 + /* strip me */ 2 } // preserved in template\`;
-    const regex = /http:\\/\\/[a-z]+\\/\\*test/i; // end line comment
-    /*
-      multi-line
-      block comment
-    */
-    function test() {
-      return regex.test(str1); // check
-    }
+test('minifyJs parses and preserves tricky regex and division ambiguities safely', async () => {
+  const sampleCode = `
+    const enabled = true;
+    const value = '/*';
+    let matched = false;
+    if (enabled) /[/*]/.test(value); matched = /[/*]/.test(value);
+    const quotient = 100 / 2 / 5;
+    const regexInGroup = (/test\\/pattern/i).test('test/pattern');
+    const complexExpr = (10 / 2) + (20 / 4);
+    /* Multi-line comment to strip */
+    // Line comment to strip
+    globalThis.__testMinifyResult = { matched, quotient, regexInGroup, complexExpr };
   `;
 
-  const stripped = stripCommentsSyntaxSafe(inputCode);
+  const minified = await minifyJs(sampleCode);
 
-  assert.ok(stripped.includes('http://example.com/*not a comment*/'));
-  assert.ok(stripped.includes('also // not a comment /* still not */'));
-  assert.ok(stripped.includes('value: ${ 1 +  2 } // preserved in template'));
-  assert.ok(stripped.includes('/http:\\/\\/[a-z]+\\/\\*test/i'));
-  assert.ok(!stripped.includes('multi-line'));
-  assert.ok(!stripped.includes('block comment'));
-  assert.ok(!stripped.includes('strip me'));
-  assert.ok(!stripped.includes('end line comment'));
-  assert.ok(!stripped.includes('check'));
+  assert.ok(!minified.includes('Multi-line comment to strip'));
+  assert.ok(!minified.includes('Line comment to strip'));
+
+  // The generated bundle must parse and execute correctly
+  delete globalThis.__testMinifyResult;
+  const fn = new Function(minified);
+  fn();
+  assert.equal(globalThis.__testMinifyResult.matched, true);
+  assert.equal(globalThis.__testMinifyResult.quotient, 10);
+  assert.equal(globalThis.__testMinifyResult.regexInGroup, true);
+  assert.equal(globalThis.__testMinifyResult.complexExpr, 10);
+  delete globalThis.__testMinifyResult;
+});
+
+test('table-driven validation rejects invalid theme and object values rather than silently normalizing', () => {
+  // Theme invalid cases
+  const themeCases = [
+    { name: 'theme.id is non-string', patch: { id: 123 }, expectError: 'Theme id must be a string' },
+    { name: 'theme.name is non-string', patch: { name: false }, expectError: 'Theme name must be a string' },
+    { name: 'theme.background is empty string', patch: { background: '' }, expectError: 'Theme background must be a valid non-empty string' },
+    { name: 'theme.background is non-string', patch: { background: 42 }, expectError: 'Theme background must be a valid non-empty string' },
+    { name: 'theme.gridColor is non-string', patch: { gridColor: true }, expectError: 'Theme gridColor must be a string' },
+    { name: 'theme.defaultFill is non-string', patch: { defaultFill: 123 }, expectError: 'Theme defaultFill must be a string' },
+    { name: 'theme.defaultStroke is non-string', patch: { defaultStroke: null }, expectError: 'Theme defaultStroke must be a string' },
+    { name: 'theme.palette is empty array', patch: { palette: [] }, expectError: 'Theme palette must be a non-empty array' },
+    { name: 'theme.palette contains non-string', patch: { palette: ['#000', 123] }, expectError: 'Theme palette entry at index 1 must be a string' },
+    { name: 'theme.defaultStrokeWidth is negative', patch: { defaultStrokeWidth: -1 }, expectError: 'Theme defaultStrokeWidth must be a finite non-negative number' },
+    { name: 'theme.defaultStrokeWidth is NaN', patch: { defaultStrokeWidth: NaN }, expectError: 'Theme defaultStrokeWidth must be a finite non-negative number' },
+    { name: 'theme.defaultOpacity is negative', patch: { defaultOpacity: -0.1 }, expectError: 'Theme defaultOpacity must be a finite number from 0 through 1' },
+    { name: 'theme.defaultOpacity is > 1', patch: { defaultOpacity: 1.5 }, expectError: 'Theme defaultOpacity must be a finite number from 0 through 1' },
+    { name: 'theme.defaultRoughness is negative', patch: { defaultRoughness: -1 }, expectError: 'Theme defaultRoughness must be a finite non-negative number' },
+    { name: 'theme.defaultFontSize is invalid', patch: { defaultFontSize: 'huge' }, expectError: 'Theme defaultFontSize must be one of: s, m, l, xl' },
+    { name: 'theme.defaultFontFamily is invalid', patch: { defaultFontFamily: 'comic' }, expectError: 'Theme defaultFontFamily must be one of: sans, serif, mono, hand' }
+  ];
+
+  for (const tc of themeCases) {
+    const doc = createDefaultDocument();
+    Object.assign(doc.theme, tc.patch);
+    const val = validateDocument(doc);
+    assert.equal(val.valid, false, `Expected failure for ${tc.name}`);
+    assert.ok(val.errors.some(e => e.includes(tc.expectError)), `Expected error containing "${tc.expectError}" for ${tc.name}, got: ${val.errors.join('; ')}`);
+  }
+
+  // Object invalid cases
+  const objectCases = [
+    { name: 'fill is non-string', patch: { fill: 123 }, expectError: 'fill must be a string' },
+    { name: 'seed is zero', patch: { seed: 0 }, expectError: 'seed must be a positive integer' },
+    { name: 'seed is negative', patch: { seed: -10 }, expectError: 'seed must be a positive integer' },
+    { name: 'seed is non-integer float', patch: { seed: 3.14 }, expectError: 'seed must be a positive integer' },
+    { name: 'seed is non-number', patch: { seed: 'seed1' }, expectError: 'seed must be a positive integer' },
+    { name: 'seed exceeds 31-bit integer range', patch: { seed: 2147483648 }, expectError: 'seed must be a positive integer' },
+    { name: 'autoWidth is non-boolean', patch: { autoWidth: 'true' }, expectError: 'autoWidth must be a boolean' },
+    { name: 'autoHeight is non-boolean', patch: { autoHeight: 1 }, expectError: 'autoHeight must be a boolean' },
+    { name: 'stroke is non-string', patch: { stroke: 123 }, expectError: 'stroke must be a string' },
+    { name: 'strokeWidth is negative', patch: { strokeWidth: -1 }, expectError: 'strokeWidth must be a finite non-negative number' },
+    { name: 'strokeStyle is invalid', patch: { strokeStyle: 'wavy' }, expectError: 'strokeStyle must be one of' },
+    { name: 'opacity is < 0', patch: { opacity: -0.2 }, expectError: 'opacity must be a finite number between 0 and 1' },
+    { name: 'opacity is > 1', patch: { opacity: 1.2 }, expectError: 'opacity must be a finite number between 0 and 1' },
+    { name: 'roughness is negative', patch: { roughness: -0.5 }, expectError: 'roughness must be a finite non-negative number' },
+    { name: 'rotation is NaN', patch: { rotation: NaN }, expectError: 'rotation must be a finite number' },
+    { name: 'locked is non-boolean', patch: { locked: 'false' }, expectError: 'locked must be a boolean' },
+    { name: 'text is non-string', patch: { text: 123 }, expectError: 'text must be a string' },
+    { name: 'textStyle.size is invalid', patch: { textStyle: { size: 'huge' } }, expectError: 'textStyle.size must be one of' },
+    { name: 'textStyle.resolvedSize is 0', patch: { textStyle: { resolvedSize: 0 } }, expectError: 'textStyle.resolvedSize must be a finite positive number' },
+    { name: 'textStyle.bold is non-boolean', patch: { textStyle: { bold: 'yes' } }, expectError: 'textStyle.bold must be a boolean' },
+    { name: 'textStyle.align is invalid', patch: { textStyle: { align: 'justify' } }, expectError: 'textStyle.align must be one of' },
+    { name: 'textStyle.fontFamily is invalid', patch: { textStyle: { fontFamily: 'arial' } }, expectError: 'textStyle.fontFamily must be one of' },
+    { name: 'textStyle.color is non-string', patch: { textStyle: { color: 42 } }, expectError: 'textStyle.color must be a string' },
+    { name: 'x is NaN', patch: { x: NaN }, expectError: 'coordinates (x, y) must be finite numbers' },
+    { name: 'width is 0', patch: { width: 0 }, expectError: 'width must be a finite positive number' },
+    { name: 'height is negative', patch: { height: -20 }, expectError: 'height must be a finite positive number' }
+  ];
+
+  for (const tc of objectCases) {
+    const doc = createDefaultDocument();
+    const rect = createDefaultObject('rectangle', { id: 'test_obj' });
+    Object.assign(rect, tc.patch);
+    doc.objects = { test_obj: rect };
+    doc.order = ['test_obj'];
+    const val = validateDocument(doc);
+    assert.equal(val.valid, false, `Expected failure for ${tc.name}`);
+    assert.ok(val.errors.some(e => e.includes(tc.expectError)), `Expected error containing "${tc.expectError}" for ${tc.name}, got: ${val.errors.join('; ')}`);
+  }
+
+  // Path point unknown unnamespaced properties
+  const docPath = createDefaultDocument();
+  const pathObj = createDefaultObject('path', {
+    id: 'p1',
+    points: [
+      { x: 0, y: 0 },
+      { x: 10, y: 10, invalidPointProp: 'bad' }
+    ]
+  });
+  docPath.objects = { p1: pathObj };
+  docPath.order = ['p1'];
+  const valPath = validateDocument(docPath);
+  assert.equal(valPath.valid, false);
+  assert.ok(valPath.errors.some(e => e.includes('Unknown unnamespaced property "invalidPointProp"')));
+
+  // Connector endpoints invalid range/value
+  const docConn = createDefaultDocument();
+  const r1 = createDefaultObject('rectangle', { id: 'r1' });
+  const r2 = createDefaultObject('rectangle', { id: 'r2' });
+  const connBadAnchor = createDefaultObject('connector', {
+    id: 'c1',
+    from: { id: 'r1', anchor: { x: -0.1, y: 0.5 } },
+    to: { id: 'r2' }
+  });
+  docConn.objects = { r1, r2, c1: connBadAnchor };
+  docConn.order = ['r1', 'r2', 'c1'];
+  const valConn = validateDocument(docConn);
+  assert.equal(valConn.valid, false);
+  assert.ok(valConn.errors.some(e => e.includes('must be normalized between 0 and 1')));
 });

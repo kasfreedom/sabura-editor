@@ -21,6 +21,14 @@ async function runSafariTests() {
       body: JSON.stringify({ msg: 'WINDOW ERROR: ' + msg + ' at line ' + line })
     }).catch(() => {});
   };
+  window.onunhandledrejection = (e) => {
+    const reason = e.reason?.stack || e.reason?.message || String(e.reason);
+    fetch('/api/safari-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg: 'UNHANDLED REJECTION: ' + reason })
+    }).catch(() => {});
+  };
   const log = (step, ok, detail) => {
     results.push({ step, ok, detail });
     fetch('/api/safari-log', {
@@ -641,6 +649,10 @@ async function runSafariTests() {
       await sleep(100);
       const undoSquareOk = app.doc.objects[testBox.id].height === origH;
 
+      app.workspace.selectedIds = [];
+      app.workspace.render();
+      await sleep(50);
+
       log('30. Keyboard Shortcut S for Equal Sides & 1-Step Undo', boxSquared && undoSquareOk, 'squared=' + boxSquared + ' undoOk=' + undoSquareOk);
     }
 
@@ -662,11 +674,11 @@ async function runSafariTests() {
     const svgEl = document.querySelector('#canvas-container');
     const rect = svgEl.getBoundingClientRect();
 
-    svgEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 280, clientY: 280, buttons: 1 }));
+    svgEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rect.left + 280, clientY: rect.top + 280, buttons: 1 }));
     await sleep(50);
-    svgEl.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 480, clientY: 420, buttons: 1 }));
+    svgEl.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 480, clientY: rect.top + 420, buttons: 1 }));
     await sleep(50);
-    svgEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 480, clientY: 420, buttons: 0 }));
+    svgEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: rect.left + 480, clientY: rect.top + 420, buttons: 0 }));
     await sleep(150);
 
     const connId = app.workspace.selectedIds[0];
@@ -734,11 +746,11 @@ async function runSafariTests() {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }));
     app.workspace.isDHeld = true;
 
-    svgEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 180, clientY: 180, button: 0, buttons: 1 }));
+    svgEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rect.left + 180, clientY: rect.top + 180, button: 0, buttons: 1 }));
     await sleep(50);
-    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 330, clientY: 280, button: 0, buttons: 1 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 330, clientY: rect.top + 280, button: 0, buttons: 1 }));
     await sleep(50);
-    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 330, clientY: 280, button: 0, buttons: 0 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: rect.left + 330, clientY: rect.top + 280, button: 0, buttons: 0 }));
     await sleep(100);
 
     document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', code: 'KeyD', bubbles: true }));

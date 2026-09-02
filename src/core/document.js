@@ -239,6 +239,7 @@ export const CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS = new Set(['id', 'anchor']);
 export const CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS = new Set(['point']);
 export const CONNECTOR_ANCHOR_ALLOWED_FIELDS = new Set(['x', 'y']);
 export const CONNECTOR_POINT_ALLOWED_FIELDS = new Set(['x', 'y']);
+export const PATH_POINT_ALLOWED_FIELDS = new Set(['x', 'y']);
 
 export const DEFAULT_THEME_VALUES = Object.freeze({
   defaultStroke: '#1e1e1e',
@@ -332,8 +333,8 @@ function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
         errors.push(`Connector "${objId}" ${endpointName}.anchor must be an object`);
       } else {
         checkUnknownProperties(endpoint.anchor, CONNECTOR_ANCHOR_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.anchor`, errors);
-        if (typeof endpoint.anchor.x !== 'number' || isNaN(endpoint.anchor.x) || typeof endpoint.anchor.y !== 'number' || isNaN(endpoint.anchor.y)) {
-          errors.push(`Connector "${objId}" ${endpointName}.anchor must have numeric x and y`);
+        if (typeof endpoint.anchor.x !== 'number' || !Number.isFinite(endpoint.anchor.x) || typeof endpoint.anchor.y !== 'number' || !Number.isFinite(endpoint.anchor.y)) {
+          errors.push(`Connector "${objId}" ${endpointName}.anchor must have finite numeric x and y`);
         } else if (endpoint.anchor.x < 0 || endpoint.anchor.x > 1 || endpoint.anchor.y < 0 || endpoint.anchor.y > 1) {
           errors.push(`Connector "${objId}" ${endpointName}.anchor (x, y) must be normalized between 0 and 1`);
         }
@@ -346,8 +347,8 @@ function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
       errors.push(`Connector "${objId}" ${endpointName}.point must be an object with { x, y }`);
     } else {
       checkUnknownProperties(pt, CONNECTOR_POINT_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}.point`, errors);
-      if (typeof pt.x !== 'number' || isNaN(pt.x) || typeof pt.y !== 'number' || isNaN(pt.y)) {
-        errors.push(`Connector "${objId}" ${endpointName}.point coordinates (x, y) must be valid numbers`);
+      if (typeof pt.x !== 'number' || !Number.isFinite(pt.x) || typeof pt.y !== 'number' || !Number.isFinite(pt.y)) {
+        errors.push(`Connector "${objId}" ${endpointName}.point coordinates (x, y) must be finite numbers`);
       }
     }
   }
@@ -385,17 +386,47 @@ export function validateDocument(doc) {
     errors.push('Document theme must be an object');
   } else {
     checkUnknownProperties(doc.theme, THEME_ALLOWED_FIELDS, 'theme', errors);
-    if (!doc.theme.background || typeof doc.theme.background !== 'string') {
-      errors.push('Theme background must be a valid string');
+    if (doc.theme.id !== undefined && typeof doc.theme.id !== 'string') {
+      errors.push('Theme id must be a string');
+    }
+    if (doc.theme.name !== undefined && typeof doc.theme.name !== 'string') {
+      errors.push('Theme name must be a string');
+    }
+    if (typeof doc.theme.background !== 'string' || !doc.theme.background.trim()) {
+      errors.push('Theme background must be a valid non-empty string');
+    }
+    if (doc.theme.gridColor !== undefined && typeof doc.theme.gridColor !== 'string') {
+      errors.push('Theme gridColor must be a string');
+    }
+    if (doc.theme.defaultFill !== undefined && typeof doc.theme.defaultFill !== 'string') {
+      errors.push('Theme defaultFill must be a string');
+    }
+    if (doc.theme.defaultStroke !== undefined && typeof doc.theme.defaultStroke !== 'string') {
+      errors.push('Theme defaultStroke must be a string');
     }
     if (!Array.isArray(doc.theme.palette) || doc.theme.palette.length === 0) {
-      errors.push('Theme palette must be a non-empty array of color strings');
+      errors.push('Theme palette must be a non-empty array of strings');
     } else {
       for (let i = 0; i < doc.theme.palette.length; i++) {
         if (typeof doc.theme.palette[i] !== 'string') {
           errors.push(`Theme palette entry at index ${i} must be a string`);
         }
       }
+    }
+    if (doc.theme.defaultStrokeWidth !== undefined && (typeof doc.theme.defaultStrokeWidth !== 'number' || !Number.isFinite(doc.theme.defaultStrokeWidth) || doc.theme.defaultStrokeWidth < 0)) {
+      errors.push('Theme defaultStrokeWidth must be a finite non-negative number');
+    }
+    if (doc.theme.defaultOpacity !== undefined && (typeof doc.theme.defaultOpacity !== 'number' || !Number.isFinite(doc.theme.defaultOpacity) || doc.theme.defaultOpacity < 0 || doc.theme.defaultOpacity > 1)) {
+      errors.push('Theme defaultOpacity must be a finite number from 0 through 1');
+    }
+    if (doc.theme.defaultRoughness !== undefined && (typeof doc.theme.defaultRoughness !== 'number' || !Number.isFinite(doc.theme.defaultRoughness) || doc.theme.defaultRoughness < 0)) {
+      errors.push('Theme defaultRoughness must be a finite non-negative number');
+    }
+    if (doc.theme.defaultFontSize !== undefined && !['s', 'm', 'l', 'xl'].includes(doc.theme.defaultFontSize)) {
+      errors.push('Theme defaultFontSize must be one of: s, m, l, xl');
+    }
+    if (doc.theme.defaultFontFamily !== undefined && !['sans', 'serif', 'mono', 'hand'].includes(doc.theme.defaultFontFamily)) {
+      errors.push('Theme defaultFontFamily must be one of: sans, serif, mono, hand');
     }
   }
 
@@ -458,29 +489,38 @@ export function validateDocument(doc) {
       checkUnknownProperties(obj, getAllowedFieldsForType(obj.type), `object "${objId}" (${obj.type})`, errors);
 
       // Common style/property validations
+      if (obj.fill !== undefined && typeof obj.fill !== 'string') {
+        errors.push(`Object "${objId}" fill must be a string`);
+      }
       if (obj.stroke !== undefined && typeof obj.stroke !== 'string') {
         errors.push(`Object "${objId}" stroke must be a string`);
       }
-      if (obj.strokeWidth !== undefined && (typeof obj.strokeWidth !== 'number' || isNaN(obj.strokeWidth) || obj.strokeWidth < 0)) {
-        errors.push(`Object "${objId}" strokeWidth must be a non-negative number`);
+      if (obj.strokeWidth !== undefined && (typeof obj.strokeWidth !== 'number' || !Number.isFinite(obj.strokeWidth) || obj.strokeWidth < 0)) {
+        errors.push(`Object "${objId}" strokeWidth must be a finite non-negative number`);
       }
       if (obj.strokeStyle !== undefined && !STROKE_STYLES.includes(obj.strokeStyle)) {
         errors.push(`Object "${objId}" strokeStyle must be one of: ${STROKE_STYLES.join(', ')}`);
       }
-      if (obj.opacity !== undefined && (typeof obj.opacity !== 'number' || isNaN(obj.opacity) || obj.opacity < 0 || obj.opacity > 1)) {
-        errors.push(`Object "${objId}" opacity must be a number between 0 and 1`);
+      if (obj.opacity !== undefined && (typeof obj.opacity !== 'number' || !Number.isFinite(obj.opacity) || obj.opacity < 0 || obj.opacity > 1)) {
+        errors.push(`Object "${objId}" opacity must be a finite number between 0 and 1`);
       }
-      if (obj.roughness !== undefined && (typeof obj.roughness !== 'number' || isNaN(obj.roughness) || obj.roughness < 0)) {
-        errors.push(`Object "${objId}" roughness must be a non-negative number`);
+      if (obj.roughness !== undefined && (typeof obj.roughness !== 'number' || !Number.isFinite(obj.roughness) || obj.roughness < 0)) {
+        errors.push(`Object "${objId}" roughness must be a finite non-negative number`);
       }
-      if (obj.seed !== undefined && (typeof obj.seed !== 'number' || isNaN(obj.seed))) {
-        errors.push(`Object "${objId}" seed must be a valid number`);
+      if (obj.seed !== undefined && (typeof obj.seed !== 'number' || !Number.isInteger(obj.seed) || obj.seed <= 0 || obj.seed > 2147483647)) {
+        errors.push(`Object "${objId}" seed must be a positive integer in the supported range`);
       }
-      if (obj.rotation !== undefined && (typeof obj.rotation !== 'number' || isNaN(obj.rotation))) {
-        errors.push(`Object "${objId}" rotation must be a valid number`);
+      if (obj.rotation !== undefined && (typeof obj.rotation !== 'number' || !Number.isFinite(obj.rotation))) {
+        errors.push(`Object "${objId}" rotation must be a finite number`);
       }
       if (obj.locked !== undefined && typeof obj.locked !== 'boolean') {
         errors.push(`Object "${objId}" locked must be a boolean`);
+      }
+      if (obj.autoWidth !== undefined && typeof obj.autoWidth !== 'boolean') {
+        errors.push(`Object "${objId}" autoWidth must be a boolean`);
+      }
+      if (obj.autoHeight !== undefined && typeof obj.autoHeight !== 'boolean') {
+        errors.push(`Object "${objId}" autoHeight must be a boolean`);
       }
       if (obj.groupId !== undefined && obj.groupId !== null) {
         if (typeof obj.groupId !== 'string' || !doc.groups || !doc.groups[obj.groupId]) {
@@ -498,8 +538,8 @@ export function validateDocument(doc) {
           if (obj.textStyle.size !== undefined && !['s', 'm', 'l', 'xl'].includes(obj.textStyle.size)) {
             errors.push(`Object "${objId}" textStyle.size must be one of: s, m, l, xl`);
           }
-          if (obj.textStyle.resolvedSize !== undefined && (typeof obj.textStyle.resolvedSize !== 'number' || isNaN(obj.textStyle.resolvedSize) || obj.textStyle.resolvedSize <= 0)) {
-            errors.push(`Object "${objId}" textStyle.resolvedSize must be a positive number`);
+          if (obj.textStyle.resolvedSize !== undefined && (typeof obj.textStyle.resolvedSize !== 'number' || !Number.isFinite(obj.textStyle.resolvedSize) || obj.textStyle.resolvedSize <= 0)) {
+            errors.push(`Object "${objId}" textStyle.resolvedSize must be a finite positive number`);
           }
           if (obj.textStyle.bold !== undefined && typeof obj.textStyle.bold !== 'boolean') {
             errors.push(`Object "${objId}" textStyle.bold must be a boolean`);
@@ -518,14 +558,14 @@ export function validateDocument(doc) {
 
       // Non-connectors require valid positive dimensions and coordinates
       if (obj.type !== 'connector') {
-        if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
-          errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
+        if (typeof obj.x !== 'number' || !Number.isFinite(obj.x) || typeof obj.y !== 'number' || !Number.isFinite(obj.y)) {
+          errors.push(`Object "${objId}" coordinates (x, y) must be finite numbers`);
         }
-        if (typeof obj.width !== 'number' || isNaN(obj.width) || obj.width <= 0) {
-          errors.push(`Object "${objId}" width must be a positive number`);
+        if (typeof obj.width !== 'number' || !Number.isFinite(obj.width) || obj.width <= 0) {
+          errors.push(`Object "${objId}" width must be a finite positive number`);
         }
-        if (typeof obj.height !== 'number' || isNaN(obj.height) || obj.height <= 0) {
-          errors.push(`Object "${objId}" height must be a positive number`);
+        if (typeof obj.height !== 'number' || !Number.isFinite(obj.height) || obj.height <= 0) {
+          errors.push(`Object "${objId}" height must be a finite positive number`);
         }
       }
 
@@ -540,11 +580,11 @@ export function validateDocument(doc) {
         if (obj.curveSide !== undefined && obj.curveSide !== 1 && obj.curveSide !== -1) {
           errors.push(`Connector "${objId}" curveSide must be 1 or -1`);
         }
-        if (obj.curveDistance !== undefined && obj.curveDistance !== null && (typeof obj.curveDistance !== 'number' || isNaN(obj.curveDistance) || obj.curveDistance < 0)) {
-          errors.push(`Connector "${objId}" curveDistance must be a non-negative number`);
+        if (obj.curveDistance !== undefined && obj.curveDistance !== null && (typeof obj.curveDistance !== 'number' || !Number.isFinite(obj.curveDistance) || obj.curveDistance < 0)) {
+          errors.push(`Connector "${objId}" curveDistance must be a finite non-negative number`);
         }
-        if (obj.elbowOffset !== undefined && obj.elbowOffset !== null && (typeof obj.elbowOffset !== 'number' || isNaN(obj.elbowOffset))) {
-          errors.push(`Connector "${objId}" elbowOffset must be a number`);
+        if (obj.elbowOffset !== undefined && obj.elbowOffset !== null && (typeof obj.elbowOffset !== 'number' || !Number.isFinite(obj.elbowOffset))) {
+          errors.push(`Connector "${objId}" elbowOffset must be a finite number`);
         }
         if (obj.startArrow !== undefined && typeof obj.startArrow !== 'boolean') {
           errors.push(`Connector "${objId}" startArrow must be a boolean`);
@@ -565,12 +605,13 @@ export function validateDocument(doc) {
           for (let pIdx = 0; pIdx < obj.points.length; pIdx++) {
             const pt = obj.points[pIdx];
             if (Array.isArray(pt)) {
-              if (pt.length < 2 || typeof pt[0] !== 'number' || isNaN(pt[0]) || typeof pt[1] !== 'number' || isNaN(pt[1])) {
-                errors.push(`Path "${objId}" point at index ${pIdx} must have valid numeric coordinates [x, y]`);
+              if (pt.length < 2 || typeof pt[0] !== 'number' || !Number.isFinite(pt[0]) || typeof pt[1] !== 'number' || !Number.isFinite(pt[1])) {
+                errors.push(`Path "${objId}" point at index ${pIdx} must have valid finite numeric coordinates [x, y]`);
               }
             } else if (pt && typeof pt === 'object') {
-              if (typeof pt.x !== 'number' || isNaN(pt.x) || typeof pt.y !== 'number' || isNaN(pt.y)) {
-                errors.push(`Path "${objId}" point at index ${pIdx} must have valid numeric coordinates { x, y }`);
+              checkUnknownProperties(pt, PATH_POINT_ALLOWED_FIELDS, `path "${objId}" point at index ${pIdx}`, errors);
+              if (typeof pt.x !== 'number' || !Number.isFinite(pt.x) || typeof pt.y !== 'number' || !Number.isFinite(pt.y)) {
+                errors.push(`Path "${objId}" point at index ${pIdx} must have valid finite numeric coordinates { x, y }`);
               }
             } else {
               errors.push(`Path "${objId}" point at index ${pIdx} is malformed`);
