@@ -724,7 +724,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_7mmta336068",
+  "id": "board_80g8ks4a2gf",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -740,7 +740,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 238167821,
+      "seed": 1051915036,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -771,7 +771,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 660317660,
+      "seed": 1263650812,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -798,7 +798,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 563330551,
+      "seed": 1524258482,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -825,7 +825,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1207793223,
+      "seed": 228017789,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -3553,34 +3553,54 @@ class LaserPointer {
     this.decayMs = 600;
 
     this.render = this.render.bind(this);
+    this.onResize = this.onResize.bind(this);
+  }
+
+  onResize() {
+    if (this.active) {
+      this.resize();
+    }
   }
 
   start() {
     this.active = true;
     this.points = [];
     this.resize();
+    window.addEventListener('resize', this.onResize);
     this.render();
   }
 
   stop() {
     this.active = false;
+    window.removeEventListener('resize', this.onResize);
     if (this.animId) {
       cancelAnimationFrame(this.animId);
       this.animId = null;
     }
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.ctx && this.canvas) {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     this.points = [];
   }
 
   resize() {
-    if (!this.canvas) return;
-    this.canvas.width = window.innerWidth * (window.devicePixelRatio || 1);
-    this.canvas.height = window.innerHeight * (window.devicePixelRatio || 1);
-    this.ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    if (!this.canvas || !this.ctx) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = rect.width || window.innerWidth;
+    const height = rect.height || window.innerHeight;
+
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  addPoint(x, y) {
-    if (!this.active) return;
+  addPoint(clientX, clientY) {
+    if (!this.active || !this.canvas) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     const now = performance.now();
     this.points.push({ x, y, time: now });
   }
@@ -3589,8 +3609,9 @@ class LaserPointer {
     if (!this.active) return;
     const now = performance.now();
     const ctx = this.ctx;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = rect.width || window.innerWidth;
+    const h = rect.height || window.innerHeight;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -6603,10 +6624,13 @@ class SaburaApp {
       }
     });
 
-    // Fullscreen change listener to sync presentation exit
+    // Fullscreen change listener to sync presentation exit and re-sync canvas size
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && this.inPresentation) {
         this.exitPresentation();
+      } else if (this.inPresentation) {
+        this.laser.resize();
+        this.workspace.fitToContent(80);
       }
     });
 
@@ -6911,9 +6935,20 @@ class SaburaApp {
     // Request fullscreen (gracefully degrades inside tab if disallowed)
     try {
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+        document.documentElement.requestFullscreen().then(() => {
+          if (this.inPresentation) {
+            this.laser.resize();
+            this.workspace.fitToContent(80);
+          }
+        }).catch(() => {});
       }
     } catch (_) {}
+
+    setTimeout(() => {
+      if (this.inPresentation) {
+        this.laser.resize();
+      }
+    }, 120);
   }
 
   exitPresentation() {

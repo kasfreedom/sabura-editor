@@ -12,34 +12,54 @@ export class LaserPointer {
     this.decayMs = 600;
 
     this.render = this.render.bind(this);
+    this.onResize = this.onResize.bind(this);
+  }
+
+  onResize() {
+    if (this.active) {
+      this.resize();
+    }
   }
 
   start() {
     this.active = true;
     this.points = [];
     this.resize();
+    window.addEventListener('resize', this.onResize);
     this.render();
   }
 
   stop() {
     this.active = false;
+    window.removeEventListener('resize', this.onResize);
     if (this.animId) {
       cancelAnimationFrame(this.animId);
       this.animId = null;
     }
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.ctx && this.canvas) {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     this.points = [];
   }
 
   resize() {
-    if (!this.canvas) return;
-    this.canvas.width = window.innerWidth * (window.devicePixelRatio || 1);
-    this.canvas.height = window.innerHeight * (window.devicePixelRatio || 1);
-    this.ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    if (!this.canvas || !this.ctx) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = rect.width || window.innerWidth;
+    const height = rect.height || window.innerHeight;
+
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  addPoint(x, y) {
-    if (!this.active) return;
+  addPoint(clientX, clientY) {
+    if (!this.active || !this.canvas) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     const now = performance.now();
     this.points.push({ x, y, time: now });
   }
@@ -48,8 +68,9 @@ export class LaserPointer {
     if (!this.active) return;
     const now = performance.now();
     const ctx = this.ctx;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = rect.width || window.innerWidth;
+    const h = rect.height || window.innerHeight;
 
     ctx.clearRect(0, 0, w, h);
 

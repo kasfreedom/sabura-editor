@@ -256,10 +256,13 @@ export class SaburaApp {
       }
     });
 
-    // Fullscreen change listener to sync presentation exit
+    // Fullscreen change listener to sync presentation exit and re-sync canvas size
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && this.inPresentation) {
         this.exitPresentation();
+      } else if (this.inPresentation) {
+        this.laser.resize();
+        this.workspace.fitToContent(80);
       }
     });
 
@@ -564,9 +567,20 @@ export class SaburaApp {
     // Request fullscreen (gracefully degrades inside tab if disallowed)
     try {
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+        document.documentElement.requestFullscreen().then(() => {
+          if (this.inPresentation) {
+            this.laser.resize();
+            this.workspace.fitToContent(80);
+          }
+        }).catch(() => {});
       }
     } catch (_) {}
+
+    setTimeout(() => {
+      if (this.inPresentation) {
+        this.laser.resize();
+      }
+    }, 120);
   }
 
   exitPresentation() {
