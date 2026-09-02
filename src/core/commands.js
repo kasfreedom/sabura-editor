@@ -229,8 +229,8 @@ export function applyCommand(doc, cmd) {
 
         const dup = cloneDocument(source);
         dup.id = newId;
-        dup.x += offset.x;
-        dup.y += offset.y;
+        if (typeof dup.x === 'number') dup.x += offset.x;
+        if (typeof dup.y === 'number') dup.y += offset.y;
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
 
@@ -313,8 +313,8 @@ export function applyCommand(doc, cmd) {
 
       for (const id of ids) {
         const obj = newDoc.objects[id];
-        obj.x += dx;
-        obj.y += dy;
+        if (typeof obj.x === 'number') obj.x += dx;
+        if (typeof obj.y === 'number') obj.y += dy;
 
         // If it's a connector with point endpoints, translate the points
         if (obj.type === 'connector') {

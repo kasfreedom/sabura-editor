@@ -284,7 +284,14 @@ export class Workspace {
 
     if (hitObj) {
       if (!this.selectedIds.includes(hitObj.id)) {
-        this.selectedIds = [hitObj.id];
+        if (hitObj.groupId && this.activeGroupId !== hitObj.groupId) {
+          const doc = this.callbacks.getDocument();
+          this.selectedIds = Object.values(doc.objects)
+            .filter(o => o.groupId === hitObj.groupId && !o.locked)
+            .map(o => o.id);
+        } else {
+          this.selectedIds = [hitObj.id];
+        }
       }
       this.callbacks.onOpenWheel(e.clientX, e.clientY, 'object', hitObj);
     } else {
@@ -396,11 +403,15 @@ export class Workspace {
           } else if (this.activeGroupId === hitObj.groupId) {
             // Already drilled into this group: work with this child
             this.selectedIds = [targetId];
-          } else if (this.selectedIds.length > 1 && this.selectedIds.includes(targetId)) {
-            // Clicked a child of currently selected group: drill down into member!
-            this.activeGroupId = hitObj.groupId;
-            this.selectedIds = [targetId];
+          } else if (this.selectedIds.includes(targetId)) {
+            // Target is already part of current selection: keep selection intact so dragging moves all members together!
+            this.activeGroupId = null;
+            const allIn = groupMembers.every(id => this.selectedIds.includes(id));
+            if (!allIn) {
+              this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
+            }
           } else {
+            // Not drilled in and target was not selected: select the entire group as a unit
             this.activeGroupId = null;
             this.selectedIds = groupMembers;
           }

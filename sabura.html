@@ -724,7 +724,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_0ruk4ydezbi",
+  "id": "board_5wtecqjs1ss",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -739,7 +739,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 671700960,
+      "seed": 1566659175,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -767,7 +767,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1802523598,
+      "seed": 934707478,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -794,7 +794,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1939941042,
+      "seed": 634138713,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -821,7 +821,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 795079350,
+      "seed": 2001085510,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -2434,8 +2434,8 @@ function applyCommand(doc, cmd) {
 
         const dup = cloneDocument(source);
         dup.id = newId;
-        dup.x += offset.x;
-        dup.y += offset.y;
+        if (typeof dup.x === 'number') dup.x += offset.x;
+        if (typeof dup.y === 'number') dup.y += offset.y;
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
 
@@ -2518,8 +2518,8 @@ function applyCommand(doc, cmd) {
 
       for (const id of ids) {
         const obj = newDoc.objects[id];
-        obj.x += dx;
-        obj.y += dy;
+        if (typeof obj.x === 'number') obj.x += dx;
+        if (typeof obj.y === 'number') obj.y += dy;
 
         // If it's a connector with point endpoints, translate the points
         if (obj.type === 'connector') {
@@ -5941,7 +5941,14 @@ class Workspace {
 
     if (hitObj) {
       if (!this.selectedIds.includes(hitObj.id)) {
-        this.selectedIds = [hitObj.id];
+        if (hitObj.groupId && this.activeGroupId !== hitObj.groupId) {
+          const doc = this.callbacks.getDocument();
+          this.selectedIds = Object.values(doc.objects)
+            .filter(o => o.groupId === hitObj.groupId && !o.locked)
+            .map(o => o.id);
+        } else {
+          this.selectedIds = [hitObj.id];
+        }
       }
       this.callbacks.onOpenWheel(e.clientX, e.clientY, 'object', hitObj);
     } else {
@@ -6053,11 +6060,15 @@ class Workspace {
           } else if (this.activeGroupId === hitObj.groupId) {
             // Already drilled into this group: work with this child
             this.selectedIds = [targetId];
-          } else if (this.selectedIds.length > 1 && this.selectedIds.includes(targetId)) {
-            // Clicked a child of currently selected group: drill down into member!
-            this.activeGroupId = hitObj.groupId;
-            this.selectedIds = [targetId];
+          } else if (this.selectedIds.includes(targetId)) {
+            // Target is already part of current selection: keep selection intact so dragging moves all members together!
+            this.activeGroupId = null;
+            const allIn = groupMembers.every(id => this.selectedIds.includes(id));
+            if (!allIn) {
+              this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
+            }
           } else {
+            // Not drilled in and target was not selected: select the entire group as a unit
             this.activeGroupId = null;
             this.selectedIds = groupMembers;
           }

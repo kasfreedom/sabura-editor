@@ -429,3 +429,51 @@ test('spatial count threshold: align requires >= 2 spatial objects, distribute r
   assert.equal(distRes.inverseCmd.type, 'noop', 'Distribute with only 2 spatial objects must be noop');
 });
 
+test('grouped objects move together atomically and restore on undo', () => {
+  let doc = createDefaultDocument();
+  const r1 = createDefaultObject('rectangle', { id: 'r1', x: 100, y: 100, width: 80, height: 60 });
+  const r2 = createDefaultObject('rectangle', { id: 'r2', x: 200, y: 150, width: 80, height: 60 });
+  const conn = createDefaultObject('connector', { id: 'c1', from: { id: 'r1' }, to: { id: 'r2' } });
+
+  doc = applyCommand(doc, { type: 'create_object', object: r1 }).doc;
+  doc = applyCommand(doc, { type: 'create_object', object: r2 }).doc;
+  doc = applyCommand(doc, { type: 'create_object', object: conn }).doc;
+
+  // Group r1 and r2
+  const groupRes = applyCommand(doc, { type: 'group_objects', ids: ['r1', 'r2'] });
+  doc = groupRes.doc;
+  const gId = doc.objects.r1.groupId;
+  assert.ok(gId);
+  assert.equal(doc.objects.r2.groupId, gId);
+
+  // When moving the group by dx: 60, dy: 40:
+  // Both members must move by the exact same delta!
+  const groupMembers = Object.values(doc.objects).filter(o => o.groupId === gId).map(o => o.id);
+  assert.deepEqual(groupMembers.sort(), ['r1', 'r2']);
+
+  const moveRes = applyCommand(doc, {
+    type: 'move_objects',
+    ids: groupMembers,
+    dx: 60,
+    dy: 40
+  });
+  doc = moveRes.doc;
+
+  assert.equal(doc.objects.r1.x, 160);
+  assert.equal(doc.objects.r1.y, 140);
+  assert.equal(doc.objects.r2.x, 260);
+  assert.equal(doc.objects.r2.y, 190);
+
+  // Attached connector resolves dynamically between moved group members
+  const geom = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.ok(geom.start.x >= 160 && geom.start.x <= 240);
+  assert.ok(geom.end.x >= 260 && geom.end.x <= 340);
+
+  // Single step undo restores both objects
+  doc = applyCommand(doc, moveRes.inverseCmd).doc;
+  assert.equal(doc.objects.r1.x, 100);
+  assert.equal(doc.objects.r1.y, 100);
+  assert.equal(doc.objects.r2.x, 200);
+  assert.equal(doc.objects.r2.y, 150);
+});
+

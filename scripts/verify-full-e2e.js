@@ -14,9 +14,20 @@ const saburaHtml = fs.readFileSync(path.join(rootDir, 'sabura.html'), 'utf8');
 const safariRunnerCode = `
 async function runSafariTests() {
   const results = [];
+  window.onerror = (msg, url, line) => {
+    fetch('/api/safari-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg: 'WINDOW ERROR: ' + msg + ' at line ' + line })
+    }).catch(() => {});
+  };
   const log = (step, ok, detail) => {
     results.push({ step, ok, detail });
-    console.log((ok ? '✓ ' : '✗ ') + step + ': ' + (detail || ''));
+    fetch('/api/safari-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg: (ok ? '✓ ' : '✗ ') + step + ': ' + (detail || '') })
+    }).catch(() => {});
   };
 
   try {
@@ -269,6 +280,71 @@ async function runSafariTests() {
     const ddragUndoOk = ddragIds.every(id => !app.doc.objects[id]);
 
     log('21. Real Multi-Object D-Drag with No Placement Jump & 1-Step Undo', ddragCreated && origsUntouched && noJump && ddragUndoOk, 'created=' + ddragCreated + ' noJump=' + noJump + ' undoOk=' + ddragUndoOk);
+
+    // Flow 22: Move Grouped Objects Together with Pointer Drag & 1-Step Undo
+    {
+      app.workspace.selectedIds = ['shape_intro', 'shape_idea'];
+      app.workspace.render();
+      await sleep(50);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, bubbles: true }));
+      await sleep(100);
+
+      const gId = app.doc.objects['shape_intro']?.groupId;
+      const isGroupedNow = gId && gId === app.doc.objects['shape_idea']?.groupId;
+
+      // Deselect by clicking whitespace
+      canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+      await sleep(30);
+      canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+      await sleep(50);
+
+      const deselected = app.workspace.selectedIds.length === 0;
+
+      // Click shape_intro -> must select the whole group as a single unit
+      canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+      await sleep(30);
+      canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+      await sleep(50);
+
+      const clickedGroupSelected = app.workspace.selectedIds.length === 2 &&
+                                   app.workspace.selectedIds.includes('shape_intro') &&
+                                   app.workspace.selectedIds.includes('shape_idea');
+
+      // Drag the group by dragging shape_intro by (+50, +40)
+      const preIntro = { x: app.doc.objects['shape_intro'].x, y: app.doc.objects['shape_intro'].y };
+      const preIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+
+      canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0, buttons: 1 }));
+      await sleep(30);
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 200, clientY: boundsRect.top + 160, button: 0, buttons: 1 }));
+      await sleep(30);
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 200, clientY: boundsRect.top + 160, button: 0, buttons: 0 }));
+      await sleep(100);
+
+      const postIntro = { x: app.doc.objects['shape_intro'].x, y: app.doc.objects['shape_intro'].y };
+      const postIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+
+      const dxIntro = postIntro.x - preIntro.x;
+      const dyIntro = postIntro.y - preIntro.y;
+      const dxIdea = postIdea.x - preIdea.x;
+      const dyIdea = postIdea.y - preIdea.y;
+
+      const groupMovedTogether = dxIntro === dxIdea && dyIntro === dyIdea && dxIntro !== 0 && dyIntro !== 0;
+
+      // Undo group move in 1 step
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+
+      const undoIntro = app.doc.objects['shape_intro'].x === preIntro.x && app.doc.objects['shape_intro'].y === preIntro.y;
+      const undoIdea = app.doc.objects['shape_idea'].x === preIdea.x && app.doc.objects['shape_idea'].y === preIdea.y;
+      const groupUndoOk = undoIntro && undoIdea;
+
+      // Clean up: ungroup
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, shiftKey: true, bubbles: true }));
+      await sleep(100);
+
+      log('22. Real Move Grouped Objects Together with Pointer Drag & 1-Step Undo', isGroupedNow && deselected && clickedGroupSelected && groupMovedTogether && groupUndoOk, 'together=' + groupMovedTogether + ' delta=(' + dxIntro + ',' + dyIntro + ') undo=' + groupUndoOk);
+    }
 
     // Flow 1: Create a curved connector through the wheel
     const fab = document.querySelector('.wheel-trigger-fab');
@@ -1485,6 +1561,83 @@ if (!c21.ddragCreated || !c21.origsUntouched || !c21.noJump || !c21.ddragUndoOk)
   throw new Error('Chrome: Multi-object D-drag failed');
 }
 
+// Flow 22: Move Grouped Objects Together with Pointer Drag & 1-Step Undo in Chrome
+const c22 = await evalInChrome(`(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const app = window.saburaApp;
+  const canvasEl = document.querySelector('#canvas-container');
+  const boundsRect = canvasEl.getBoundingClientRect();
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  // 1. Group shape_intro and shape_idea
+  app.workspace.selectedIds = ['shape_intro', 'shape_idea'];
+  app.workspace.render();
+  await sleep(50);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, bubbles: true }));
+  await sleep(100);
+
+  const gId = app.doc.objects['shape_intro']?.groupId;
+  const isGroupedNow = gId && gId === app.doc.objects['shape_idea']?.groupId;
+
+  // 2. Deselect by clicking whitespace
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+  await sleep(30);
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+  await sleep(50);
+
+  const deselected = app.workspace.selectedIds.length === 0;
+
+  // 3. Click shape_intro -> must select the whole group as a single unit
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+  await sleep(30);
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+  await sleep(50);
+
+  const clickedGroupSelected = app.workspace.selectedIds.length === 2 &&
+                               app.workspace.selectedIds.includes('shape_intro') &&
+                               app.workspace.selectedIds.includes('shape_idea');
+
+  // 4. Drag the group by dragging shape_intro by (+50, +40)
+  const preIntro = { x: app.doc.objects['shape_intro'].x, y: app.doc.objects['shape_intro'].y };
+  const preIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0, buttons: 1 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 200, clientY: boundsRect.top + 160, button: 0, buttons: 1 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 200, clientY: boundsRect.top + 160, button: 0, buttons: 0 }));
+  await sleep(100);
+
+  const postIntro = { x: app.doc.objects['shape_intro'].x, y: app.doc.objects['shape_intro'].y };
+  const postIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+
+  const dxIntro = postIntro.x - preIntro.x;
+  const dyIntro = postIntro.y - preIntro.y;
+  const dxIdea = postIdea.x - preIdea.x;
+  const dyIdea = postIdea.y - preIdea.y;
+
+  const groupMovedTogether = dxIntro === dxIdea && dyIntro === dyIdea && dxIntro !== 0 && dyIntro !== 0;
+
+  // 5. Undo group move in 1 step
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+
+  const undoIntro = app.doc.objects['shape_intro'].x === preIntro.x && app.doc.objects['shape_intro'].y === preIntro.y;
+  const undoIdea = app.doc.objects['shape_idea'].x === preIdea.x && app.doc.objects['shape_idea'].y === preIdea.y;
+  const groupUndoOk = undoIntro && undoIdea;
+
+  // 6. Clean up: ungroup
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(100);
+
+  return { isGroupedNow, deselected, clickedGroupSelected, groupMovedTogether, groupUndoOk, dxIntro, dyIntro, dxIdea, dyIdea };
+})()`);
+console.log('Chrome 22. Real Move Grouped Objects Together with Pointer Drag & 1-Step Undo:', c22);
+if (!c22.isGroupedNow || !c22.deselected || !c22.clickedGroupSelected || !c22.groupMovedTogether || !c22.groupUndoOk) {
+  throw new Error('Chrome: Moving grouped objects together failed');
+}
+
 console.log('✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
@@ -1500,7 +1653,7 @@ console.log('Launching Safari with automated test harness...');
 exec(`open -a Safari "http://127.0.0.1:${port}/sabura-safari.html"`);
 
 // Wait for Safari callback report
-const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 30 seconds')), 30000));
+const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 60 seconds')), 60000));
 const safariData = await Promise.race([safariPromise, timeout]);
 
 console.log('\nSafari Test Results:');
