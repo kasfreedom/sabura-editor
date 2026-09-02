@@ -82,6 +82,7 @@ export function packageHtmlWithDocument(htmlShell, doc) {
  *
  * @param {string} filename
  * @param {string} htmlContent
+ * @returns {number} The actual UTF-8 byte size of the downloaded file (Blob.size).
  */
 export function triggerFileDownload(filename, htmlContent) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -89,6 +90,7 @@ export function triggerFileDownload(filename, htmlContent) {
   }
 
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const byteLength = blob.size; // accurate UTF-8 byte count
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -99,4 +101,5 @@ export function triggerFileDownload(filename, htmlContent) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, 200);
+  return byteLength;
 }

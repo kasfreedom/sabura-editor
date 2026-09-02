@@ -142,34 +142,83 @@ function createSampleBoard() {
   return doc;
 }
 
-const AI_CONTRACT = `  <!-- SABURA AI CONTRACT
-  schemaVersion: "sabura/canvas/v1"
-  The diagram document is canonical JSON stored in the script element below with id="sabura-document".
-  Do not modify any HTML, CSS, or JavaScript outside this script tag seam.
-  Required top-level keys:
-  - schemaVersion: "sabura/canvas/v1"
-  - id: non-empty string board identifier
-  - title: string
-  - theme: { background: string, palette: string[], ... }
-  - objects: map of { [objectId]: object } where key === object.id
-  - order: array of object IDs defining bottom-to-top paint order / z-index
-  - groups: map of { [groupId]: { id: groupId, name: string } }
-  - assets: map of { [assetId]: asset }
-  Supported object types: rectangle, ellipse, diamond, triangle, text, connector, path.
-  Object fields:
-  - Common: id, type, stroke, strokeWidth, strokeStyle ("solid"|"dashed"|"dotted"), fill, opacity (0..1), roughness (>=0), seed (int), locked (bool), groupId (string|null), text, textStyle ({ size, resolvedSize, fontFamily, bold, align, color })
-  - Shape text: stored directly in the object's text and textStyle fields
-  - Grouping: set object.groupId to an existing group in top-level groups record
-  - Shapes & Text: require numeric x, y, width, height
-  - Connectors: require from and to endpoints, each formatted as either:
-    { "id": "target_id" }
-    { "id": "target_id", "anchor": { "x": 0..1, "y": 0..1 } }
-    { "point": { "x": number, "y": number } }
-    routing: "straight" | "elbow" | "curved", curveSide (1 | -1), startArrow (bool), endArrow (bool)
-  - Paths: require points array of [{x,y}, ...] or [[x,y], ...], closed (bool), curveStyle ("sharp"|"curved"), startArrow (bool), endArrow (bool)
-  - Extensions: unknown properties are strictly rejected unless namespaced with "ext:*" (e.g. "ext:myMeta")
-  - Escaping: every literal "<" in JSON text must be encoded as "\\u003C" to prevent HTML parsing breaks
-  -->`;
+const AI_CONTRACT = `<!-- SABURA AI CONTRACT
+OVERVIEW
+  Sabura is an AI-first offline whiteboard. This file has two sections:
+    1. A small, editable board document (sabura/canvas/v1 JSON) — readable and replaceable.
+    2. An opaque application runtime (CSS + JS) — treat as a sealed black box.
+  Stop reading at &lt;style&gt;. Do not read, reproduce, or modify anything from &lt;style&gt; onward.
+
+BROWSER-AGENT WORKFLOW  (preferred)
+  1. Open sabura.html in a browser.
+  2. Call window.sabura.readAiContract() -> { found, contract }
+  3. Call window.sabura.getDocument() to read the current board (optional).
+  4. Build your document object using the schema below.
+  5. Call window.sabura.validateDocument(doc) -> { valid, errors[] }
+  6. Call window.sabura.generateBoardFile(doc) -> { success, filename, byteLength }
+     A complete HTML board file is downloaded. The runtime is never returned to you.
+  7. Return the downloaded file without opening or reading it.
+
+FILE-TOOL WORKFLOW  (fallback — no browser)
+  1. Read only the contract and the document seam below. Stop before &lt;style&gt;.
+  2. Locate the seam markers (angle brackets shown escaped for safety):
+       &lt;script type="application/json" id="sabura-document"&gt;
+       &lt;/script&gt;
+  3. Replace only the JSON between those two markers with your new canonical JSON.
+  4. Encode every literal < as \\u003C inside the JSON.
+  5. Copy the remainder of the file through your tools without loading it into context.
+  6. Never inspect, reformat, or regenerate the runtime. Return the resulting HTML file.
+
+SCHEMA  sabura/canvas/v1
+  Required top-level fields:
+    schemaVersion  "sabura/canvas/v1"
+    id             non-empty string
+    title          string
+    theme          { background, gridColor, palette[], defaultFill, defaultStroke,
+                     defaultStrokeWidth, defaultOpacity, defaultRoughness,
+                     defaultFontSize ("s"|"m"|"l"|"xl"),
+                     defaultFontFamily ("sans"|"serif"|"mono"|"hand") }
+    objects        { [objectId]: object }  where key === object.id
+    order          string[]  bottom-to-top paint order (z-index)
+    groups         { [groupId]: { id, name } }
+    assets         { [assetId]: asset }
+
+  Supported types: rectangle, ellipse, diamond, triangle, text, connector, path
+
+  Common object fields:
+    id, type, x, y, width, height
+    fill (string), stroke (string), strokeWidth (number>=0),
+    strokeStyle ("solid"|"dashed"|"dotted"), opacity (0..1), roughness (>=0),
+    seed (positive integer 1..2147483647), locked (bool), groupId (string|null)
+    text (string), textStyle { size ("s"|"m"|"l"|"xl"), resolvedSize (number),
+      fontFamily ("sans"|"serif"|"mono"|"hand"), bold (bool), align (string), color (string) }
+
+  Connector (type: connector):
+    from, to — endpoint: { "id": "target_id" }
+                          { "id": "target_id", "anchor": { "x": 0..1, "y": 0..1 } }
+                          { "point": { "x": number, "y": number } }
+    routing: "straight" | "elbow" | "curved"
+    curveSide: 1 | -1,  startArrow: bool,  endArrow: bool
+
+  Path (type: path):
+    points: [{ "x": number, "y": number }, ...]
+    closed: bool,  curveStyle: "sharp" | "curved",  startArrow: bool,  endArrow: bool
+
+  Grouping: set object.groupId to a key that exists in the top-level groups map.
+  Extensions: unknown properties are rejected unless prefixed "ext:" (e.g. "ext:myMeta").
+  Escaping: every literal < in JSON string values must be encoded as \\u003C.
+
+PUBLIC API  (window.sabura.*)
+  readAiContract()        -> { found: bool, contract: string }
+  getDocument()           -> board document object (deep copy)
+  validateDocument(doc)   -> { valid: bool, errors: string[] }
+  generateBoardFile(doc)  -> { success: bool, filename, byteLength } | { success: false, errors[] }
+  applyCommands(cmds[])   -> { success: bool, document?, errors? }
+  exportCanonicalJson()   -> canonical JSON string
+  undo() / redo()  /  subscribe(listener) -> unsubscribe fn
+
+  generateBoardFile() never returns the HTML source. The runtime remains opaque.
+-->`;
 
 function generateHtml(css, bundledJs, serializedDoc) {
   return `<!DOCTYPE html>
@@ -178,20 +227,20 @@ function generateHtml(css, bundledJs, serializedDoc) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Sabura - AI-First Offline Whiteboard</title>
+
+${AI_CONTRACT}
+
+  <script type="application/json" id="sabura-document">
+${serializedDoc}
+  </script>
+
+  <!-- Opaque application runtime begins here. Do not read or modify. -->
   <style>
 ${css}
   </style>
 </head>
 <body>
   <div id="app"></div>
-
-${AI_CONTRACT}
-  <!-- Sabura Persisted Document Seam -->
-  <script type="application/json" id="sabura-document">
-${serializedDoc}
-  </script>
-
-  <!-- Sabura Standalone Application Bundle -->
   <script>
 ${bundledJs}
   </script>

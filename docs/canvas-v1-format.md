@@ -4,6 +4,109 @@ The `sabura/canvas/v1` document format defines the persistent data model for Sab
 
 ---
 
+## 0. Single-File Layout
+
+A Sabura HTML file is structured so that an AI can read the board document and the operating guide without encountering the application runtime:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sabura - AI-First Offline Whiteboard</title>
+
+  <!-- SABURA AI CONTRACT
+       Human- and machine-readable operating guide.
+       Describes the schema, both agent workflows, and the public API.
+       Stop reading at <style>. The runtime below is opaque.
+  -->
+
+  <script type="application/json" id="sabura-document">
+    { ... board document ... }
+  </script>
+
+  <!-- Opaque application runtime begins here. Do not read or modify. -->
+  <style>/* CSS — opaque */</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>/* minified JS bundle — opaque */</script>
+</body>
+</html>
+```
+
+Both the AI contract and the document seam appear **before** `<style>`. An agent with partial file-reading tools can stop reading at `<style>` and never encounter CSS or JavaScript.
+
+The seam element is accessed by the runtime via `document.getElementById('sabura-document')`, which works regardless of whether the element is in `<head>` or `<body>`.
+
+---
+
+## 0a. Generator API
+
+When opened in a browser, `window.sabura` exposes a public generator API:
+
+| Method | Signature | Description |
+| :--- | :--- | :--- |
+| `readAiContract()` | `-> { found: bool, contract: string }` | Returns the embedded AI guide from `<head>`. Never returns CSS or JS. |
+| `getDocument()` | `-> document` | Returns a deep copy of the current board document. |
+| `validateDocument(doc)` | `-> { valid: bool, errors: string[] }` | Validates a document without mutating the open board. |
+| `generateBoardFile(doc)` | `-> { success, filename, byteLength } \| { success: false, errors[] }` | Validates, packages, and downloads a complete HTML board file. Never returns the HTML source. |
+| `applyCommands(cmds[])` | `-> { success, document?, errors? }` | Applies editing commands to the open board. |
+| `exportCanonicalJson()` | `-> string` | Returns canonical JSON of the current document. |
+| `undo()` / `redo()` | | Undo/redo the last command. |
+| `subscribe(listener)` | `-> unsubscribe fn` | Subscribes to document changes. |
+
+### `generateBoardFile(doc)` behavior
+
+1. Validates the supplied document with the strict `sabura/canvas/v1` validator.
+2. If invalid: returns `{ success: false, errors: [...] }` — no file is generated.
+3. Builds a clean canonical HTML using the DOM-clone shell (excludes canvas SVG, selection, wheel, and presentation state).
+4. Replaces only the `sabura-document` seam via regex.
+5. Triggers a browser file download.
+6. Returns `{ success: true, filename, byteLength }` — `byteLength` is the real UTF-8 byte count from `Blob.size`.
+7. Does **not** alter the open board, selection, undo history, or redo history.
+8. The HTML string is never returned through this API.
+
+### Preservation guarantee
+
+After `generateBoardFile`:
+- CSS `<style>` content hash is unchanged.
+- JavaScript bundle `<script>` content hash is unchanged.
+- Only the board document JSON changes.
+- Minor whitespace differences in wrapper HTML are acceptable (DOM-clone serialization).
+
+---
+
+## 0b. Agent Workflows
+
+### Preferred (browser automation)
+
+```
+1. Open sabura.html in a browser.
+2. window.sabura.readAiContract()   -> { found, contract }
+3. window.sabura.getDocument()      -> current board (optional)
+4. Build your document object.
+5. window.sabura.validateDocument(doc)   -> { valid, errors[] }
+6. window.sabura.generateBoardFile(doc)  -> { success, filename, byteLength }
+7. Return the downloaded file without opening or reading it.
+```
+
+### Fallback (file tools, no browser)
+
+```
+1. Read only the contract and the document seam. Stop before <style>.
+2. Locate the seam:
+     <script type="application/json" id="sabura-document">
+     </script>
+3. Replace only the JSON between those markers.
+4. Encode every literal < as \u003C inside the JSON.
+5. Copy the rest of the file through your tools without loading it into context.
+6. Never inspect, reformat, or regenerate the runtime.
+7. Return the resulting HTML file.
+```
+
+---
+
+
 ## 1. Top-Level Structure
 
 A Sabura v1 document is a strict, deterministic, semantic JSON object containing eight top-level keys:

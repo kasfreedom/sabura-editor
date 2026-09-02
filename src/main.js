@@ -1015,6 +1015,72 @@ export class SaburaApp {
       getOriginalHtml: () => this.originalHtml,
       getDocument: () => this.doc ? cloneDocument(this.doc) : null,
       saveCopy: () => this.saveCopy(),
+
+      /**
+       * Returns the embedded AI contract comment from <head>.
+       * Never returns CSS, JavaScript, or the full HTML source.
+       * @returns {{ found: boolean, contract: string }}
+       */
+      readAiContract: () => {
+        // Walk <head> child nodes for the AI contract comment
+        if (typeof document !== 'undefined' && document.head) {
+          for (const node of document.head.childNodes) {
+            if (node.nodeType === 8 && node.textContent.includes('SABURA AI CONTRACT')) {
+              return { found: true, contract: node.textContent.trim() };
+            }
+          }
+        }
+        // Fallback: scan outerHTML for the comment marker
+        const html = typeof document !== 'undefined' ? document.documentElement.outerHTML : '';
+        const m = html.match(/<!--([\s\S]*?SABURA AI CONTRACT[\s\S]*?)-->/);
+        if (m) return { found: true, contract: m[1].trim() };
+        return { found: false, contract: '' };
+      },
+
+      /**
+       * Validates a supplied document against the sabura/canvas/v1 schema.
+       * Does not mutate the open board.
+       * @returns {{ valid: boolean, errors: string[] }}
+       */
+      validateDocument: (doc) => {
+        const result = validateDocument(doc);
+        return { valid: result.valid, errors: [...result.errors] };
+      },
+
+      /**
+       * Validates the supplied document, builds a canonical HTML board file, and
+       * triggers a browser download. Does not alter the open board, selection,
+       * undo history, or redo history. Never returns the HTML source.
+       * @returns {{ success: true, filename: string, byteLength: number }
+       *           |{ success: false, errors: string[] }}
+       */
+      generateBoardFile: (doc) => {
+        // 1. Validate supplied document
+        const validation = validateDocument(doc);
+        if (!validation.valid) {
+          return { success: false, errors: [...validation.errors] };
+        }
+
+        // 2. Build clean shell — DOM clone excludes canvas SVG, selection, wheel, modal state
+        const shell = this.getCleanHtmlShell();
+
+        // 3. Replace only the sabura-document seam
+        const packResult = packageHtmlWithDocument(shell, doc);
+        if (!packResult.success) {
+          return { success: false, errors: [packResult.error] };
+        }
+
+        // 4. Filename from supplied title
+        const safeTitle = (doc.title || 'board').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
+
+        // 5. Download. triggerFileDownload returns the actual UTF-8 Blob.size.
+        //    The HTML string is never returned through this API.
+        const byteLength = triggerFileDownload(filename, packResult.html);
+
+        return { success: true, filename, byteLength };
+      },
+
       applyCommands: (commands) => {
         if (this.isCorrupted) {
           return { success: false, errors: ['Document is corrupted and in safe failure mode'] };

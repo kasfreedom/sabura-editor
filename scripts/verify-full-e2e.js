@@ -2,6 +2,9 @@ import { spawn, exec } from 'child_process';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
+import { extractDocumentFromHtml } from '../src/storage/file-packer.js';
 
 const rootDir = path.resolve('.');
 const port = 8092;
@@ -1034,6 +1037,62 @@ async function runSafariTests() {
 
     log('14. Presentation Mode Hiding & Viewport Restoration', toolbarHiddenInPres && toolbarRestored && cameraRestored, 'hidden=' + toolbarHiddenInPres + ' restored=' + cameraRestored);
 
+    // Flow 15: AI Generator API checks (Safari — no download capture)
+    // Note: Safari automation cannot intercept file downloads.
+    // We verify readAiContract, getDocument, validateDocument, and generateBoardFile
+    // (return value only). Download delivery is verified in Chrome Flow 31.
+    try {
+      const contractResult = window.sabura.readAiContract();
+      const contractOk = contractResult.found &&
+        typeof contractResult.contract === 'string' &&
+        contractResult.contract.includes('SABURA AI CONTRACT') &&
+        contractResult.contract.includes('generateBoardFile') &&
+        contractResult.contract.includes('BROWSER-AGENT WORKFLOW') &&
+        contractResult.contract.includes('FILE-TOOL WORKFLOW') &&
+        contractResult.contract.length < 30000; // not the whole runtime
+      log('15a. readAiContract() returns guide', contractOk, 'found=' + contractResult.found + ' length=' + contractResult.contract.length);
+
+      const docResult = window.sabura.getDocument();
+      const docOk = docResult && typeof docResult.schemaVersion === 'string' &&
+        typeof docResult.objects === 'object' &&
+        !docResult.html && !docResult.source && !docResult.runtime;
+      log('15b. getDocument() returns only board data', Boolean(docOk), 'hasSchema=' + Boolean(docResult?.schemaVersion));
+
+      const valGoodResult = window.sabura.validateDocument({
+        schemaVersion: 'sabura/canvas/v1', id: 'board_safari31', title: 'Safari Test',
+        theme: app.doc.theme, objects: {}, order: [], groups: {}, assets: {}
+      });
+      log('15c. validateDocument() accepts valid doc', valGoodResult.valid, 'errors=' + (valGoodResult.errors || []).join(';'));
+
+      const valBadResult = window.sabura.validateDocument({ bogus: true });
+      log('15d. validateDocument() rejects invalid doc', !valBadResult.valid && valBadResult.errors.length > 0, 'errors=' + valBadResult.errors.slice(0, 1).join(';'));
+
+      // generateBoardFile — verify return value; we cannot capture the download in Safari
+      const genBadResult = window.sabura.generateBoardFile({ bogus: true });
+      log('15e. generateBoardFile() rejects invalid doc', !genBadResult.success && genBadResult.errors && genBadResult.errors.length > 0, 'errors=' + (genBadResult.errors || []).slice(0, 1).join(';'));
+
+      const origId = window.sabura.getDocument().id;
+      const genGoodResult = window.sabura.generateBoardFile({
+        schemaVersion: 'sabura/canvas/v1', id: 'board_safari_gen', title: 'Safari Gen Test',
+        theme: app.doc.theme,
+        objects: { 's1': { id: 's1', type: 'rectangle', x: 50, y: 50, width: 100, height: 60, seed: 7 } },
+        order: ['s1'], groups: {}, assets: {}
+      });
+      const genOk = genGoodResult.success &&
+        typeof genGoodResult.filename === 'string' &&
+        typeof genGoodResult.byteLength === 'number' &&
+        genGoodResult.byteLength > 200000 &&
+        !genGoodResult.html && !genGoodResult.source;
+      log('15f. generateBoardFile() returns metadata only (no HTML/source)', genOk, 'byteLength=' + genGoodResult.byteLength);
+
+      const afterId = window.sabura.getDocument().id;
+      log('15g. generateBoardFile() does not alter open board', afterId === origId, 'before=' + origId + ' after=' + afterId);
+
+      log('15h. NOTE: Safari download capture not supported — download delivery verified in Chrome Flow 31', true, 'limitation: expected');
+
+    } catch (aiErr) {
+      log('15. AI API Checks (Safari)', false, aiErr.message);
+    }
 
 
   } catch (err) {
@@ -1059,12 +1118,23 @@ if (document.readyState === 'loading') {
 let safariResolve = null;
 const safariPromise = new Promise(resolve => { safariResolve = resolve; });
 
+// Shared in-memory slot for the generated board file (Flow 31)
+let generatedE2eHtml = null;
+
 const server = http.createServer((req, res) => {
   console.log(`[HTTP ${req.method}] ${req.url}`);
   const freshHtml = fs.readFileSync(path.join(rootDir, 'sabura.html'), 'utf8');
   if (req.url === '/sabura.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(freshHtml);
+  } else if (req.url === '/generated-e2e.html') {
+    if (!generatedE2eHtml) {
+      res.writeHead(404);
+      res.end('Not yet generated');
+    } else {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(generatedE2eHtml);
+    }
   } else if (req.url === '/sabura-safari.html') {
     // Inject Safari runner script
     const injected = freshHtml.replace('</body>', '<script type="module" src="/safari-e2e-runner.js"></script></body>');
@@ -2330,7 +2400,265 @@ if (!c30.boxSquared || !c30.undoSquareOk) {
   throw new Error('Chrome: Keyboard Shortcut S for Equal Sides failed');
 }
 
-console.log('✓ All Chrome flows passed cleanly!');
+// -------------------------------------------------------------
+// Flow 31: AI Generator Interface (Chrome CDP)
+// -------------------------------------------------------------
+console.log('\n--- Flow 31: AI Generator Interface ---');
+
+// Helper: extract CSS text from <style>...</style>
+function extractCssContent(htmlStr) {
+  const m = htmlStr.match(/<style>([\s\S]*?)<\/style>/i);
+  if (!m) throw new Error('Flow 31: Could not extract CSS from HTML');
+  return m[1];
+}
+// Helper: extract JS bundle from bare <script>...</script> (no type= attribute)
+function extractJsContent(htmlStr) {
+  const m = htmlStr.match(/<script\s*>([\s\S]*?)<\/script>/i);
+  if (!m) throw new Error('Flow 31: Could not extract JS from HTML');
+  return m[1];
+}
+function sha256hex(str) {
+  return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
+}
+
+const generatorHtml = fs.readFileSync(path.join(rootDir, 'sabura.html'), 'utf8');
+const generatorCssHash = sha256hex(extractCssContent(generatorHtml));
+const generatorJsHash = sha256hex(extractJsContent(generatorHtml));
+
+const tmpDownloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sabura-e2e-'));
+try {
+  // Step B: readAiContract — must return the guide, never CSS/JS
+  const contract = await evalInChrome('window.sabura.readAiContract()');
+  if (!contract.found) throw new Error('Flow 31: readAiContract() returned found: false');
+  if (!contract.contract.includes('generateBoardFile'))
+    throw new Error('Flow 31: contract missing generateBoardFile');
+  if (!contract.contract.includes('BROWSER-AGENT WORKFLOW'))
+    throw new Error('Flow 31: contract missing BROWSER-AGENT WORKFLOW');
+  if (!contract.contract.includes('FILE-TOOL WORKFLOW'))
+    throw new Error('Flow 31: contract missing FILE-TOOL WORKFLOW');
+  if (contract.contract.toLowerCase().includes('function') && contract.contract.includes('{') && contract.contract.length > 20000)
+    throw new Error('Flow 31: readAiContract() appears to have returned runtime code');
+  console.log('  ✓ 31a. readAiContract() returns guide, not runtime');
+
+  // Step C: getDocument returns only board data
+  const docCheck = await evalInChrome(`(() => {
+    const d = window.sabura.getDocument();
+    return {
+      hasSchema: d && typeof d.schemaVersion === 'string',
+      hasObjects: d && typeof d.objects === 'object',
+      noHtml: !d || (!d.html && !d.source && !d.runtime && !d.css && !d.js)
+    };
+  })()`);
+  if (!docCheck.hasSchema || !docCheck.hasObjects || !docCheck.noHtml)
+    throw new Error('Flow 31: getDocument() returned unexpected HTML/runtime fields');
+  console.log('  ✓ 31b. getDocument() returns only board data');
+
+  // Step D: validateDocument — valid doc accepted
+  const valOk = await evalInChrome(`window.sabura.validateDocument({
+    schemaVersion: 'sabura/canvas/v1', id: 'board_val31', title: 'Val Test',
+    theme: window.saburaApp.doc.theme, objects: {}, order: [], groups: {}, assets: {}
+  })`);
+  if (!valOk.valid) throw new Error('Flow 31: validateDocument rejected valid doc: ' + valOk.errors.join(', '));
+  console.log('  ✓ 31c. validateDocument() accepts valid doc');
+
+  // Step E: validateDocument — invalid doc rejected with useful errors
+  const valBad = await evalInChrome(`window.sabura.validateDocument({ bogus: true })`);
+  if (valBad.valid || !valBad.errors || valBad.errors.length === 0)
+    throw new Error('Flow 31: validateDocument accepted invalid doc or gave no errors');
+  console.log('  ✓ 31d. validateDocument() rejects invalid doc with errors: ' + valBad.errors.slice(0, 2).join('; '));
+
+  // Step F: invalid generateBoardFile must fail (no download; Blob URLs don't reach disk in headless Chrome)
+  const genBadResult = await evalInChrome(`window.sabura.generateBoardFile({ bogus: true })`);
+  if (genBadResult.success) throw new Error('Flow 31: generateBoardFile succeeded with invalid doc');
+  if (!genBadResult.errors || genBadResult.errors.length === 0)
+    throw new Error('Flow 31: generateBoardFile gave no errors for invalid doc');
+  // In headless Chrome, Blob URL downloads do not reach the filesystem.
+  // We verify that failure is reported without triggering a download by checking success: false.
+  console.log('  ✓ 31e. generateBoardFile() rejects invalid doc (success: false, errors reported)');
+
+  // Step G: Capture original board state
+  const originalDocId = await evalInChrome('window.sabura.getDocument().id');
+
+  // Step H: generateBoardFile with valid doc — initial call (result metadata only)
+
+  const genResult = await evalInChrome(`window.sabura.generateBoardFile({
+    schemaVersion: 'sabura/canvas/v1',
+    id: 'board_e2egentest',
+    title: 'E2E Generated Board',
+    theme: window.saburaApp.doc.theme,
+    objects: {
+      'shape_e2e': {
+        id: 'shape_e2e', type: 'rectangle',
+        x: 100, y: 100, width: 200, height: 120,
+        fill: '#ff6b6b', stroke: '#c92a2a',
+        strokeWidth: 2, strokeStyle: 'solid',
+        opacity: 1, roughness: 1, seed: 42,
+        locked: false, groupId: null,
+        text: 'E2E Object', textStyle: {
+          size: 'm', resolvedSize: 18, fontFamily: 'sans',
+          bold: false, align: 'center', color: '#1e1e1e'
+        }
+      }
+    },
+    order: ['shape_e2e'],
+    groups: {},
+    assets: {}
+  })`);
+
+  if (!genResult.success)
+    throw new Error('Flow 31: generateBoardFile failed: ' + (genResult.errors || []).join(', '));
+  if (genResult.html !== undefined)
+    throw new Error('Flow 31: generateBoardFile returned html field in result');
+  if (genResult.source !== undefined)
+    throw new Error('Flow 31: generateBoardFile returned source field in result');
+  if (genResult.runtime !== undefined)
+    throw new Error('Flow 31: generateBoardFile returned runtime field in result');
+  if (typeof genResult.filename !== 'string' || !genResult.filename.endsWith('.html'))
+    throw new Error('Flow 31: generateBoardFile returned invalid filename: ' + genResult.filename);
+  if (typeof genResult.byteLength !== 'number' || genResult.byteLength < 200000)
+    throw new Error('Flow 31: generateBoardFile returned invalid byteLength: ' + genResult.byteLength);
+  console.log(`  ✓ 31f. generateBoardFile() succeeded: ${genResult.filename}, byteLength=${genResult.byteLength}`);
+
+  // Step I: Verify live board is unaltered
+  const afterDocId = await evalInChrome('window.sabura.getDocument().id');
+  if (afterDocId !== originalDocId)
+    throw new Error(`Flow 31: generateBoardFile altered open board (was ${originalDocId}, now ${afterDocId})`);
+  console.log('  ✓ 31g. generateBoardFile() did not alter the open board');
+
+  // Step J: Intercept the generated Blob in the browser (headless Chrome does not
+  // write Blob URL downloads to disk). Inject an interceptor before generating,
+  // then read the captured Blob content back via CDP after generation.
+  await cdpSend('Runtime.evaluate', {
+    expression: `
+      (function() {
+        window._lastSaburaBlob = null;
+        const _orig = URL.createObjectURL.bind(URL);
+        URL.createObjectURL = function(blob) {
+          if (blob && blob.type && blob.type.includes('text/html')) {
+            const reader = new FileReader();
+            reader.onload = () => { window._lastSaburaBlob = reader.result; };
+            reader.readAsDataURL(blob);
+          }
+          return _orig(blob);
+        };
+      })()
+    `,
+    awaitPromise: false
+  });
+
+  // (Re-run generateBoardFile now that interceptor is in place)
+  const captureResult = await evalInChrome(`window.sabura.generateBoardFile({
+    schemaVersion: 'sabura/canvas/v1',
+    id: 'board_e2egentest',
+    title: 'E2E Generated Board',
+    theme: window.saburaApp.doc.theme,
+    objects: {
+      'shape_e2e': {
+        id: 'shape_e2e', type: 'rectangle',
+        x: 100, y: 100, width: 200, height: 120,
+        fill: '#ff6b6b', stroke: '#c92a2a',
+        strokeWidth: 2, strokeStyle: 'solid',
+        opacity: 1, roughness: 1, seed: 42,
+        locked: false, groupId: null,
+        text: 'E2E Object', textStyle: {
+          size: 'm', resolvedSize: 18, fontFamily: 'sans',
+          bold: false, align: 'center', color: '#1e1e1e'
+        }
+      }
+    },
+    order: ['shape_e2e'],
+    groups: {},
+    assets: {}
+  })`);
+  if (!captureResult.success)
+    throw new Error('Flow 31: second generateBoardFile (for Blob capture) failed: ' + (captureResult.errors || []).join(', '));
+
+  // Wait for FileReader.onload (async)
+  let capturedDataUrl = null;
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    capturedDataUrl = await evalInChrome('window._lastSaburaBlob');
+    if (capturedDataUrl) break;
+  }
+  if (!capturedDataUrl)
+    throw new Error('Flow 31: Blob interceptor did not capture any data within 3 seconds');
+
+  // Decode base64 data URL -> HTML string
+  const b64 = capturedDataUrl.split(',')[1];
+  const downloadedHtml = Buffer.from(b64, 'base64').toString('utf8');
+  const actualBytes = Buffer.byteLength(downloadedHtml, 'utf8');
+  console.log(`  ✓ 31h. Blob captured in browser: ${actualBytes} bytes`);
+
+  // Step K: Verify real byte size matches byteLength returned by API
+  // Step K: Verify real byte size matches byteLength returned by API (use captureResult)
+  if (Math.abs(actualBytes - captureResult.byteLength) > 4)
+    throw new Error(`Flow 31: byteLength mismatch — API=${captureResult.byteLength}, decoded=${actualBytes}`);
+  console.log(`  ✓ 31i. byteLength accurate: API=${captureResult.byteLength}, decoded=${actualBytes}`);
+
+  // Step L: CSS and JS content hashes must match generator
+  const dlCssHash = sha256hex(extractCssContent(downloadedHtml));
+  const dlJsHash = sha256hex(extractJsContent(downloadedHtml));
+  if (dlCssHash !== generatorCssHash)
+    throw new Error('Flow 31: CSS content hash changed in generated file');
+  if (dlJsHash !== generatorJsHash)
+    throw new Error('Flow 31: JS bundle hash changed in generated file');
+  console.log('  ✓ 31j. CSS and JS content hashes match generator');
+
+  // Step M: Extract and validate embedded document
+  const extracted = extractDocumentFromHtml(downloadedHtml);
+  if (!extracted.valid)
+    throw new Error('Flow 31: Embedded document invalid: ' + extracted.errors.join(', '));
+  if (extracted.document.id !== 'board_e2egentest')
+    throw new Error('Flow 31: Embedded document ID mismatch: ' + extracted.document.id);
+  if (!extracted.document.objects['shape_e2e'])
+    throw new Error('Flow 31: shape_e2e missing from embedded document');
+  console.log('  ✓ 31k. Embedded document validates and contains supplied object');
+
+  // Step N: Serve generated file via HTTP and navigate Chrome to it
+  generatedE2eHtml = downloadedHtml;
+  await cdpSend('Page.navigate', { url: `http://127.0.0.1:${port}/generated-e2e.html` });
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 200));
+    const hasApp = await evalInChrome('Boolean(window.saburaApp)').catch(() => false);
+    if (hasApp) break;
+  }
+
+  // Step O: Verify the supplied object is rendered via public API
+  const renderOk = await evalInChrome(`(() => {
+    const doc = window.sabura.getDocument();
+    return Boolean(doc && doc.id === 'board_e2egentest' && doc.objects && doc.objects['shape_e2e']);
+  })()`);
+  if (!renderOk)
+    throw new Error('Flow 31: Generated board did not render the supplied shape_e2e object');
+  console.log('  ✓ 31l. Generated board opened with supplied object visible');
+
+  // Step P: Confirm the generated board is editable (create a new object via public API)
+  const editOk = await evalInChrome(`(() => {
+    const result = window.sabura.applyCommands([{
+      type: 'create_object',
+      object: { id: 'r_edit_test', type: 'ellipse', x: 300, y: 300, width: 100, height: 60, seed: 99 }
+    }]);
+    return result.success && Boolean(window.sabura.getDocument().objects['r_edit_test']);
+  })()`);
+  if (!editOk)
+    throw new Error('Flow 31: Generated board is not editable via applyCommands');
+  console.log('  ✓ 31m. Generated board remains fully editable');
+
+  console.log('\n✓ Flow 31: AI generator interface fully verified!');
+
+} finally {
+  // Restore Chrome to the main generator file before Safari tests
+  try { await cdpSend('Page.navigate', { url: `http://127.0.0.1:${port}/sabura.html` }); } catch (_) {}
+  // Clean temporary download directory
+  try {
+    for (const f of fs.readdirSync(tmpDownloadDir)) {
+      try { fs.unlinkSync(path.join(tmpDownloadDir, f)); } catch (_) {}
+    }
+    fs.rmdirSync(tmpDownloadDir);
+  } catch (_) {}
+}
+
+console.log('\n✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
 
@@ -2370,6 +2698,8 @@ if (!allSafariPassed) {
 }
 
 console.log('\n=============================================================');
-console.log('✓ ALL 10 CRITICAL BROWSER REQUIREMENTS VERIFIED IN CHROME AND SAFARI!');
+console.log('✓ ALL CRITICAL BROWSER REQUIREMENTS VERIFIED IN CHROME AND SAFARI!');
+console.log('  Chrome: Flows 1-31 (including AI generator interface, Flow 31)');
+console.log('  Safari: Flows 15-28 + AI API checks (15a-h); download capture not supported in Safari');
 console.log('=============================================================\n');
 process.exit(0);
