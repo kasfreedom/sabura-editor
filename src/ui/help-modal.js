@@ -73,11 +73,16 @@ export class HelpModal {
                 <li><span class="help-desc">Delete</span> <kbd class="kbd-badge">Delete</kbd> / <kbd class="kbd-badge">Backspace</kbd></li>
                 <li><span class="help-desc">Undo</span> <kbd class="kbd-badge">${modKey}+Z</kbd></li>
                 <li><span class="help-desc">Redo</span> <kbd class="kbd-badge">${modKey}+Shift+Z</kbd></li>
-                <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Copy</span> <kbd class="kbd-badge">${modKey}+C</kbd></li>
+                <li><span class="help-desc">Cut</span> <kbd class="kbd-badge">${modKey}+X</kbd></li>
+                <li><span class="help-desc">Paste</span> <kbd class="kbd-badge">${modKey}+V</kbd></li>
                 <li><span class="help-desc">Duplicate</span> <kbd class="kbd-badge">${modKey}+D</kbd></li>
+                <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Group / Ungroup</span> <kbd class="kbd-badge">${modKey}+G</kbd> / <kbd class="kbd-badge">Shift</kbd></li>
+                <li><span class="help-desc">Arrange Front/Back</span> <kbd class="kbd-badge">${modKey}+]</kbd> / <kbd class="kbd-badge">[</kbd></li>
                 <li><span class="help-desc">Select All</span> <kbd class="kbd-badge">${modKey}+A</kbd></li>
                 <li><span class="help-desc">Nudge (10px)</span> <kbd class="kbd-badge">Arrows</kbd> (<kbd class="kbd-badge">Shift</kbd>)</li>
-                <li><span class="help-desc">Proportional Resize</span> <kbd class="kbd-badge">Shift</kbd> + resize handle</li>
+                <li><span class="help-desc">Proportional Resize</span> <kbd class="kbd-badge">Shift</kbd> + handle</li>
                 <li><span class="help-desc">Centered Resize</span> <kbd class="kbd-badge">Alt / Option</kbd> + handle</li>
               </ul>
             </section>

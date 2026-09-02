@@ -170,6 +170,54 @@ export class ShortcutsCoordinator {
       this.handlers.onDHold?.(true);
     }
 
+    if (mod && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      this.handlers.onCopy?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'x') {
+      e.preventDefault();
+      this.handlers.onCut?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      this.handlers.onPaste?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'g') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        this.handlers.onUngroup?.();
+      } else {
+        this.handlers.onGroup?.();
+      }
+      return;
+    }
+
+    if (mod && (e.key === ']' || e.key === '}')) {
+      e.preventDefault();
+      if (e.shiftKey || e.altKey) {
+        this.handlers.onBringToFront?.();
+      } else {
+        this.handlers.onBringForward?.();
+      }
+      return;
+    }
+
+    if (mod && (e.key === '[' || e.key === '{')) {
+      e.preventDefault();
+      if (e.shiftKey || e.altKey) {
+        this.handlers.onSendToBack?.();
+      } else {
+        this.handlers.onSendBackward?.();
+      }
+      return;
+    }
+
     if (mod && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       this.handlers.onDuplicate?.();

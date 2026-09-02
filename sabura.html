@@ -724,7 +724,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_80g8ks4a2gf",
+  "id": "board_0ruk4ydezbi",
   "objects": {
     "conn_1": {
       "endArrow": true,
@@ -733,14 +733,13 @@ body.in-presentation {
         "id": "shape_idea"
       },
       "groupId": null,
-      "height": 100,
       "id": "conn_1",
       "locked": false,
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 1051915036,
+      "seed": 671700960,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -757,10 +756,7 @@ body.in-presentation {
       "to": {
         "id": "shape_core"
       },
-      "type": "connector",
-      "width": 160,
-      "x": 0,
-      "y": 0
+      "type": "connector"
     },
     "shape_core": {
       "fill": "#b2f2bb",
@@ -771,7 +767,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1263650812,
+      "seed": 1802523598,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -798,7 +794,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1524258482,
+      "seed": 1939941042,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -825,7 +821,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 228017789,
+      "seed": 795079350,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -1026,14 +1022,67 @@ const MIN_OBJECT_SIZE = 16;
 
 /**
  * Gets axis-aligned bounding box of an object.
+ * For connectors, calculates the true bounds from resolved/rendered geometry without phantom zero-origin.
  * @param {Object} obj 
- * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number }}
+ * @param {Object|null} doc 
+ * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
-function getBoundingBox(obj) {
-  const x = obj.x;
-  const y = obj.y;
-  const width = obj.width;
-  const height = obj.height;
+function getBoundingBox(obj, doc = null) {
+  if (!obj) return null;
+
+  if (obj.type === 'connector') {
+    let pts = [];
+    if (doc) {
+      const geom = resolveConnectorGeometry(doc, obj);
+      if (geom && Array.isArray(geom.points) && geom.points.length > 0) {
+        pts = geom.points;
+      }
+    }
+    if (pts.length === 0) {
+      if (obj.from?.point) pts.push(obj.from.point);
+      if (obj.to?.point) pts.push(obj.to.point);
+    }
+    if (pts.length === 0) {
+      return null;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      if (typeof p.x === 'number' && !isNaN(p.x)) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+      }
+      if (typeof p.y === 'number' && !isNaN(p.y)) {
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+
+    if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+      return null;
+    }
+
+    const width = Math.max(0, maxX - minX);
+    const height = Math.max(0, maxY - minY);
+    return {
+      x: minX,
+      y: minY,
+      width,
+      height,
+      cx: minX + width / 2,
+      cy: minY + height / 2,
+      right: maxX,
+      bottom: maxY
+    };
+  }
+
+  const x = typeof obj.x === 'number' && !isNaN(obj.x) ? obj.x : 0;
+  const y = typeof obj.y === 'number' && !isNaN(obj.y) ? obj.y : 0;
+  const width = typeof obj.width === 'number' && !isNaN(obj.width) ? obj.width : 0;
+  const height = typeof obj.height === 'number' && !isNaN(obj.height) ? obj.height : 0;
   return {
     x,
     y,
@@ -1048,23 +1097,30 @@ function getBoundingBox(obj) {
 
 /**
  * Gets union bounding box for multiple objects.
+ * Accurately integrates resolved connector geometry and ignores invalid/phantom objects.
  * @param {Array<Object>} objects 
+ * @param {Object|null} doc 
  * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
-function getUnionBoundingBox(objects) {
+function getUnionBoundingBox(objects, doc = null) {
   if (!objects || objects.length === 0) return null;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
+  let validCount = 0;
 
   for (const obj of objects) {
-    const box = getBoundingBox(obj);
+    const box = getBoundingBox(obj, doc);
+    if (!box || isNaN(box.x) || isNaN(box.y) || isNaN(box.right) || isNaN(box.bottom)) continue;
+    validCount++;
     if (box.x < minX) minX = box.x;
     if (box.y < minY) minY = box.y;
     if (box.right > maxX) maxX = box.right;
     if (box.bottom > maxY) maxY = box.bottom;
   }
+
+  if (validCount === 0 || minX === Infinity || minY === Infinity) return null;
 
   const width = Math.max(0, maxX - minX);
   const height = Math.max(0, maxY - minY);
@@ -1655,7 +1711,8 @@ function calculateSnapping(currentBox, otherObjects, options = {}) {
 
   // Object-to-object snapping
   for (const other of otherObjects) {
-    const box = getBoundingBox(other);
+    const box = getBoundingBox(other, options.doc);
+    if (!box) continue;
 
     // Vertical alignment (X axis)
     const xPairs = [
@@ -1731,17 +1788,22 @@ function calculateSnapping(currentBox, otherObjects, options = {}) {
 
 /**
  * Calculates alignment mutations for multiple objects.
+ * Attached and free connectors do not participate as independent objects;
+ * only eligible spatial objects (type !== 'connector') are aligned.
  * 
  * @param {Array<Object>} objects 
  * @param {'left'|'center'|'right'|'top'|'middle'|'bottom'} alignment 
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 function alignObjects(objects, alignment) {
-  if (!objects || objects.length < 2) return {};
-  const union = getUnionBoundingBox(objects);
+  if (!objects) return {};
+  const spatialObjects = objects.filter(o => o && o.type !== 'connector');
+  if (spatialObjects.length < 2) return {};
+  const union = getUnionBoundingBox(spatialObjects);
+  if (!union) return {};
   const deltas = {};
 
-  for (const obj of objects) {
+  for (const obj of spatialObjects) {
     let dx = 0;
     let dy = 0;
     switch (alignment) {
@@ -1771,17 +1833,21 @@ function alignObjects(objects, alignment) {
 
 /**
  * Calculates even distribution for multiple objects.
+ * Attached and free connectors do not participate;
+ * only eligible spatial objects (type !== 'connector') are distributed.
  * 
  * @param {Array<Object>} objects 
  * @param {'horizontal'|'vertical'} direction 
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 function distributeObjects(objects, direction) {
-  if (!objects || objects.length < 3) return {};
+  if (!objects) return {};
+  const spatialObjects = objects.filter(o => o && o.type !== 'connector');
+  if (spatialObjects.length < 3) return {};
   const deltas = {};
 
   if (direction === 'horizontal') {
-    const sorted = [...objects].sort((a, b) => a.x - b.x);
+    const sorted = [...spatialObjects].sort((a, b) => a.x - b.x);
     const totalObjectWidth = sorted.reduce((sum, o) => sum + o.width, 0);
     const span = (sorted[sorted.length - 1].x + sorted[sorted.length - 1].width) - sorted[0].x;
     const gap = (span - totalObjectWidth) / (sorted.length - 1);
@@ -1792,7 +1858,7 @@ function distributeObjects(objects, direction) {
       currentX += obj.width + gap;
     }
   } else {
-    const sorted = [...objects].sort((a, b) => a.y - b.y);
+    const sorted = [...spatialObjects].sort((a, b) => a.y - b.y);
     const totalObjectHeight = sorted.reduce((sum, o) => sum + o.height, 0);
     const span = (sorted[sorted.length - 1].y + sorted[sorted.length - 1].height) - sorted[0].y;
     const gap = (span - totalObjectHeight) / (sorted.length - 1);
@@ -1943,10 +2009,6 @@ function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) 
   const baseObject = {
     id,
     type,
-    x: overrides.x !== undefined ? overrides.x : 0,
-    y: overrides.y !== undefined ? overrides.y : 0,
-    width,
-    height,
     rotation: overrides.rotation || 0,
     fill: overrides.fill !== undefined ? overrides.fill : theme.defaultFill,
     stroke: overrides.stroke !== undefined ? overrides.stroke : theme.defaultStroke,
@@ -1969,13 +2031,19 @@ function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) 
   };
 
   if (type === 'connector') {
-    baseObject.from = overrides.from || { point: { x: baseObject.x, y: baseObject.y } };
-    baseObject.to = overrides.to || { point: { x: baseObject.x + width, y: baseObject.y + height } };
+    baseObject.from = overrides.from || { point: { x: overrides.x !== undefined ? overrides.x : 0, y: overrides.y !== undefined ? overrides.y : 0 } };
+    baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
     baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
     baseObject.startArrow = overrides.startArrow || false;
     baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
-  } else if (type === 'path') {
-    baseObject.points = Array.isArray(overrides.points) ? overrides.points : [];
+  } else {
+    baseObject.x = overrides.x !== undefined ? overrides.x : 0;
+    baseObject.y = overrides.y !== undefined ? overrides.y : 0;
+    baseObject.width = width;
+    baseObject.height = height;
+    if (type === 'path') {
+      baseObject.points = Array.isArray(overrides.points) ? overrides.points : [];
+    }
   }
 
   // Preserve any additional fields for custom namespaces
@@ -2037,11 +2105,13 @@ function validateDocument(doc) {
       if (typeof obj.type !== 'string' || !obj.type.trim()) {
         errors.push(`Object "${objId}" must have a valid type string`);
       }
-      if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
-        errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
-      }
-      if (typeof obj.width !== 'number' || isNaN(obj.width) || typeof obj.height !== 'number' || isNaN(obj.height)) {
-        errors.push(`Object "${objId}" dimensions (width, height) must be valid numbers`);
+      if (obj.type !== 'connector') {
+        if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
+          errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
+        }
+        if (typeof obj.width !== 'number' || isNaN(obj.width) || typeof obj.height !== 'number' || isNaN(obj.height)) {
+          errors.push(`Object "${objId}" dimensions (width, height) must be valid numbers`);
+        }
       }
       if (typeof obj.seed !== 'number' || isNaN(obj.seed)) {
         errors.push(`Object "${objId}" seed must be a valid number`);
@@ -2300,6 +2370,12 @@ function applyCommand(doc, cmd) {
 
       newDoc.order = newDoc.order.filter(id => !idsToDelete.includes(id));
 
+      if (Array.isArray(cmd.removeGroups)) {
+        for (const gId of cmd.removeGroups) {
+          delete newDoc.groups[gId];
+        }
+      }
+
       // Reconnect connectors that referenced deleted objects to static points
       const affectedConnectors = [];
       for (const [cId, conn] of Object.entries(newDoc.objects)) {
@@ -2347,35 +2423,90 @@ function applyCommand(doc, cmd) {
       const offset = cmd.offset || { x: 24, y: 24 };
       const duplicatedIds = [];
       const newObjects = [];
+      const idMap = {};
+      const groupMap = {};
 
+      // 1. First pass: clone objects, assign new IDs, and clone groups
       for (const id of ids) {
         const source = newDoc.objects[id];
         const newId = generateId(source.type || 'dup');
+        idMap[id] = newId;
+
         const dup = cloneDocument(source);
         dup.id = newId;
         dup.x += offset.x;
         dup.y += offset.y;
-        if (dup.type === 'connector') {
-          if (dup.from?.point) {
-            dup.from.point.x += offset.x;
-            dup.from.point.y += offset.y;
-          }
-          if (dup.to?.point) {
-            dup.to.point.x += offset.x;
-            dup.to.point.y += offset.y;
-          }
-        }
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
+
+        if (dup.groupId) {
+          if (!groupMap[dup.groupId]) {
+            const newGid = generateId('grp');
+            groupMap[dup.groupId] = newGid;
+            const origGroup = newDoc.groups[dup.groupId];
+            newDoc.groups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
+          }
+          dup.groupId = groupMap[dup.groupId];
+        }
+
         newDoc.objects[newId] = dup;
         newDoc.order.push(newId);
         duplicatedIds.push(newId);
         newObjects.push(dup);
       }
 
+      // 2. Second pass: Rebind connector endpoints
+      for (const dup of newObjects) {
+        if (dup.type === 'connector') {
+          // Rebind 'from' endpoint
+          if (dup.from) {
+            if (dup.from.id && idMap[dup.from.id]) {
+              dup.from.id = idMap[dup.from.id];
+            } else if (dup.from.id) {
+              // Connected to external uncopied object: convert to free point offset by (dx, dy)
+              const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
+              const origConn = doc.objects[origId] || dup;
+              const resolved = resolveConnectorGeometry(doc, origConn);
+              dup.from = {
+                point: {
+                  x: resolved.start.x + offset.x,
+                  y: resolved.start.y + offset.y
+                }
+              };
+            } else if (dup.from.point) {
+              dup.from.point.x += offset.x;
+              dup.from.point.y += offset.y;
+            }
+          }
+
+          // Rebind 'to' endpoint
+          if (dup.to) {
+            if (dup.to.id && idMap[dup.to.id]) {
+              dup.to.id = idMap[dup.to.id];
+            } else if (dup.to.id) {
+              // Connected to external uncopied object: convert to free point offset by (dx, dy)
+              const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
+              const origConn = doc.objects[origId] || dup;
+              const resolved = resolveConnectorGeometry(doc, origConn);
+              dup.to = {
+                point: {
+                  x: resolved.end.x + offset.x,
+                  y: resolved.end.y + offset.y
+                }
+              };
+            } else if (dup.to.point) {
+              dup.to.point.x += offset.x;
+              dup.to.point.y += offset.y;
+            }
+          }
+        }
+      }
+
+      const createdGroupIds = Object.values(groupMap);
       const inverseCmd = {
         type: 'delete_objects',
-        ids: duplicatedIds
+        ids: duplicatedIds,
+        removeGroups: createdGroupIds
       };
       return { doc: newDoc, inverseCmd, duplicatedIds };
     }
@@ -2455,16 +2586,20 @@ function applyCommand(doc, cmd) {
     }
 
     case 'align_objects': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
-      if (ids.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
-      const objects = ids.map(id => newDoc.objects[id]);
+      const spatialIds = (cmd.ids || []).filter(id => {
+        const o = newDoc.objects[id];
+        return o && o.type !== 'connector' && !o.locked;
+      });
+      if (spatialIds.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = spatialIds.map(id => newDoc.objects[id]);
       const deltas = alignObjects(objects, cmd.alignment);
       const prevPositions = {};
-      for (const id of ids) {
+      for (const id of spatialIds) {
         const d = deltas[id] || { dx: 0, dy: 0 };
-        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x += d.dx;
-        newDoc.objects[id].y += d.dy;
+        const obj = newDoc.objects[id];
+        prevPositions[id] = { x: obj.x, y: obj.y };
+        obj.x += d.dx;
+        obj.y += d.dy;
       }
       const inverseCmd = {
         type: 'restore_positions',
@@ -2474,16 +2609,20 @@ function applyCommand(doc, cmd) {
     }
 
     case 'distribute_objects': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
-      if (ids.length < 3) return { doc: newDoc, inverseCmd: { type: 'noop' } };
-      const objects = ids.map(id => newDoc.objects[id]);
+      const spatialIds = (cmd.ids || []).filter(id => {
+        const o = newDoc.objects[id];
+        return o && o.type !== 'connector' && !o.locked;
+      });
+      if (spatialIds.length < 3) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = spatialIds.map(id => newDoc.objects[id]);
       const deltas = distributeObjects(objects, cmd.direction);
       const prevPositions = {};
-      for (const id of ids) {
+      for (const id of spatialIds) {
         const d = deltas[id] || { dx: 0, dy: 0 };
-        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x += d.dx;
-        newDoc.objects[id].y += d.dy;
+        const obj = newDoc.objects[id];
+        prevPositions[id] = { x: obj.x, y: obj.y };
+        obj.x += d.dx;
+        obj.y += d.dy;
       }
       const inverseCmd = {
         type: 'restore_positions',
@@ -2495,10 +2634,20 @@ function applyCommand(doc, cmd) {
     case 'restore_positions': {
       const prev = {};
       for (const [id, pos] of Object.entries(cmd.positions || {})) {
-        if (!newDoc.objects[id]) continue;
-        prev[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x = pos.x;
-        newDoc.objects[id].y = pos.y;
+        const obj = newDoc.objects[id];
+        if (!obj) continue;
+        prev[id] = {
+          x: obj.x,
+          y: obj.y,
+          fromPoint: obj.type === 'connector' && obj.from?.point ? { ...obj.from.point } : null,
+          toPoint: obj.type === 'connector' && obj.to?.point ? { ...obj.to.point } : null
+        };
+        obj.x = pos.x;
+        obj.y = pos.y;
+        if (obj.type === 'connector') {
+          if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
+          if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
+        }
       }
       return { doc: newDoc, inverseCmd: { type: 'restore_positions', positions: prev } };
     }
@@ -4077,7 +4226,7 @@ function renderSelectionOverlay(doc, selectedIds) {
     return markup.join('\n');
   }
 
-  const unionBox = getUnionBoundingBox(selectedObjects);
+  const unionBox = getUnionBoundingBox(selectedObjects, doc);
   if (!unionBox) return '';
 
   const pad = 4;
@@ -4087,13 +4236,28 @@ function renderSelectionOverlay(doc, selectedIds) {
   const bh = unionBox.height + pad * 2;
 
   // Bounding rect: Concepts precision hairline dash with subtle accent wash
-  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" class="selection-bounds-rect" pointer-events="none" />`);
 
-  // Only render 8 resize handles if single unlocked object or non-group selection
+  // If multiple objects are selected, render an unobtrusive count badge at the top
+  if (selectedObjects.length > 1) {
+    const countText = `${selectedObjects.length} objects`;
+    const badgeWidth = Math.max(60, countText.length * 7 + 16);
+    const badgeHeight = 20;
+    const badgeX = bx + bw - badgeWidth;
+    const badgeY = by - badgeHeight - 4;
+    markup.push(`
+      <g class="selection-count-badge" pointer-events="none">
+        <rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${badgeHeight}" rx="4" ry="4" fill="${selStroke}" opacity="0.9" />
+        <text x="${badgeX + badgeWidth / 2}" y="${badgeY + 14}" fill="#ffffff" font-size="11" font-weight="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">${countText}</text>
+      </g>
+    `);
+  }
+
+  // Only render 8 resize handles if single unlocked object
   const isSingle = selectedObjects.length === 1;
   const isLocked = selectedObjects.some(o => o.locked);
 
-  if (!isLocked) {
+  if (isSingle && !isLocked) {
     const handles = [
       { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
       { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },
@@ -4175,11 +4339,12 @@ class ToolWheel {
     this.themePalette = palette || [];
   }
 
-  open(x, y, context = 'canvas', selectedObject = null, palette = [], selectedCount = 1) {
+  open(x, y, context = 'canvas', selectedObject = null, palette = [], selectedCount = 1, selectedObjects = []) {
     if (palette && palette.length) this.themePalette = palette;
     this.context = context;
     this.selectedObject = selectedObject;
     this.selectedCount = selectedCount;
+    this.selectedObjects = Array.isArray(selectedObjects) ? selectedObjects : [];
     this.activeSubMenu = null;
     this.hoveredItem = null;
 
@@ -4258,15 +4423,79 @@ class ToolWheel {
 
     // Selected object context
     const isLocked = this.selectedObject?.locked;
-    const isGrouped = Boolean(this.selectedObject?.groupId);
+    const isGrouped = Boolean(this.selectedObject?.groupId) || this.selectedObjects.some(o => o.groupId);
     const isConnector = this.selectedObject?.type === 'connector';
     const isMulti = this.selectedCount > 1;
 
     const items = [];
 
+    const spatialObjects = this.selectedObjects.filter(o => o && o.type !== 'connector' && !o.locked);
+    const spatialCount = spatialObjects.length;
+
     // Context: Multiple objects
     if (isMulti) {
-      // Shared styling
+      // 1. Grouping
+      if (isGrouped) {
+        items.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+      }
+      if (this.selectedCount >= 2) {
+        items.push({ id: 'action_group', label: 'Group', icon: '⧉' });
+      }
+
+      // 2. Alignment (requires at least 2 eligible spatial objects)
+      if (spatialCount >= 2) {
+        items.push({
+          id: 'menu_align',
+          label: 'Align',
+          icon: '⫿',
+          subItems: [
+            { id: 'align_left', label: 'Left', icon: '⇤' },
+            { id: 'align_center', label: 'Center H', icon: '⫿' },
+            { id: 'align_right', label: 'Right', icon: '⇥' },
+            { id: 'align_top', label: 'Top', icon: '⤒' },
+            { id: 'align_middle', label: 'Middle V', icon: '⁼' },
+            { id: 'align_bottom', label: 'Bottom', icon: '⤓' }
+          ]
+        });
+      }
+
+      // 3. Distribution (requires at least 3 eligible spatial objects)
+      if (spatialCount >= 3) {
+        items.push({
+          id: 'menu_distribute',
+          label: 'Distribute',
+          icon: '↔',
+          subItems: [
+            { id: 'dist_h', label: 'Horizontal', icon: '↔' },
+            { id: 'dist_v', label: 'Vertical', icon: '↕' }
+          ]
+        });
+      }
+
+      // 3. Stacking / Ordering
+      items.push({
+        id: 'menu_order',
+        label: 'Arrange',
+        icon: '≡',
+        subItems: [
+          { id: 'order_front', label: 'Front', icon: '⇈' },
+          { id: 'order_forward', label: 'Forward', icon: '↑' },
+          { id: 'order_backward', label: 'Backward', icon: '↓' },
+          { id: 'order_back', label: 'Back', icon: '⇊' }
+        ]
+      });
+
+      // 4. Actions: Duplicate, Lock / Unlock, Delete
+      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
+      const anyUnlocked = this.selectedObjects.length > 0 ? this.selectedObjects.some(o => !o.locked) : true;
+      items.push({
+        id: anyUnlocked ? 'action_lock' : 'action_unlock',
+        label: anyUnlocked ? 'Lock' : 'Unlock',
+        icon: anyUnlocked ? '🔒' : '🔓'
+      });
+      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+
+      // 5. Shared styling
       const fillSub = [
         { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
         ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
@@ -4301,32 +4530,6 @@ class ToolWheel {
         ]
       });
 
-      // Grouping
-      items.push({
-        id: isGrouped ? 'action_ungroup' : 'action_group',
-        label: isGrouped ? 'Ungroup' : 'Group',
-        icon: '⧉'
-      });
-
-      // Alignment & Distribution
-      items.push({
-        id: 'menu_align',
-        label: 'Align',
-        icon: '⫿',
-        subItems: [
-          { id: 'align_left', label: 'Left', icon: '⇤' },
-          { id: 'align_center', label: 'Center', icon: '⫿' },
-          { id: 'align_right', label: 'Right', icon: '⇥' },
-          { id: 'align_top', label: 'Top', icon: '⤒' },
-          { id: 'align_middle', label: 'Middle', icon: '⁼' },
-          { id: 'align_bottom', label: 'Bottom', icon: '⤓' },
-          { id: 'dist_h', label: 'Dist H', icon: '↔' },
-          { id: 'dist_v', label: 'Dist V', icon: '↕' }
-        ]
-      });
-
-      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
-      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
       return items;
     }
 
@@ -4508,6 +4711,11 @@ class ToolWheel {
       icon: isLocked ? '🔓' : '🔒'
     });
     items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+
+    if (shape?.groupId) {
+      items.push({ id: 'action_select_group', label: 'Select Group', icon: '⧉' });
+      items.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+    }
 
     return items;
   }
@@ -5111,6 +5319,54 @@ class ShortcutsCoordinator {
       this.handlers.onDHold?.(true);
     }
 
+    if (mod && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      this.handlers.onCopy?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'x') {
+      e.preventDefault();
+      this.handlers.onCut?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      this.handlers.onPaste?.();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'g') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        this.handlers.onUngroup?.();
+      } else {
+        this.handlers.onGroup?.();
+      }
+      return;
+    }
+
+    if (mod && (e.key === ']' || e.key === '}')) {
+      e.preventDefault();
+      if (e.shiftKey || e.altKey) {
+        this.handlers.onBringToFront?.();
+      } else {
+        this.handlers.onBringForward?.();
+      }
+      return;
+    }
+
+    if (mod && (e.key === '[' || e.key === '{')) {
+      e.preventDefault();
+      if (e.shiftKey || e.altKey) {
+        this.handlers.onSendToBack?.();
+      } else {
+        this.handlers.onSendBackward?.();
+      }
+      return;
+    }
+
     if (mod && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       this.handlers.onDuplicate?.();
@@ -5311,11 +5567,16 @@ class HelpModal {
                 <li><span class="help-desc">Delete</span> <kbd class="kbd-badge">Delete</kbd> / <kbd class="kbd-badge">Backspace</kbd></li>
                 <li><span class="help-desc">Undo</span> <kbd class="kbd-badge">${modKey}+Z</kbd></li>
                 <li><span class="help-desc">Redo</span> <kbd class="kbd-badge">${modKey}+Shift+Z</kbd></li>
-                <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Copy</span> <kbd class="kbd-badge">${modKey}+C</kbd></li>
+                <li><span class="help-desc">Cut</span> <kbd class="kbd-badge">${modKey}+X</kbd></li>
+                <li><span class="help-desc">Paste</span> <kbd class="kbd-badge">${modKey}+V</kbd></li>
                 <li><span class="help-desc">Duplicate</span> <kbd class="kbd-badge">${modKey}+D</kbd></li>
+                <li><span class="help-desc">Drag Duplicate</span> <kbd class="kbd-badge">Hold D</kbd> + drag</li>
+                <li><span class="help-desc">Group / Ungroup</span> <kbd class="kbd-badge">${modKey}+G</kbd> / <kbd class="kbd-badge">Shift</kbd></li>
+                <li><span class="help-desc">Arrange Front/Back</span> <kbd class="kbd-badge">${modKey}+]</kbd> / <kbd class="kbd-badge">[</kbd></li>
                 <li><span class="help-desc">Select All</span> <kbd class="kbd-badge">${modKey}+A</kbd></li>
                 <li><span class="help-desc">Nudge (10px)</span> <kbd class="kbd-badge">Arrows</kbd> (<kbd class="kbd-badge">Shift</kbd>)</li>
-                <li><span class="help-desc">Proportional Resize</span> <kbd class="kbd-badge">Shift</kbd> + resize handle</li>
+                <li><span class="help-desc">Proportional Resize</span> <kbd class="kbd-badge">Shift</kbd> + handle</li>
                 <li><span class="help-desc">Centered Resize</span> <kbd class="kbd-badge">Alt / Option</kbd> + handle</li>
               </ul>
             </section>
@@ -5414,6 +5675,7 @@ class Workspace {
     this.previousTool = 'select';
     this.connectorRouting = 'straight';
     this.selectedIds = [];
+    this.activeGroupId = null;
     this.snapGrid = true;
     this.showGrid = true;
     this.gridSize = 20;
@@ -5691,6 +5953,11 @@ class Workspace {
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     const hitObj = this.findObjectAt(worldPt);
     if (hitObj) {
+      if (hitObj.groupId) {
+        this.activeGroupId = hitObj.groupId;
+        this.selectedIds = [hitObj.id];
+        this.render();
+      }
       this.callbacks.onDoubleClickedObject(hitObj);
     }
   }
@@ -5758,13 +6025,40 @@ class Workspace {
       if (hitObj) {
         clearTimeout(this.longPressTimer);
         let targetId = hitObj.id;
-        // Group selection logic: if part of group, select all group members
         const doc = this.callbacks.getDocument();
+
+        // Locked objects are immune to multi-selection, movement, and drag
+        if (hitObj.locked) {
+          if (!e.shiftKey) {
+            this.selectedIds = [targetId];
+            this.activeGroupId = null;
+          }
+          this.render();
+          return;
+        }
+
+        // Group selection logic: if part of group, select all group members unless drilled in
         if (hitObj.groupId) {
-          const groupMembers = Object.values(doc.objects).filter(o => o.groupId === hitObj.groupId).map(o => o.id);
+          const groupMembers = Object.values(doc.objects)
+            .filter(o => o.groupId === hitObj.groupId && !o.locked)
+            .map(o => o.id);
+
           if (e.shiftKey) {
-            this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
-          } else if (!this.selectedIds.includes(targetId)) {
+            const allIn = groupMembers.every(id => this.selectedIds.includes(id));
+            if (allIn) {
+              this.selectedIds = this.selectedIds.filter(id => !groupMembers.includes(id));
+            } else {
+              this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
+            }
+          } else if (this.activeGroupId === hitObj.groupId) {
+            // Already drilled into this group: work with this child
+            this.selectedIds = [targetId];
+          } else if (this.selectedIds.length > 1 && this.selectedIds.includes(targetId)) {
+            // Clicked a child of currently selected group: drill down into member!
+            this.activeGroupId = hitObj.groupId;
+            this.selectedIds = [targetId];
+          } else {
+            this.activeGroupId = null;
             this.selectedIds = groupMembers;
           }
         } else {
@@ -5775,6 +6069,7 @@ class Workspace {
               this.selectedIds.push(targetId);
             }
           } else if (!this.selectedIds.includes(targetId)) {
+            this.activeGroupId = null;
             this.selectedIds = [targetId];
           }
         }
@@ -5800,6 +6095,7 @@ class Workspace {
         // Clicked empty space
         if (!e.shiftKey) {
           this.selectedIds = [];
+          this.activeGroupId = null;
         }
         this.isMarquee = true;
         this.marquee = { startX: worldPt.x, startY: worldPt.y, currentX: worldPt.x, currentY: worldPt.y };
@@ -5869,12 +6165,29 @@ class Workspace {
 
       const doc = this.callbacks.getDocument();
       const hits = [];
+      const includedGroups = new Set();
+
       for (const obj of Object.values(doc.objects)) {
-        const b = getBoundingBox(obj);
+        if (obj.locked) continue; // Locked objects are never selected by marquee!
+        const b = getBoundingBox(obj, doc);
+        if (!b) continue;
         if (b.x < mr && b.right > mx && b.y < mb && b.bottom > my) {
           hits.push(obj.id);
+          if (obj.groupId) includedGroups.add(obj.groupId);
         }
       }
+
+      // If any member of a group was intersected, expand to all unlocked members of that group
+      if (includedGroups.size > 0) {
+        for (const obj of Object.values(doc.objects)) {
+          if (!obj.locked && obj.groupId && includedGroups.has(obj.groupId)) {
+            if (!hits.includes(obj.id)) {
+              hits.push(obj.id);
+            }
+          }
+        }
+      }
+
       this.selectedIds = hits;
       this.render();
       return;
@@ -5901,7 +6214,7 @@ class Workspace {
       }
 
       const selectedObjects = this.selectedIds.map(id => doc.objects[id]).filter(Boolean);
-      const union = getUnionBoundingBox(selectedObjects);
+      const union = getUnionBoundingBox(selectedObjects, doc);
       if (!union) return;
 
       let dx = worldPt.x - this.dragStart.x;
@@ -5919,7 +6232,8 @@ class Workspace {
         const snap = calculateSnapping(testBox, otherObjects, {
           tolerance: 8 / this.camera.zoom,
           snapGrid: this.snapGrid,
-          gridSize: this.gridSize
+          gridSize: this.gridSize,
+          doc
         });
 
         dx += (snap.x - testBox.x);
@@ -5941,8 +6255,10 @@ class Workspace {
         const obj = doc.objects[id];
         const initial = this.dragInitialPositions[id];
         if (obj && initial) {
-          obj.x = initial.x + dx;
-          obj.y = initial.y + dy;
+          if (obj.x !== undefined && initial.x !== undefined) {
+            obj.x = initial.x + dx;
+            obj.y = initial.y + dy;
+          }
           if (obj.type === 'connector') {
             if (initial.fromPoint && obj.from) obj.from.point = { x: initial.fromPoint.x + dx, y: initial.fromPoint.y + dy };
             if (initial.toPoint && obj.to) obj.to.point = { x: initial.toPoint.x + dx, y: initial.toPoint.y + dy };
@@ -6135,8 +6451,10 @@ class Workspace {
         for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
           const obj = doc.objects[id];
           if (obj) {
-            obj.x = pos.x;
-            obj.y = pos.y;
+            if (obj.x !== undefined && pos.x !== undefined) {
+              obj.x = pos.x;
+              obj.y = pos.y;
+            }
             if (obj.type === 'connector') {
               if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
               if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
@@ -6386,6 +6704,7 @@ class Workspace {
 
 
 
+
 class SaburaApp {
   constructor() {
     this.doc = null;
@@ -6395,6 +6714,8 @@ class SaburaApp {
     this.redoStack = [];
     this.subscribers = new Set();
     this.inPresentation = false;
+    this.clipboard = null;
+    this.pasteCount = 0;
 
     this.initDocument();
     this.initDOM();
@@ -6448,7 +6769,8 @@ class SaburaApp {
       onCommand: (cmd) => this.dispatchCommand(cmd),
       onCommandBatch: (cmds) => this.dispatchCommandBatch(cmds),
       onOpenWheel: (x, y, context, selectedObj) => {
-        this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length);
+        const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+        this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onDoubleClickedObject: (obj) => {
         if (!obj.locked && obj.type !== 'connector') {
@@ -6535,7 +6857,8 @@ class SaburaApp {
             context = 'object';
           }
         }
-        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length);
+        const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onSelectTool: (tool) => this.workspace.setTool(tool),
       onSpaceHold: (held) => {
@@ -6572,8 +6895,45 @@ class SaburaApp {
           this.workspace.selectedIds = [];
         }
       },
+      onCopy: () => this.copy(),
+      onCut: () => this.cut(),
+      onPaste: () => this.paste(),
+      onGroup: () => {
+        if (this.workspace.selectedIds.length > 1) {
+          this.dispatchCommand({ type: 'group_objects', ids: this.workspace.selectedIds });
+        }
+      },
+      onUngroup: () => {
+        const groupIds = Array.from(new Set(this.workspace.selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
+        if (groupIds.length > 0) {
+          this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+        }
+      },
+      onBringForward: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'forward' });
+        }
+      },
+      onBringToFront: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'front' });
+        }
+      },
+      onSendBackward: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'backward' });
+        }
+      },
+      onSendToBack: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'back' });
+        }
+      },
       onSelectAll: () => {
-        this.workspace.selectedIds = Object.keys(this.doc.objects);
+        this.workspace.activeGroupId = null;
+        this.workspace.selectedIds = Object.values(this.doc.objects)
+          .filter(o => !o.locked)
+          .map(o => o.id);
         this.workspace.render();
       },
       onNudge: (dx, dy) => {
@@ -6602,6 +6962,14 @@ class SaburaApp {
           this.textEditor.close(true);
         } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
           this.workspace.cancelGesture();
+        } else if (this.workspace.activeGroupId) {
+          const gId = this.workspace.activeGroupId;
+          const groupMembers = Object.values(this.doc.objects)
+            .filter(o => o.groupId === gId && !o.locked)
+            .map(o => o.id);
+          this.workspace.activeGroupId = null;
+          this.workspace.selectedIds = groupMembers;
+          this.workspace.render();
         } else if (this.workspace.selectedIds.length > 0) {
           this.workspace.selectedIds = [];
           this.workspace.render();
@@ -6614,7 +6982,10 @@ class SaburaApp {
     // FAB trigger
     this.wheelFab.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, 'canvas', null, this.doc.theme.palette, this.workspace.selectedIds.length);
+      const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+      const context = this.workspace.selectedIds.length > 0 ? 'object' : 'canvas';
+      const firstObj = selectedObjects[0] || null;
+      this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, context, firstObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
     });
 
     // Track presentation laser pointer
@@ -6736,10 +7107,35 @@ class SaburaApp {
       const lock = actionId === 'action_lock';
       this.dispatchCommand({ type: 'lock_objects', ids: selectedIds, locked: lock });
     } else if (actionId === 'action_group') {
-      this.dispatchCommand({ type: 'group_objects', ids: selectedIds });
+      if (selectedIds.length > 1) {
+        this.dispatchCommand({ type: 'group_objects', ids: selectedIds });
+      }
     } else if (actionId === 'action_ungroup') {
       const groupIds = Array.from(new Set(selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
-      this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+      if (groupIds.length > 0) {
+        this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+        this.workspace.activeGroupId = null;
+      }
+    } else if (actionId === 'action_enter_group') {
+      if (selectedIds.length > 0) {
+        const first = this.doc.objects[selectedIds[0]];
+        if (first?.groupId) {
+          this.workspace.activeGroupId = first.groupId;
+          this.workspace.selectedIds = [first.id];
+          this.workspace.render();
+        }
+      }
+    } else if (actionId === 'action_select_group') {
+      if (selectedIds.length > 0) {
+        const first = this.doc.objects[selectedIds[0]];
+        if (first?.groupId) {
+          this.workspace.activeGroupId = null;
+          this.workspace.selectedIds = Object.values(this.doc.objects)
+            .filter(o => o.groupId === first.groupId && !o.locked)
+            .map(o => o.id);
+          this.workspace.render();
+        }
+      }
     } else if (actionId === 'action_connect') {
       this.workspace.setTool('connector');
     } else if (actionId.startsWith('order_')) {
@@ -6881,6 +7277,105 @@ class SaburaApp {
         defaultFontSize: preset.defaultFontSize
       }
     });
+  }
+
+  copy() {
+    const selected = this.workspace.selectedIds
+      .map(id => this.doc.objects[id])
+      .filter(o => o && !o.locked);
+    if (selected.length === 0) return;
+    this.clipboard = cloneDocument(selected);
+    this.pasteCount = 0;
+  }
+
+  cut() {
+    this.copy();
+    const ids = this.workspace.selectedIds.filter(id => this.doc.objects[id] && !this.doc.objects[id].locked);
+    if (ids.length > 0) {
+      this.dispatchCommand({ type: 'delete_objects', ids });
+      this.workspace.selectedIds = [];
+      this.workspace.activeGroupId = null;
+      this.workspace.render();
+    }
+  }
+
+  paste() {
+    if (!this.clipboard || this.clipboard.length === 0) return;
+    this.pasteCount++;
+    const offset = { x: 24 * this.pasteCount, y: 24 * this.pasteCount };
+
+    const idMap = {};
+    const groupMap = {};
+    const newObjects = [];
+    const cmds = [];
+
+    // 1. Pass 1: Clone objects, generate new IDs, map groups
+    for (const source of this.clipboard) {
+      const newId = generateId(source.type || 'obj');
+      idMap[source.id] = newId;
+
+      const dup = cloneDocument(source);
+      dup.id = newId;
+      dup.x += offset.x;
+      dup.y += offset.y;
+      dup.seed = generateSeed();
+      dup.locked = false;
+
+      if (dup.groupId) {
+        if (!groupMap[dup.groupId]) {
+          const newGid = generateId('grp');
+          groupMap[dup.groupId] = newGid;
+          const origGroup = this.doc.groups[dup.groupId];
+          this.doc.groups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
+        }
+        dup.groupId = groupMap[dup.groupId];
+      }
+
+      newObjects.push(dup);
+    }
+
+    // 2. Pass 2: Rebind connectors
+    for (const dup of newObjects) {
+      if (dup.type === 'connector') {
+        if (dup.from) {
+          if (dup.from.id && idMap[dup.from.id]) {
+            dup.from.id = idMap[dup.from.id];
+          } else if (dup.from.id) {
+            const extObj = this.doc.objects[dup.from.id];
+            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
+            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
+            const pt = resolved ? resolved.start : (dup.from.point || { x: dup.x, y: dup.y });
+            dup.from = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
+          } else if (dup.from.point) {
+            dup.from.point.x += offset.x;
+            dup.from.point.y += offset.y;
+          }
+        }
+
+        if (dup.to) {
+          if (dup.to.id && idMap[dup.to.id]) {
+            dup.to.id = idMap[dup.to.id];
+          } else if (dup.to.id) {
+            const extObj = this.doc.objects[dup.to.id];
+            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
+            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
+            const pt = resolved ? resolved.end : (dup.to.point || { x: dup.x + dup.width, y: dup.y + dup.height });
+            dup.to = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
+          } else if (dup.to.point) {
+            dup.to.point.x += offset.x;
+            dup.to.point.y += offset.y;
+          }
+        }
+      }
+      cmds.push({ type: 'create_object', object: dup });
+    }
+
+    if (cmds.length > 0) {
+      this.dispatchCommandBatch(cmds);
+      this.workspace.selectedIds = newObjects.map(o => o.id);
+      this.workspace.activeGroupId = null;
+      this.workspace.render();
+    }
   }
 
   setInterfaceTheme(theme) {

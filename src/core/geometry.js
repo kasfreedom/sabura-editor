@@ -6,14 +6,67 @@ import { MIN_OBJECT_SIZE, FONT_FAMILIES } from './types.js';
 
 /**
  * Gets axis-aligned bounding box of an object.
+ * For connectors, calculates the true bounds from resolved/rendered geometry without phantom zero-origin.
  * @param {Object} obj 
- * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number }}
+ * @param {Object|null} doc 
+ * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
-export function getBoundingBox(obj) {
-  const x = obj.x;
-  const y = obj.y;
-  const width = obj.width;
-  const height = obj.height;
+export function getBoundingBox(obj, doc = null) {
+  if (!obj) return null;
+
+  if (obj.type === 'connector') {
+    let pts = [];
+    if (doc) {
+      const geom = resolveConnectorGeometry(doc, obj);
+      if (geom && Array.isArray(geom.points) && geom.points.length > 0) {
+        pts = geom.points;
+      }
+    }
+    if (pts.length === 0) {
+      if (obj.from?.point) pts.push(obj.from.point);
+      if (obj.to?.point) pts.push(obj.to.point);
+    }
+    if (pts.length === 0) {
+      return null;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      if (typeof p.x === 'number' && !isNaN(p.x)) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+      }
+      if (typeof p.y === 'number' && !isNaN(p.y)) {
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+
+    if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+      return null;
+    }
+
+    const width = Math.max(0, maxX - minX);
+    const height = Math.max(0, maxY - minY);
+    return {
+      x: minX,
+      y: minY,
+      width,
+      height,
+      cx: minX + width / 2,
+      cy: minY + height / 2,
+      right: maxX,
+      bottom: maxY
+    };
+  }
+
+  const x = typeof obj.x === 'number' && !isNaN(obj.x) ? obj.x : 0;
+  const y = typeof obj.y === 'number' && !isNaN(obj.y) ? obj.y : 0;
+  const width = typeof obj.width === 'number' && !isNaN(obj.width) ? obj.width : 0;
+  const height = typeof obj.height === 'number' && !isNaN(obj.height) ? obj.height : 0;
   return {
     x,
     y,
@@ -28,23 +81,30 @@ export function getBoundingBox(obj) {
 
 /**
  * Gets union bounding box for multiple objects.
+ * Accurately integrates resolved connector geometry and ignores invalid/phantom objects.
  * @param {Array<Object>} objects 
+ * @param {Object|null} doc 
  * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
  */
-export function getUnionBoundingBox(objects) {
+export function getUnionBoundingBox(objects, doc = null) {
   if (!objects || objects.length === 0) return null;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
+  let validCount = 0;
 
   for (const obj of objects) {
-    const box = getBoundingBox(obj);
+    const box = getBoundingBox(obj, doc);
+    if (!box || isNaN(box.x) || isNaN(box.y) || isNaN(box.right) || isNaN(box.bottom)) continue;
+    validCount++;
     if (box.x < minX) minX = box.x;
     if (box.y < minY) minY = box.y;
     if (box.right > maxX) maxX = box.right;
     if (box.bottom > maxY) maxY = box.bottom;
   }
+
+  if (validCount === 0 || minX === Infinity || minY === Infinity) return null;
 
   const width = Math.max(0, maxX - minX);
   const height = Math.max(0, maxY - minY);
@@ -635,7 +695,8 @@ export function calculateSnapping(currentBox, otherObjects, options = {}) {
 
   // Object-to-object snapping
   for (const other of otherObjects) {
-    const box = getBoundingBox(other);
+    const box = getBoundingBox(other, options.doc);
+    if (!box) continue;
 
     // Vertical alignment (X axis)
     const xPairs = [
@@ -711,17 +772,22 @@ export function calculateSnapping(currentBox, otherObjects, options = {}) {
 
 /**
  * Calculates alignment mutations for multiple objects.
+ * Attached and free connectors do not participate as independent objects;
+ * only eligible spatial objects (type !== 'connector') are aligned.
  * 
  * @param {Array<Object>} objects 
  * @param {'left'|'center'|'right'|'top'|'middle'|'bottom'} alignment 
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 export function alignObjects(objects, alignment) {
-  if (!objects || objects.length < 2) return {};
-  const union = getUnionBoundingBox(objects);
+  if (!objects) return {};
+  const spatialObjects = objects.filter(o => o && o.type !== 'connector');
+  if (spatialObjects.length < 2) return {};
+  const union = getUnionBoundingBox(spatialObjects);
+  if (!union) return {};
   const deltas = {};
 
-  for (const obj of objects) {
+  for (const obj of spatialObjects) {
     let dx = 0;
     let dy = 0;
     switch (alignment) {
@@ -751,17 +817,21 @@ export function alignObjects(objects, alignment) {
 
 /**
  * Calculates even distribution for multiple objects.
+ * Attached and free connectors do not participate;
+ * only eligible spatial objects (type !== 'connector') are distributed.
  * 
  * @param {Array<Object>} objects 
  * @param {'horizontal'|'vertical'} direction 
  * @returns {Record<string, { dx: number, dy: number }>}
  */
 export function distributeObjects(objects, direction) {
-  if (!objects || objects.length < 3) return {};
+  if (!objects) return {};
+  const spatialObjects = objects.filter(o => o && o.type !== 'connector');
+  if (spatialObjects.length < 3) return {};
   const deltas = {};
 
   if (direction === 'horizontal') {
-    const sorted = [...objects].sort((a, b) => a.x - b.x);
+    const sorted = [...spatialObjects].sort((a, b) => a.x - b.x);
     const totalObjectWidth = sorted.reduce((sum, o) => sum + o.width, 0);
     const span = (sorted[sorted.length - 1].x + sorted[sorted.length - 1].width) - sorted[0].x;
     const gap = (span - totalObjectWidth) / (sorted.length - 1);
@@ -772,7 +842,7 @@ export function distributeObjects(objects, direction) {
       currentX += obj.width + gap;
     }
   } else {
-    const sorted = [...objects].sort((a, b) => a.y - b.y);
+    const sorted = [...spatialObjects].sort((a, b) => a.y - b.y);
     const totalObjectHeight = sorted.reduce((sum, o) => sum + o.height, 0);
     const span = (sorted[sorted.length - 1].y + sorted[sorted.length - 1].height) - sorted[0].y;
     const gap = (span - totalObjectHeight) / (sorted.length - 1);

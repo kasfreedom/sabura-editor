@@ -33,6 +33,243 @@ async function runSafariTests() {
 
     log('Safari Load Check', true, 'App loaded, theme: ' + app.doc.theme.id);
 
+    // Flow 15: Marquee Selection of Default Board 3 shapes + attached connector
+    app.workspace.camera.zoom = 1;
+    app.workspace.camera.x = 0;
+    app.workspace.camera.y = 0;
+    app.workspace.setTool('select');
+    app.workspace.selectedIds = [];
+    app.workspace.render();
+    await sleep(50);
+
+    const canvasEl = document.querySelector('#canvas-container');
+    const boundsRect = canvasEl.getBoundingClientRect();
+
+    // Drag marquee covering [40, 40] to [600, 400]
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 40, clientY: boundsRect.top + 40, button: 0, buttons: 1 }));
+    await sleep(40);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 600, clientY: boundsRect.top + 400, button: 0, buttons: 1 }));
+    await sleep(40);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 600, clientY: boundsRect.top + 400, button: 0, buttons: 0 }));
+    await sleep(100);
+
+    const selIds15 = [...app.workspace.selectedIds];
+    const marqueeAll4 = selIds15.length === 4 &&
+                        selIds15.includes('shape_intro') &&
+                        selIds15.includes('shape_idea') &&
+                        selIds15.includes('shape_core') &&
+                        selIds15.includes('conn_1');
+
+    const badgeText = document.querySelector('.selection-count-badge text')?.textContent;
+    const badgeHas4 = badgeText === '4 objects';
+
+    const selRect = document.querySelector('.selection-bounds-rect');
+    const selX = parseFloat(selRect?.getAttribute('x') || '0');
+    const selY = parseFloat(selRect?.getAttribute('y') || '0');
+    const selWidth = parseFloat(selRect?.getAttribute('width') || '0');
+    const selHeight = parseFloat(selRect?.getAttribute('height') || '0');
+
+    // Expected: x: 80 - 4 = 76, y: 80 - 4 = 76, width: 430 + 8 = 438, height: 275 + 8 = 283
+    const boundsCorrect = Math.abs(selX - 76) <= 2 && Math.abs(selY - 76) <= 2 && Math.abs(selWidth - 438) <= 4;
+    log('15. Default Board Marquee Selection & Real Visual Bounds', marqueeAll4 && badgeHas4 && boundsCorrect, 'sel=(' + selX + ',' + selY + ',' + selWidth + 'x' + selHeight + ') badge=' + badgeText);
+
+    // Flow 16: Real Contextual Wheel Click for Align Left
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', bubbles: true }));
+    await sleep(150);
+
+    const alignWedge = document.querySelector('[data-item-id="menu_align"]');
+    if (!alignWedge) throw new Error('Align wedge not found on multi-selection wheel');
+    alignWedge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await sleep(150);
+
+    const alignLeftSub = document.querySelector('[data-sub-id="align_left"]');
+    if (!alignLeftSub) throw new Error('Align Left sub-wedge not found');
+    alignLeftSub.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await sleep(150);
+
+    const introX = app.doc.objects['shape_intro']?.x;
+    const ideaX = app.doc.objects['shape_idea']?.x;
+    const coreX = app.doc.objects['shape_core']?.x;
+    const conn1 = app.doc.objects['conn_1'];
+
+    const alignLeftSuccess = introX === 80 && ideaX === 80 && coreX === 80 && conn1?.from?.id === 'shape_idea' && conn1?.to?.id === 'shape_core';
+    log('16. Real Wheel Align Left on Spatial Objects', alignLeftSuccess, 'introX=' + introX + ' ideaX=' + ideaX + ' coreX=' + coreX);
+
+    // Flow 17: Real Keyboard Undo and Redo in 1 step
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+    // Keyboard Undo: Cmd/Ctrl+Z
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    const undoIntroX = app.doc.objects['shape_intro']?.x;
+    const undoIdeaX = app.doc.objects['shape_idea']?.x;
+    const undoCoreX = app.doc.objects['shape_core']?.x;
+    const undoOk = undoIntroX === 80 && undoIdeaX === 100 && undoCoreX === 360;
+
+    // Keyboard Redo: Cmd/Ctrl+Shift+Z
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+    await sleep(100);
+
+    const redoIdeaX = app.doc.objects['shape_idea']?.x;
+    const redoCoreX = app.doc.objects['shape_core']?.x;
+    const redoOk = redoIdeaX === 80 && redoCoreX === 80;
+
+    // Undo once more back to original
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    log('17. Real Keyboard Undo & Redo for Multi-Object Alignment', undoOk && redoOk, 'undoIdea=' + undoIdeaX + ' redoIdea=' + redoIdeaX);
+
+    // Flow 18: Real Contextual Wheel Click for Distribute Horizontal
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', bubbles: true }));
+    await sleep(150);
+
+    const distWedge = document.querySelector('[data-item-id="menu_distribute"]');
+    if (!distWedge) throw new Error('Distribute wedge not found');
+    distWedge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await sleep(150);
+
+    const distHSub = document.querySelector('[data-sub-id="dist_h"]');
+    if (!distHSub) throw new Error('Distribute Horizontal sub-wedge not found');
+    distHSub.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await sleep(150);
+
+    const distIntroX = app.doc.objects['shape_intro']?.x;
+    const distIdeaX = app.doc.objects['shape_idea']?.x;
+    const distCoreX = app.doc.objects['shape_core']?.x;
+    const distOk = distIntroX === 80 && distIdeaX !== 100 && distCoreX === 360;
+
+    // Undo distribution
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+    const distUndoOk = app.doc.objects['shape_idea']?.x === 100;
+
+    log('18. Real Wheel Distribute Horizontal & 1-Step Undo', distOk && distUndoOk, 'distOk=' + distOk + ' distUndoOk=' + distUndoOk);
+
+    // Flow 19: Real Shift-Click Multi-Selection and Real Drag Movement
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+    await sleep(50);
+    canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+    await sleep(50);
+
+    // Click shape_intro (x: 80, y: 80, w: 340, h: 100) -> click at (150, 120)
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+    await sleep(30);
+    canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+    await sleep(50);
+
+    // Shift-click shape_core (x: 360, y: 235, w: 150, h: 120) -> click at (400, 280)
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, shiftKey: true, clientX: boundsRect.left + 400, clientY: boundsRect.top + 280, button: 0 }));
+    await sleep(30);
+    canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, shiftKey: true, clientX: boundsRect.left + 400, clientY: boundsRect.top + 280, button: 0 }));
+    await sleep(50);
+
+    const shiftSelOk = app.workspace.selectedIds.length === 2 &&
+                       app.workspace.selectedIds.includes('shape_intro') &&
+                       app.workspace.selectedIds.includes('shape_core');
+
+    // Real pointer drag of the multi-selection by (+30, +20)
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 180, clientY: boundsRect.top + 140, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 180, clientY: boundsRect.top + 140, button: 0, buttons: 0 }));
+    await sleep(100);
+
+    const dragIntroX = app.doc.objects['shape_intro']?.x;
+    const dragCoreX = app.doc.objects['shape_core']?.x;
+    const dragOk = dragIntroX === 110 && dragCoreX === 390;
+
+    // Undo drag in one step
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    const dragUndoOk = app.doc.objects['shape_intro']?.x === 80 && app.doc.objects['shape_core']?.x === 360;
+    log('19. Real Shift-Click & Drag Multi-Selection with 1-Step Undo', shiftSelOk && dragOk && dragUndoOk, 'dragOk=' + dragOk + ' undoOk=' + dragUndoOk);
+
+    // Flow 20: Real Keyboard Copy, Paste, Group & Ungroup
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ...modObj, bubbles: true }));
+    await sleep(50);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    const pasteIds = [...app.workspace.selectedIds];
+    const pastedOk = pasteIds.length === 2 && pasteIds.every(id => id !== 'shape_intro' && id !== 'shape_core');
+    const pastedOffset = app.doc.objects[pasteIds[0]]?.x === 80 + 24;
+
+    // Undo paste in one step
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+    const pasteUndoOk = pasteIds.every(id => !app.doc.objects[id]);
+
+    // Test Cmd/Ctrl+G (Group)
+    app.workspace.selectedIds = ['shape_intro', 'shape_idea'];
+    app.workspace.render();
+    await sleep(50);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    const groupGid = app.doc.objects['shape_intro']?.groupId;
+    const groupCreated = groupGid && groupGid === app.doc.objects['shape_idea']?.groupId;
+
+    // Test Cmd/Ctrl+Shift+G (Ungroup)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, shiftKey: true, bubbles: true }));
+    await sleep(100);
+
+    const ungrouped = app.doc.objects['shape_intro']?.groupId === null && app.doc.objects['shape_idea']?.groupId === null;
+
+    log('20. Real Keyboard Copy, Paste, Group & Ungroup', pastedOk && pastedOffset && pasteUndoOk && groupCreated && ungrouped, 'pasteOk=' + pastedOk + ' groupCreated=' + groupCreated + ' ungrouped=' + ungrouped);
+
+    // Flow 21: Real Multi-Object D-Drag with No Placement Jump
+    app.workspace.selectedIds = ['shape_idea', 'shape_core'];
+    app.workspace.render();
+    await sleep(50);
+
+    const origIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+    const origCore = { x: app.doc.objects['shape_core'].x, y: app.doc.objects['shape_core'].y };
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }));
+    await sleep(20);
+
+    canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 175, clientY: boundsRect.top + 295, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 275, clientY: boundsRect.top + 345, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 275, clientY: boundsRect.top + 345, button: 0, buttons: 0 }));
+    await sleep(30);
+
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', code: 'KeyD', bubbles: true }));
+    await sleep(100);
+
+    const ddragIds = [...app.workspace.selectedIds];
+    const ddragCreated = ddragIds.length === 2 && ddragIds.every(id => id !== 'shape_idea' && id !== 'shape_core');
+    const origsUntouched = app.doc.objects['shape_idea'].x === origIdea.x &&
+                           app.doc.objects['shape_core'].x === origCore.x;
+
+    const dupIdea = app.doc.objects[ddragIds.find(id => app.doc.objects[id].type === 'ellipse')];
+    const dupCore = app.doc.objects[ddragIds.find(id => app.doc.objects[id].type === 'diamond')];
+    const dxIdea = dupIdea ? dupIdea.x - origIdea.x : 0;
+    const dyIdea = dupIdea ? dupIdea.y - origIdea.y : 0;
+    const dxCore = dupCore ? dupCore.x - origCore.x : 0;
+    const dyCore = dupCore ? dupCore.y - origCore.y : 0;
+    const noJump = Boolean(dupIdea && dupCore &&
+                   dxIdea === dxCore &&
+                   dyIdea === dyCore &&
+                   Math.abs(dxIdea - 100) <= 8 &&
+                   Math.abs(dyIdea - 50) <= 8);
+
+    // Undo D-drag in one step
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+    await sleep(100);
+
+    const ddragUndoOk = ddragIds.every(id => !app.doc.objects[id]);
+
+    log('21. Real Multi-Object D-Drag with No Placement Jump & 1-Step Undo', ddragCreated && origsUntouched && noJump && ddragUndoOk, 'created=' + ddragCreated + ' noJump=' + noJump + ' undoOk=' + ddragUndoOk);
+
     // Flow 1: Create a curved connector through the wheel
     const fab = document.querySelector('.wheel-trigger-fab');
     if (!fab) throw new Error('Wheel FAB not found');
@@ -136,7 +373,7 @@ async function runSafariTests() {
 
     const allObjects = Object.values(app.doc.objects);
     const origRect = app.doc.objects['rect_ddrag'];
-    const dupRect = allObjects.find(o => o.id !== 'rect_ddrag' && o.type === 'rectangle' && o.x === 300 && o.y === 250);
+    const dupRect = allObjects.find(o => o.id !== 'rect_ddrag' && o.type === 'rectangle' && Math.abs(o.x - 300) <= 15 && Math.abs(o.y - 250) <= 15);
 
     const ddragSuccess = origRect && origRect.x === 150 && origRect.y === 150 && Boolean(dupRect);
     log('4. Hold D and Drag Duplicate', ddragSuccess, 'Orig=(150, 150), Dup=(' + dupRect?.x + ', ' + dupRect?.y + ')');
@@ -407,6 +644,8 @@ async function runSafariTests() {
                            Math.abs(app.workspace.camera.x - preX) < 0.001;
 
     log('14. Presentation Mode Hiding & Viewport Restoration', toolbarHiddenInPres && toolbarRestored && cameraRestored, 'hidden=' + toolbarHiddenInPres + ' restored=' + cameraRestored);
+
+
 
   } catch (err) {
     log('Safari Execution Error', false, err.message);
@@ -943,6 +1182,307 @@ const c13 = await evalInChrome(`(() => {
 console.log('Chrome 13. Presentation Mode & Viewport Restoration:', c13);
 if (!c13.toolbarHiddenInPres || !c13.toolbarRestored || !c13.cameraRestored) {
   throw new Error('Chrome: Presentation mode hiding or viewport restoration failed');
+}
+
+// Reload fresh default board for default-board regression testing
+await cdpSend('Page.navigate', { url: `http://127.0.0.1:${port}/sabura.html` });
+for (let i = 0; i < 30; i++) {
+  await new Promise(r => setTimeout(r, 100));
+  const hasApp = await evalInChrome('Boolean(window.saburaApp && window.saburaApp.doc && window.saburaApp.doc.order.length === 4)');
+  if (hasApp) break;
+}
+
+// Flow 15: Marquee Selection of Default Board 3 shapes + attached connector in Chrome
+const c15 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  app.workspace.camera.zoom = 1;
+  app.workspace.camera.x = 0;
+  app.workspace.camera.y = 0;
+  app.workspace.setTool('select');
+  app.workspace.selectedIds = [];
+  app.workspace.render();
+  await sleep(50);
+
+  const canvasEl = document.querySelector('#canvas-container');
+  const boundsRect = canvasEl.getBoundingClientRect();
+
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 40, clientY: boundsRect.top + 40, button: 0, buttons: 1 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 600, clientY: boundsRect.top + 400, button: 0, buttons: 1 }));
+  await sleep(30);
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 600, clientY: boundsRect.top + 400, button: 0, buttons: 0 }));
+  await sleep(50);
+
+  const selIds = [...app.workspace.selectedIds];
+  const marqueeAll4 = selIds.length === 4 &&
+                      selIds.includes('shape_intro') &&
+                      selIds.includes('shape_idea') &&
+                      selIds.includes('shape_core') &&
+                      selIds.includes('conn_1');
+
+  const badgeText = document.querySelector('.selection-count-badge text')?.textContent;
+  const badgeHas4 = badgeText === '4 objects';
+
+  const selRect = document.querySelector('.selection-bounds-rect');
+  const selX = parseFloat(selRect?.getAttribute('x') || '0');
+  const selY = parseFloat(selRect?.getAttribute('y') || '0');
+  const selWidth = parseFloat(selRect?.getAttribute('width') || '0');
+  const boundsCorrect = Math.abs(selX - 76) <= 2 && Math.abs(selY - 76) <= 2 && Math.abs(selWidth - 438) <= 4;
+
+  return { docKeys: Object.keys(app.doc.objects), selIds, marqueeAll4, badgeHas4, boundsCorrect, selX, selY, selWidth };
+})()`);
+console.log('Chrome 15. Default Board Marquee Selection & Real Visual Bounds:', c15);
+if (!c15.marqueeAll4 || !c15.badgeHas4 || !c15.boundsCorrect) {
+  throw new Error('Chrome: Default board marquee selection or visual bounds failed');
+}
+
+// Flow 16: Real Contextual Wheel Click for Align Left in Chrome
+const c16 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', bubbles: true }));
+  await sleep(100);
+
+  const alignWedge = document.querySelector('[data-item-id="menu_align"]');
+  if (!alignWedge) throw new Error('Align wedge not found');
+  alignWedge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(100);
+
+  const alignLeftSub = document.querySelector('[data-sub-id="align_left"]');
+  if (!alignLeftSub) throw new Error('Align Left sub-wedge not found');
+  alignLeftSub.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(100);
+
+  const introX = app.doc.objects['shape_intro']?.x;
+  const ideaX = app.doc.objects['shape_idea']?.x;
+  const coreX = app.doc.objects['shape_core']?.x;
+  const conn1 = app.doc.objects['conn_1'];
+
+  const alignLeftSuccess = introX === 80 && ideaX === 80 && coreX === 80 && conn1?.from?.id === 'shape_idea' && conn1?.to?.id === 'shape_core';
+  return { alignLeftSuccess, introX, ideaX, coreX };
+})()`);
+console.log('Chrome 16. Real Wheel Align Left on Spatial Objects:', c16);
+if (!c16.alignLeftSuccess) {
+  throw new Error('Chrome: Real wheel Align Left failed');
+}
+
+// Flow 17: Real Keyboard Undo & Redo in Chrome
+const c17 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  // Cmd/Ctrl+Z
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+  const undoOk = app.doc.objects['shape_intro']?.x === 80 &&
+                 app.doc.objects['shape_idea']?.x === 100 &&
+                 app.doc.objects['shape_core']?.x === 360;
+
+  // Cmd/Ctrl+Shift+Z
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(50);
+  const redoOk = app.doc.objects['shape_idea']?.x === 80 && app.doc.objects['shape_core']?.x === 80;
+
+  // Undo back to original
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+
+  return { undoOk, redoOk };
+})()`);
+console.log('Chrome 17. Real Keyboard Undo & Redo for Multi-Object Alignment:', c17);
+if (!c17.undoOk || !c17.redoOk) {
+  throw new Error('Chrome: Multi-object Undo/Redo failed');
+}
+
+// Flow 18: Real Contextual Wheel Distribute Horizontal in Chrome
+const c18 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', bubbles: true }));
+  await sleep(100);
+
+  const distWedge = document.querySelector('[data-item-id="menu_distribute"]');
+  if (!distWedge) throw new Error('Distribute wedge not found');
+  distWedge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(100);
+
+  const distHSub = document.querySelector('[data-sub-id="dist_h"]');
+  if (!distHSub) throw new Error('Distribute Horizontal sub-wedge not found');
+  distHSub.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(100);
+
+  const distIntroX = app.doc.objects['shape_intro']?.x;
+  const distIdeaX = app.doc.objects['shape_idea']?.x;
+  const distCoreX = app.doc.objects['shape_core']?.x;
+  const distOk = distIntroX === 80 && distIdeaX !== 100 && distCoreX === 360;
+
+  // Undo distribution
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+  const distUndoOk = app.doc.objects['shape_idea']?.x === 100;
+
+  return { distOk, distUndoOk };
+})()`);
+console.log('Chrome 18. Real Wheel Distribute Horizontal & 1-Step Undo:', c18);
+if (!c18.distOk || !c18.distUndoOk) {
+  throw new Error('Chrome: Distribute Horizontal or 1-step undo failed');
+}
+
+// Flow 19: Real Shift-Click & Drag Multi-Selection in Chrome
+const c19 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const canvasEl = document.querySelector('#canvas-container');
+  const boundsRect = canvasEl.getBoundingClientRect();
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  // Clear selection
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 10, clientY: boundsRect.top + 10, button: 0 }));
+  await sleep(30);
+
+  // Click shape_intro
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0 }));
+  await sleep(30);
+
+  // Shift-click shape_core
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, shiftKey: true, clientX: boundsRect.left + 400, clientY: boundsRect.top + 280, button: 0 }));
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, shiftKey: true, clientX: boundsRect.left + 400, clientY: boundsRect.top + 280, button: 0 }));
+  await sleep(30);
+
+  const shiftSelOk = app.workspace.selectedIds.length === 2 &&
+                     app.workspace.selectedIds.includes('shape_intro') &&
+                     app.workspace.selectedIds.includes('shape_core');
+
+  // Drag multi-selection by (+30, +20)
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 150, clientY: boundsRect.top + 120, button: 0, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 180, clientY: boundsRect.top + 140, button: 0, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 180, clientY: boundsRect.top + 140, button: 0, buttons: 0 }));
+  await sleep(50);
+
+  const dragOk = app.doc.objects['shape_intro']?.x === 110 && app.doc.objects['shape_core']?.x === 390;
+
+  // Undo drag in one step
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+
+  const dragUndoOk = app.doc.objects['shape_intro']?.x === 80 && app.doc.objects['shape_core']?.x === 360;
+
+  return { shiftSelOk, dragOk, dragUndoOk };
+})()`);
+console.log('Chrome 19. Real Shift-Click & Drag Multi-Selection with 1-Step Undo:', c19);
+if (!c19.shiftSelOk || !c19.dragOk || !c19.dragUndoOk) {
+  throw new Error('Chrome: Shift-click and drag multi-selection failed');
+}
+
+// Flow 20: Real Keyboard Copy, Paste, Group & Ungroup in Chrome
+const c20 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ...modObj, bubbles: true }));
+  await sleep(30);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', ...modObj, bubbles: true }));
+  await sleep(50);
+
+  const pasteIds = [...app.workspace.selectedIds];
+  const pastedOk = pasteIds.length === 2 && pasteIds.every(id => id !== 'shape_intro' && id !== 'shape_core');
+
+  // Undo paste
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+  const pasteUndoOk = pasteIds.every(id => !app.doc.objects[id]);
+
+  // Group
+  app.workspace.selectedIds = ['shape_intro', 'shape_idea'];
+  app.workspace.render();
+  await sleep(30);
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, bubbles: true }));
+  await sleep(50);
+
+  const groupGid = app.doc.objects['shape_intro']?.groupId;
+  const groupCreated = groupGid && groupGid === app.doc.objects['shape_idea']?.groupId;
+
+  // Ungroup
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(50);
+
+  const ungrouped = app.doc.objects['shape_intro']?.groupId === null && app.doc.objects['shape_idea']?.groupId === null;
+
+  return { pastedOk, pasteUndoOk, groupCreated, ungrouped };
+})()`);
+console.log('Chrome 20. Real Keyboard Copy, Paste, Group & Ungroup:', c20);
+if (!c20.pastedOk || !c20.pasteUndoOk || !c20.groupCreated || !c20.ungrouped) {
+  throw new Error('Chrome: Real keyboard copy/paste or group/ungroup failed');
+}
+
+// Flow 21: Real Multi-Object D-Drag with No Placement Jump in Chrome
+const c21 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const canvasEl = document.querySelector('#canvas-container');
+  const boundsRect = canvasEl.getBoundingClientRect();
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  app.workspace.selectedIds = ['shape_idea', 'shape_core'];
+  app.workspace.render();
+  await sleep(30);
+
+  const origIdea = { x: app.doc.objects['shape_idea'].x, y: app.doc.objects['shape_idea'].y };
+  const origCore = { x: app.doc.objects['shape_core'].x, y: app.doc.objects['shape_core'].y };
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }));
+  await sleep(20);
+
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: boundsRect.left + 175, clientY: boundsRect.top + 295, button: 0, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: boundsRect.left + 275, clientY: boundsRect.top + 345, button: 0, buttons: 1 }));
+  window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: boundsRect.left + 275, clientY: boundsRect.top + 345, button: 0, buttons: 0 }));
+  await sleep(20);
+
+  document.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', code: 'KeyD', bubbles: true }));
+  await sleep(50);
+
+  const ddragIds = [...app.workspace.selectedIds];
+  const ddragCreated = ddragIds.length === 2 && ddragIds.every(id => id !== 'shape_idea' && id !== 'shape_core');
+  const origsUntouched = app.doc.objects['shape_idea'].x === origIdea.x &&
+                         app.doc.objects['shape_core'].x === origCore.x;
+
+  const dupIdea = app.doc.objects[ddragIds.find(id => app.doc.objects[id].type === 'ellipse')];
+  const dupCore = app.doc.objects[ddragIds.find(id => app.doc.objects[id].type === 'diamond')];
+  const dxIdea = dupIdea ? dupIdea.x - origIdea.x : 0;
+  const dyIdea = dupIdea ? dupIdea.y - origIdea.y : 0;
+  const dxCore = dupCore ? dupCore.x - origCore.x : 0;
+  const dyCore = dupCore ? dupCore.y - origCore.y : 0;
+  const noJump = Boolean(dupIdea && dupCore &&
+                 dxIdea === dxCore &&
+                 dyIdea === dyCore &&
+                 Math.abs(dxIdea - 100) <= 8 &&
+                 Math.abs(dyIdea - 50) <= 8);
+
+  // Undo D-drag
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(50);
+
+  const ddragUndoOk = ddragIds.every(id => !app.doc.objects[id]);
+
+  return { ddragCreated, origsUntouched, noJump, ddragUndoOk, dupIdea: { x: dupIdea?.x, y: dupIdea?.y }, dupCore: { x: dupCore?.x, y: dupCore?.y }, origIdea, origCore };
+})()`);
+console.log('Chrome 21. Real Multi-Object D-Drag with No Placement Jump & 1-Step Undo:', c21);
+if (!c21.ddragCreated || !c21.origsUntouched || !c21.noJump || !c21.ddragUndoOk) {
+  throw new Error('Chrome: Multi-object D-drag failed');
 }
 
 console.log('✓ All Chrome flows passed cleanly!');

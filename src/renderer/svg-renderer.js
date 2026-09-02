@@ -412,7 +412,7 @@ export function renderSelectionOverlay(doc, selectedIds) {
     return markup.join('\n');
   }
 
-  const unionBox = getUnionBoundingBox(selectedObjects);
+  const unionBox = getUnionBoundingBox(selectedObjects, doc);
   if (!unionBox) return '';
 
   const pad = 4;
@@ -422,13 +422,28 @@ export function renderSelectionOverlay(doc, selectedIds) {
   const bh = unionBox.height + pad * 2;
 
   // Bounding rect: Concepts precision hairline dash with subtle accent wash
-  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" pointer-events="none" />`);
+  markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" class="selection-bounds-rect" pointer-events="none" />`);
 
-  // Only render 8 resize handles if single unlocked object or non-group selection
+  // If multiple objects are selected, render an unobtrusive count badge at the top
+  if (selectedObjects.length > 1) {
+    const countText = `${selectedObjects.length} objects`;
+    const badgeWidth = Math.max(60, countText.length * 7 + 16);
+    const badgeHeight = 20;
+    const badgeX = bx + bw - badgeWidth;
+    const badgeY = by - badgeHeight - 4;
+    markup.push(`
+      <g class="selection-count-badge" pointer-events="none">
+        <rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${badgeHeight}" rx="4" ry="4" fill="${selStroke}" opacity="0.9" />
+        <text x="${badgeX + badgeWidth / 2}" y="${badgeY + 14}" fill="#ffffff" font-size="11" font-weight="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">${countText}</text>
+      </g>
+    `);
+  }
+
+  // Only render 8 resize handles if single unlocked object
   const isSingle = selectedObjects.length === 1;
   const isLocked = selectedObjects.some(o => o.locked);
 
-  if (!isLocked) {
+  if (isSingle && !isLocked) {
     const handles = [
       { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
       { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },

@@ -18,6 +18,7 @@ export class Workspace {
     this.previousTool = 'select';
     this.connectorRouting = 'straight';
     this.selectedIds = [];
+    this.activeGroupId = null;
     this.snapGrid = true;
     this.showGrid = true;
     this.gridSize = 20;
@@ -295,6 +296,11 @@ export class Workspace {
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     const hitObj = this.findObjectAt(worldPt);
     if (hitObj) {
+      if (hitObj.groupId) {
+        this.activeGroupId = hitObj.groupId;
+        this.selectedIds = [hitObj.id];
+        this.render();
+      }
       this.callbacks.onDoubleClickedObject(hitObj);
     }
   }
@@ -362,13 +368,40 @@ export class Workspace {
       if (hitObj) {
         clearTimeout(this.longPressTimer);
         let targetId = hitObj.id;
-        // Group selection logic: if part of group, select all group members
         const doc = this.callbacks.getDocument();
+
+        // Locked objects are immune to multi-selection, movement, and drag
+        if (hitObj.locked) {
+          if (!e.shiftKey) {
+            this.selectedIds = [targetId];
+            this.activeGroupId = null;
+          }
+          this.render();
+          return;
+        }
+
+        // Group selection logic: if part of group, select all group members unless drilled in
         if (hitObj.groupId) {
-          const groupMembers = Object.values(doc.objects).filter(o => o.groupId === hitObj.groupId).map(o => o.id);
+          const groupMembers = Object.values(doc.objects)
+            .filter(o => o.groupId === hitObj.groupId && !o.locked)
+            .map(o => o.id);
+
           if (e.shiftKey) {
-            this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
-          } else if (!this.selectedIds.includes(targetId)) {
+            const allIn = groupMembers.every(id => this.selectedIds.includes(id));
+            if (allIn) {
+              this.selectedIds = this.selectedIds.filter(id => !groupMembers.includes(id));
+            } else {
+              this.selectedIds = Array.from(new Set([...this.selectedIds, ...groupMembers]));
+            }
+          } else if (this.activeGroupId === hitObj.groupId) {
+            // Already drilled into this group: work with this child
+            this.selectedIds = [targetId];
+          } else if (this.selectedIds.length > 1 && this.selectedIds.includes(targetId)) {
+            // Clicked a child of currently selected group: drill down into member!
+            this.activeGroupId = hitObj.groupId;
+            this.selectedIds = [targetId];
+          } else {
+            this.activeGroupId = null;
             this.selectedIds = groupMembers;
           }
         } else {
@@ -379,6 +412,7 @@ export class Workspace {
               this.selectedIds.push(targetId);
             }
           } else if (!this.selectedIds.includes(targetId)) {
+            this.activeGroupId = null;
             this.selectedIds = [targetId];
           }
         }
@@ -404,6 +438,7 @@ export class Workspace {
         // Clicked empty space
         if (!e.shiftKey) {
           this.selectedIds = [];
+          this.activeGroupId = null;
         }
         this.isMarquee = true;
         this.marquee = { startX: worldPt.x, startY: worldPt.y, currentX: worldPt.x, currentY: worldPt.y };
@@ -473,12 +508,29 @@ export class Workspace {
 
       const doc = this.callbacks.getDocument();
       const hits = [];
+      const includedGroups = new Set();
+
       for (const obj of Object.values(doc.objects)) {
-        const b = getBoundingBox(obj);
+        if (obj.locked) continue; // Locked objects are never selected by marquee!
+        const b = getBoundingBox(obj, doc);
+        if (!b) continue;
         if (b.x < mr && b.right > mx && b.y < mb && b.bottom > my) {
           hits.push(obj.id);
+          if (obj.groupId) includedGroups.add(obj.groupId);
         }
       }
+
+      // If any member of a group was intersected, expand to all unlocked members of that group
+      if (includedGroups.size > 0) {
+        for (const obj of Object.values(doc.objects)) {
+          if (!obj.locked && obj.groupId && includedGroups.has(obj.groupId)) {
+            if (!hits.includes(obj.id)) {
+              hits.push(obj.id);
+            }
+          }
+        }
+      }
+
       this.selectedIds = hits;
       this.render();
       return;
@@ -505,7 +557,7 @@ export class Workspace {
       }
 
       const selectedObjects = this.selectedIds.map(id => doc.objects[id]).filter(Boolean);
-      const union = getUnionBoundingBox(selectedObjects);
+      const union = getUnionBoundingBox(selectedObjects, doc);
       if (!union) return;
 
       let dx = worldPt.x - this.dragStart.x;
@@ -523,7 +575,8 @@ export class Workspace {
         const snap = calculateSnapping(testBox, otherObjects, {
           tolerance: 8 / this.camera.zoom,
           snapGrid: this.snapGrid,
-          gridSize: this.gridSize
+          gridSize: this.gridSize,
+          doc
         });
 
         dx += (snap.x - testBox.x);
@@ -545,8 +598,10 @@ export class Workspace {
         const obj = doc.objects[id];
         const initial = this.dragInitialPositions[id];
         if (obj && initial) {
-          obj.x = initial.x + dx;
-          obj.y = initial.y + dy;
+          if (obj.x !== undefined && initial.x !== undefined) {
+            obj.x = initial.x + dx;
+            obj.y = initial.y + dy;
+          }
           if (obj.type === 'connector') {
             if (initial.fromPoint && obj.from) obj.from.point = { x: initial.fromPoint.x + dx, y: initial.fromPoint.y + dy };
             if (initial.toPoint && obj.to) obj.to.point = { x: initial.toPoint.x + dx, y: initial.toPoint.y + dy };
@@ -739,8 +794,10 @@ export class Workspace {
         for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
           const obj = doc.objects[id];
           if (obj) {
-            obj.x = pos.x;
-            obj.y = pos.y;
+            if (obj.x !== undefined && pos.x !== undefined) {
+              obj.x = pos.x;
+              obj.y = pos.y;
+            }
             if (obj.type === 'connector') {
               if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
               if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };

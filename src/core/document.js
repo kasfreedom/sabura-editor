@@ -73,10 +73,6 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
   const baseObject = {
     id,
     type,
-    x: overrides.x !== undefined ? overrides.x : 0,
-    y: overrides.y !== undefined ? overrides.y : 0,
-    width,
-    height,
     rotation: overrides.rotation || 0,
     fill: overrides.fill !== undefined ? overrides.fill : theme.defaultFill,
     stroke: overrides.stroke !== undefined ? overrides.stroke : theme.defaultStroke,
@@ -99,13 +95,19 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
   };
 
   if (type === 'connector') {
-    baseObject.from = overrides.from || { point: { x: baseObject.x, y: baseObject.y } };
-    baseObject.to = overrides.to || { point: { x: baseObject.x + width, y: baseObject.y + height } };
+    baseObject.from = overrides.from || { point: { x: overrides.x !== undefined ? overrides.x : 0, y: overrides.y !== undefined ? overrides.y : 0 } };
+    baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
     baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
     baseObject.startArrow = overrides.startArrow || false;
     baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
-  } else if (type === 'path') {
-    baseObject.points = Array.isArray(overrides.points) ? overrides.points : [];
+  } else {
+    baseObject.x = overrides.x !== undefined ? overrides.x : 0;
+    baseObject.y = overrides.y !== undefined ? overrides.y : 0;
+    baseObject.width = width;
+    baseObject.height = height;
+    if (type === 'path') {
+      baseObject.points = Array.isArray(overrides.points) ? overrides.points : [];
+    }
   }
 
   // Preserve any additional fields for custom namespaces
@@ -167,11 +169,13 @@ export function validateDocument(doc) {
       if (typeof obj.type !== 'string' || !obj.type.trim()) {
         errors.push(`Object "${objId}" must have a valid type string`);
       }
-      if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
-        errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
-      }
-      if (typeof obj.width !== 'number' || isNaN(obj.width) || typeof obj.height !== 'number' || isNaN(obj.height)) {
-        errors.push(`Object "${objId}" dimensions (width, height) must be valid numbers`);
+      if (obj.type !== 'connector') {
+        if (typeof obj.x !== 'number' || isNaN(obj.x) || typeof obj.y !== 'number' || isNaN(obj.y)) {
+          errors.push(`Object "${objId}" coordinates (x, y) must be valid numbers`);
+        }
+        if (typeof obj.width !== 'number' || isNaN(obj.width) || typeof obj.height !== 'number' || isNaN(obj.height)) {
+          errors.push(`Object "${objId}" dimensions (width, height) must be valid numbers`);
+        }
       }
       if (typeof obj.seed !== 'number' || isNaN(obj.seed)) {
         errors.push(`Object "${objId}" seed must be a valid number`);

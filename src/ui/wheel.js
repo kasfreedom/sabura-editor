@@ -61,11 +61,12 @@ export class ToolWheel {
     this.themePalette = palette || [];
   }
 
-  open(x, y, context = 'canvas', selectedObject = null, palette = [], selectedCount = 1) {
+  open(x, y, context = 'canvas', selectedObject = null, palette = [], selectedCount = 1, selectedObjects = []) {
     if (palette && palette.length) this.themePalette = palette;
     this.context = context;
     this.selectedObject = selectedObject;
     this.selectedCount = selectedCount;
+    this.selectedObjects = Array.isArray(selectedObjects) ? selectedObjects : [];
     this.activeSubMenu = null;
     this.hoveredItem = null;
 
@@ -144,15 +145,79 @@ export class ToolWheel {
 
     // Selected object context
     const isLocked = this.selectedObject?.locked;
-    const isGrouped = Boolean(this.selectedObject?.groupId);
+    const isGrouped = Boolean(this.selectedObject?.groupId) || this.selectedObjects.some(o => o.groupId);
     const isConnector = this.selectedObject?.type === 'connector';
     const isMulti = this.selectedCount > 1;
 
     const items = [];
 
+    const spatialObjects = this.selectedObjects.filter(o => o && o.type !== 'connector' && !o.locked);
+    const spatialCount = spatialObjects.length;
+
     // Context: Multiple objects
     if (isMulti) {
-      // Shared styling
+      // 1. Grouping
+      if (isGrouped) {
+        items.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+      }
+      if (this.selectedCount >= 2) {
+        items.push({ id: 'action_group', label: 'Group', icon: '⧉' });
+      }
+
+      // 2. Alignment (requires at least 2 eligible spatial objects)
+      if (spatialCount >= 2) {
+        items.push({
+          id: 'menu_align',
+          label: 'Align',
+          icon: '⫿',
+          subItems: [
+            { id: 'align_left', label: 'Left', icon: '⇤' },
+            { id: 'align_center', label: 'Center H', icon: '⫿' },
+            { id: 'align_right', label: 'Right', icon: '⇥' },
+            { id: 'align_top', label: 'Top', icon: '⤒' },
+            { id: 'align_middle', label: 'Middle V', icon: '⁼' },
+            { id: 'align_bottom', label: 'Bottom', icon: '⤓' }
+          ]
+        });
+      }
+
+      // 3. Distribution (requires at least 3 eligible spatial objects)
+      if (spatialCount >= 3) {
+        items.push({
+          id: 'menu_distribute',
+          label: 'Distribute',
+          icon: '↔',
+          subItems: [
+            { id: 'dist_h', label: 'Horizontal', icon: '↔' },
+            { id: 'dist_v', label: 'Vertical', icon: '↕' }
+          ]
+        });
+      }
+
+      // 3. Stacking / Ordering
+      items.push({
+        id: 'menu_order',
+        label: 'Arrange',
+        icon: '≡',
+        subItems: [
+          { id: 'order_front', label: 'Front', icon: '⇈' },
+          { id: 'order_forward', label: 'Forward', icon: '↑' },
+          { id: 'order_backward', label: 'Backward', icon: '↓' },
+          { id: 'order_back', label: 'Back', icon: '⇊' }
+        ]
+      });
+
+      // 4. Actions: Duplicate, Lock / Unlock, Delete
+      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
+      const anyUnlocked = this.selectedObjects.length > 0 ? this.selectedObjects.some(o => !o.locked) : true;
+      items.push({
+        id: anyUnlocked ? 'action_lock' : 'action_unlock',
+        label: anyUnlocked ? 'Lock' : 'Unlock',
+        icon: anyUnlocked ? '🔒' : '🔓'
+      });
+      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+
+      // 5. Shared styling
       const fillSub = [
         { id: 'fill_none', label: 'None', color: 'none', icon: '⊘' },
         ...this.themePalette.map((col, idx) => ({ id: `fill_${idx}`, label: col, color: col }))
@@ -187,32 +252,6 @@ export class ToolWheel {
         ]
       });
 
-      // Grouping
-      items.push({
-        id: isGrouped ? 'action_ungroup' : 'action_group',
-        label: isGrouped ? 'Ungroup' : 'Group',
-        icon: '⧉'
-      });
-
-      // Alignment & Distribution
-      items.push({
-        id: 'menu_align',
-        label: 'Align',
-        icon: '⫿',
-        subItems: [
-          { id: 'align_left', label: 'Left', icon: '⇤' },
-          { id: 'align_center', label: 'Center', icon: '⫿' },
-          { id: 'align_right', label: 'Right', icon: '⇥' },
-          { id: 'align_top', label: 'Top', icon: '⤒' },
-          { id: 'align_middle', label: 'Middle', icon: '⁼' },
-          { id: 'align_bottom', label: 'Bottom', icon: '⤓' },
-          { id: 'dist_h', label: 'Dist H', icon: '↔' },
-          { id: 'dist_v', label: 'Dist V', icon: '↕' }
-        ]
-      });
-
-      items.push({ id: 'action_duplicate', label: 'Duplicate', icon: '❐' });
-      items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
       return items;
     }
 
@@ -394,6 +433,11 @@ export class ToolWheel {
       icon: isLocked ? '🔓' : '🔒'
     });
     items.push({ id: 'action_delete', label: 'Delete', icon: '🗑' });
+
+    if (shape?.groupId) {
+      items.push({ id: 'action_select_group', label: 'Select Group', icon: '⧉' });
+      items.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+    }
 
     return items;
   }

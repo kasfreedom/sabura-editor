@@ -5,9 +5,10 @@
  * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
  */
 
-import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument, cloneDocument } from './core/document.js';
+import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument, cloneDocument, generateId, generateSeed } from './core/document.js';
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
 import { THEME_PRESETS, FONT_SIZES } from './core/types.js';
+import { resolveConnectorGeometry } from './core/geometry.js';
 import { packageHtmlWithDocument, triggerFileDownload, extractDocumentFromHtml } from './storage/file-packer.js';
 import { Workspace } from './ui/workspace.js';
 import { ToolWheel } from './ui/wheel.js';
@@ -27,6 +28,8 @@ export class SaburaApp {
     this.redoStack = [];
     this.subscribers = new Set();
     this.inPresentation = false;
+    this.clipboard = null;
+    this.pasteCount = 0;
 
     this.initDocument();
     this.initDOM();
@@ -80,7 +83,8 @@ export class SaburaApp {
       onCommand: (cmd) => this.dispatchCommand(cmd),
       onCommandBatch: (cmds) => this.dispatchCommandBatch(cmds),
       onOpenWheel: (x, y, context, selectedObj) => {
-        this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length);
+        const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+        this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onDoubleClickedObject: (obj) => {
         if (!obj.locked && obj.type !== 'connector') {
@@ -167,7 +171,8 @@ export class SaburaApp {
             context = 'object';
           }
         }
-        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length);
+        const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+        this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onSelectTool: (tool) => this.workspace.setTool(tool),
       onSpaceHold: (held) => {
@@ -204,8 +209,45 @@ export class SaburaApp {
           this.workspace.selectedIds = [];
         }
       },
+      onCopy: () => this.copy(),
+      onCut: () => this.cut(),
+      onPaste: () => this.paste(),
+      onGroup: () => {
+        if (this.workspace.selectedIds.length > 1) {
+          this.dispatchCommand({ type: 'group_objects', ids: this.workspace.selectedIds });
+        }
+      },
+      onUngroup: () => {
+        const groupIds = Array.from(new Set(this.workspace.selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
+        if (groupIds.length > 0) {
+          this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+        }
+      },
+      onBringForward: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'forward' });
+        }
+      },
+      onBringToFront: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'front' });
+        }
+      },
+      onSendBackward: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'backward' });
+        }
+      },
+      onSendToBack: () => {
+        if (this.workspace.selectedIds.length > 0) {
+          this.dispatchCommand({ type: 'reorder_objects', ids: this.workspace.selectedIds, action: 'back' });
+        }
+      },
       onSelectAll: () => {
-        this.workspace.selectedIds = Object.keys(this.doc.objects);
+        this.workspace.activeGroupId = null;
+        this.workspace.selectedIds = Object.values(this.doc.objects)
+          .filter(o => !o.locked)
+          .map(o => o.id);
         this.workspace.render();
       },
       onNudge: (dx, dy) => {
@@ -234,6 +276,14 @@ export class SaburaApp {
           this.textEditor.close(true);
         } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating) {
           this.workspace.cancelGesture();
+        } else if (this.workspace.activeGroupId) {
+          const gId = this.workspace.activeGroupId;
+          const groupMembers = Object.values(this.doc.objects)
+            .filter(o => o.groupId === gId && !o.locked)
+            .map(o => o.id);
+          this.workspace.activeGroupId = null;
+          this.workspace.selectedIds = groupMembers;
+          this.workspace.render();
         } else if (this.workspace.selectedIds.length > 0) {
           this.workspace.selectedIds = [];
           this.workspace.render();
@@ -246,7 +296,10 @@ export class SaburaApp {
     // FAB trigger
     this.wheelFab.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, 'canvas', null, this.doc.theme.palette, this.workspace.selectedIds.length);
+      const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+      const context = this.workspace.selectedIds.length > 0 ? 'object' : 'canvas';
+      const firstObj = selectedObjects[0] || null;
+      this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, context, firstObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
     });
 
     // Track presentation laser pointer
@@ -368,10 +421,35 @@ export class SaburaApp {
       const lock = actionId === 'action_lock';
       this.dispatchCommand({ type: 'lock_objects', ids: selectedIds, locked: lock });
     } else if (actionId === 'action_group') {
-      this.dispatchCommand({ type: 'group_objects', ids: selectedIds });
+      if (selectedIds.length > 1) {
+        this.dispatchCommand({ type: 'group_objects', ids: selectedIds });
+      }
     } else if (actionId === 'action_ungroup') {
       const groupIds = Array.from(new Set(selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
-      this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+      if (groupIds.length > 0) {
+        this.dispatchCommand({ type: 'ungroup_objects', groupIds });
+        this.workspace.activeGroupId = null;
+      }
+    } else if (actionId === 'action_enter_group') {
+      if (selectedIds.length > 0) {
+        const first = this.doc.objects[selectedIds[0]];
+        if (first?.groupId) {
+          this.workspace.activeGroupId = first.groupId;
+          this.workspace.selectedIds = [first.id];
+          this.workspace.render();
+        }
+      }
+    } else if (actionId === 'action_select_group') {
+      if (selectedIds.length > 0) {
+        const first = this.doc.objects[selectedIds[0]];
+        if (first?.groupId) {
+          this.workspace.activeGroupId = null;
+          this.workspace.selectedIds = Object.values(this.doc.objects)
+            .filter(o => o.groupId === first.groupId && !o.locked)
+            .map(o => o.id);
+          this.workspace.render();
+        }
+      }
     } else if (actionId === 'action_connect') {
       this.workspace.setTool('connector');
     } else if (actionId.startsWith('order_')) {
@@ -513,6 +591,105 @@ export class SaburaApp {
         defaultFontSize: preset.defaultFontSize
       }
     });
+  }
+
+  copy() {
+    const selected = this.workspace.selectedIds
+      .map(id => this.doc.objects[id])
+      .filter(o => o && !o.locked);
+    if (selected.length === 0) return;
+    this.clipboard = cloneDocument(selected);
+    this.pasteCount = 0;
+  }
+
+  cut() {
+    this.copy();
+    const ids = this.workspace.selectedIds.filter(id => this.doc.objects[id] && !this.doc.objects[id].locked);
+    if (ids.length > 0) {
+      this.dispatchCommand({ type: 'delete_objects', ids });
+      this.workspace.selectedIds = [];
+      this.workspace.activeGroupId = null;
+      this.workspace.render();
+    }
+  }
+
+  paste() {
+    if (!this.clipboard || this.clipboard.length === 0) return;
+    this.pasteCount++;
+    const offset = { x: 24 * this.pasteCount, y: 24 * this.pasteCount };
+
+    const idMap = {};
+    const groupMap = {};
+    const newObjects = [];
+    const cmds = [];
+
+    // 1. Pass 1: Clone objects, generate new IDs, map groups
+    for (const source of this.clipboard) {
+      const newId = generateId(source.type || 'obj');
+      idMap[source.id] = newId;
+
+      const dup = cloneDocument(source);
+      dup.id = newId;
+      dup.x += offset.x;
+      dup.y += offset.y;
+      dup.seed = generateSeed();
+      dup.locked = false;
+
+      if (dup.groupId) {
+        if (!groupMap[dup.groupId]) {
+          const newGid = generateId('grp');
+          groupMap[dup.groupId] = newGid;
+          const origGroup = this.doc.groups[dup.groupId];
+          this.doc.groups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
+        }
+        dup.groupId = groupMap[dup.groupId];
+      }
+
+      newObjects.push(dup);
+    }
+
+    // 2. Pass 2: Rebind connectors
+    for (const dup of newObjects) {
+      if (dup.type === 'connector') {
+        if (dup.from) {
+          if (dup.from.id && idMap[dup.from.id]) {
+            dup.from.id = idMap[dup.from.id];
+          } else if (dup.from.id) {
+            const extObj = this.doc.objects[dup.from.id];
+            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
+            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
+            const pt = resolved ? resolved.start : (dup.from.point || { x: dup.x, y: dup.y });
+            dup.from = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
+          } else if (dup.from.point) {
+            dup.from.point.x += offset.x;
+            dup.from.point.y += offset.y;
+          }
+        }
+
+        if (dup.to) {
+          if (dup.to.id && idMap[dup.to.id]) {
+            dup.to.id = idMap[dup.to.id];
+          } else if (dup.to.id) {
+            const extObj = this.doc.objects[dup.to.id];
+            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
+            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
+            const pt = resolved ? resolved.end : (dup.to.point || { x: dup.x + dup.width, y: dup.y + dup.height });
+            dup.to = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
+          } else if (dup.to.point) {
+            dup.to.point.x += offset.x;
+            dup.to.point.y += offset.y;
+          }
+        }
+      }
+      cmds.push({ type: 'create_object', object: dup });
+    }
+
+    if (cmds.length > 0) {
+      this.dispatchCommandBatch(cmds);
+      this.workspace.selectedIds = newObjects.map(o => o.id);
+      this.workspace.activeGroupId = null;
+      this.workspace.render();
+    }
   }
 
   setInterfaceTheme(theme) {

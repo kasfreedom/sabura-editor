@@ -4,7 +4,7 @@
 
 import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS } from './types.js';
 import { cloneDocument, generateId, generateSeed } from './document.js';
-import { alignObjects, distributeObjects, measureText } from './geometry.js';
+import { alignObjects, distributeObjects, measureText, resolveConnectorGeometry } from './geometry.js';
 
 export const SUPPORTED_COMMAND_TYPES = new Set([
   'create_object',
@@ -165,6 +165,12 @@ export function applyCommand(doc, cmd) {
 
       newDoc.order = newDoc.order.filter(id => !idsToDelete.includes(id));
 
+      if (Array.isArray(cmd.removeGroups)) {
+        for (const gId of cmd.removeGroups) {
+          delete newDoc.groups[gId];
+        }
+      }
+
       // Reconnect connectors that referenced deleted objects to static points
       const affectedConnectors = [];
       for (const [cId, conn] of Object.entries(newDoc.objects)) {
@@ -212,35 +218,90 @@ export function applyCommand(doc, cmd) {
       const offset = cmd.offset || { x: 24, y: 24 };
       const duplicatedIds = [];
       const newObjects = [];
+      const idMap = {};
+      const groupMap = {};
 
+      // 1. First pass: clone objects, assign new IDs, and clone groups
       for (const id of ids) {
         const source = newDoc.objects[id];
         const newId = generateId(source.type || 'dup');
+        idMap[id] = newId;
+
         const dup = cloneDocument(source);
         dup.id = newId;
         dup.x += offset.x;
         dup.y += offset.y;
-        if (dup.type === 'connector') {
-          if (dup.from?.point) {
-            dup.from.point.x += offset.x;
-            dup.from.point.y += offset.y;
-          }
-          if (dup.to?.point) {
-            dup.to.point.x += offset.x;
-            dup.to.point.y += offset.y;
-          }
-        }
         dup.seed = generateSeed();
         dup.locked = false; // Duplicated objects are unlocked by default
+
+        if (dup.groupId) {
+          if (!groupMap[dup.groupId]) {
+            const newGid = generateId('grp');
+            groupMap[dup.groupId] = newGid;
+            const origGroup = newDoc.groups[dup.groupId];
+            newDoc.groups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
+          }
+          dup.groupId = groupMap[dup.groupId];
+        }
+
         newDoc.objects[newId] = dup;
         newDoc.order.push(newId);
         duplicatedIds.push(newId);
         newObjects.push(dup);
       }
 
+      // 2. Second pass: Rebind connector endpoints
+      for (const dup of newObjects) {
+        if (dup.type === 'connector') {
+          // Rebind 'from' endpoint
+          if (dup.from) {
+            if (dup.from.id && idMap[dup.from.id]) {
+              dup.from.id = idMap[dup.from.id];
+            } else if (dup.from.id) {
+              // Connected to external uncopied object: convert to free point offset by (dx, dy)
+              const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
+              const origConn = doc.objects[origId] || dup;
+              const resolved = resolveConnectorGeometry(doc, origConn);
+              dup.from = {
+                point: {
+                  x: resolved.start.x + offset.x,
+                  y: resolved.start.y + offset.y
+                }
+              };
+            } else if (dup.from.point) {
+              dup.from.point.x += offset.x;
+              dup.from.point.y += offset.y;
+            }
+          }
+
+          // Rebind 'to' endpoint
+          if (dup.to) {
+            if (dup.to.id && idMap[dup.to.id]) {
+              dup.to.id = idMap[dup.to.id];
+            } else if (dup.to.id) {
+              // Connected to external uncopied object: convert to free point offset by (dx, dy)
+              const origId = Object.keys(idMap).find(k => idMap[k] === dup.id);
+              const origConn = doc.objects[origId] || dup;
+              const resolved = resolveConnectorGeometry(doc, origConn);
+              dup.to = {
+                point: {
+                  x: resolved.end.x + offset.x,
+                  y: resolved.end.y + offset.y
+                }
+              };
+            } else if (dup.to.point) {
+              dup.to.point.x += offset.x;
+              dup.to.point.y += offset.y;
+            }
+          }
+        }
+      }
+
+      const createdGroupIds = Object.values(groupMap);
       const inverseCmd = {
         type: 'delete_objects',
-        ids: duplicatedIds
+        ids: duplicatedIds,
+        removeGroups: createdGroupIds
       };
       return { doc: newDoc, inverseCmd, duplicatedIds };
     }
@@ -320,16 +381,20 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'align_objects': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
-      if (ids.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
-      const objects = ids.map(id => newDoc.objects[id]);
+      const spatialIds = (cmd.ids || []).filter(id => {
+        const o = newDoc.objects[id];
+        return o && o.type !== 'connector' && !o.locked;
+      });
+      if (spatialIds.length < 2) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = spatialIds.map(id => newDoc.objects[id]);
       const deltas = alignObjects(objects, cmd.alignment);
       const prevPositions = {};
-      for (const id of ids) {
+      for (const id of spatialIds) {
         const d = deltas[id] || { dx: 0, dy: 0 };
-        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x += d.dx;
-        newDoc.objects[id].y += d.dy;
+        const obj = newDoc.objects[id];
+        prevPositions[id] = { x: obj.x, y: obj.y };
+        obj.x += d.dx;
+        obj.y += d.dy;
       }
       const inverseCmd = {
         type: 'restore_positions',
@@ -339,16 +404,20 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'distribute_objects': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
-      if (ids.length < 3) return { doc: newDoc, inverseCmd: { type: 'noop' } };
-      const objects = ids.map(id => newDoc.objects[id]);
+      const spatialIds = (cmd.ids || []).filter(id => {
+        const o = newDoc.objects[id];
+        return o && o.type !== 'connector' && !o.locked;
+      });
+      if (spatialIds.length < 3) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      const objects = spatialIds.map(id => newDoc.objects[id]);
       const deltas = distributeObjects(objects, cmd.direction);
       const prevPositions = {};
-      for (const id of ids) {
+      for (const id of spatialIds) {
         const d = deltas[id] || { dx: 0, dy: 0 };
-        prevPositions[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x += d.dx;
-        newDoc.objects[id].y += d.dy;
+        const obj = newDoc.objects[id];
+        prevPositions[id] = { x: obj.x, y: obj.y };
+        obj.x += d.dx;
+        obj.y += d.dy;
       }
       const inverseCmd = {
         type: 'restore_positions',
@@ -360,10 +429,20 @@ export function applyCommand(doc, cmd) {
     case 'restore_positions': {
       const prev = {};
       for (const [id, pos] of Object.entries(cmd.positions || {})) {
-        if (!newDoc.objects[id]) continue;
-        prev[id] = { x: newDoc.objects[id].x, y: newDoc.objects[id].y };
-        newDoc.objects[id].x = pos.x;
-        newDoc.objects[id].y = pos.y;
+        const obj = newDoc.objects[id];
+        if (!obj) continue;
+        prev[id] = {
+          x: obj.x,
+          y: obj.y,
+          fromPoint: obj.type === 'connector' && obj.from?.point ? { ...obj.from.point } : null,
+          toPoint: obj.type === 'connector' && obj.to?.point ? { ...obj.to.point } : null
+        };
+        obj.x = pos.x;
+        obj.y = pos.y;
+        if (obj.type === 'connector') {
+          if (pos.fromPoint && obj.from) obj.from.point = { ...pos.fromPoint };
+          if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
+        }
       }
       return { doc: newDoc, inverseCmd: { type: 'restore_positions', positions: prev } };
     }
