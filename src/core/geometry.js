@@ -467,17 +467,53 @@ export function resolveConnectorGeometry(doc, connector) {
   let pathStr = '';
 
   if (routing === 'elbow') {
-    // Orthogonal routing: stepped 90 deg corner
     const dx = end.x - start.x;
     const dy = end.y - start.y;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      const midX = start.x + dx / 2;
-      points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
-      pathStr = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    let elbowMidpoint = null;
+
+    if (typeof connector.elbowOffset === 'number' && !isNaN(connector.elbowOffset)) {
+      // Orthogonal U-bypass loop routing
+      const offset = connector.elbowOffset;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        // Horizontal-dominant: route vertically out, across, and back in
+        const baseY = offset >= 0 ? Math.max(start.y, end.y) : Math.min(start.y, end.y);
+        const bypassY = baseY + offset;
+        points = [
+          start,
+          { x: start.x, y: bypassY },
+          { x: end.x, y: bypassY },
+          end
+        ];
+        pathStr = `M ${start.x} ${start.y} L ${start.x} ${bypassY} L ${end.x} ${bypassY} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: (start.x + end.x) / 2, y: bypassY };
+      } else {
+        // Vertical-dominant: route horizontally out, across, and back in
+        const baseX = offset >= 0 ? Math.max(start.x, end.x) : Math.min(start.x, end.x);
+        const bypassX = baseX + offset;
+        points = [
+          start,
+          { x: bypassX, y: start.y },
+          { x: bypassX, y: end.y },
+          end
+        ];
+        pathStr = `M ${start.x} ${start.y} L ${bypassX} ${start.y} L ${bypassX} ${end.y} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: bypassX, y: (start.y + end.y) / 2 };
+      }
+      return { start, end, points, path: pathStr, elbowMidpoint, isBypass: true, elbowOffset: offset };
     } else {
-      const midY = start.y + dy / 2;
-      points = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
-      pathStr = `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+      // Standard 2-corner Z-step
+      if (Math.abs(dx) > Math.abs(dy)) {
+        const midX = start.x + dx / 2;
+        points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+        pathStr = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: midX, y: (start.y + end.y) / 2 };
+      } else {
+        const midY = start.y + dy / 2;
+        points = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+        pathStr = `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: (start.x + end.x) / 2, y: midY };
+      }
+      return { start, end, points, path: pathStr, elbowMidpoint, isBypass: false };
     }
   } else if (routing === 'curved') {
     // Smooth bezier curve with perpendicular offset
@@ -485,7 +521,10 @@ export function resolveConnectorGeometry(doc, connector) {
     const dy = end.y - start.y;
     const dist = Math.hypot(dx, dy);
     const normal = dist > 0 ? { x: -dy / dist, y: dx / dist } : { x: 0, y: 0 };
-    const curveAmount = Math.min(60, dist * 0.2);
+    const autoAmount = Math.min(60, dist * 0.2);
+    const curveAmount = (typeof connector.curveDistance === 'number' && !isNaN(connector.curveDistance))
+      ? Math.max(5, connector.curveDistance)
+      : autoAmount;
     const side = connector.curveSide === -1 ? -1 : 1;
     const cpX = (start.x + end.x) / 2 + normal.x * curveAmount * side;
     const cpY = (start.y + end.y) / 2 + normal.y * curveAmount * side;
@@ -495,7 +534,17 @@ export function resolveConnectorGeometry(doc, connector) {
     };
     points = [start, { x: cpX, y: cpY }, end];
     pathStr = `M ${start.x} ${start.y} Q ${cpX} ${cpY} ${end.x} ${end.y}`;
-    return { start, end, points, path: pathStr, cp: { x: cpX, y: cpY }, curveMidpoint, side };
+    return {
+      start,
+      end,
+      points,
+      path: pathStr,
+      cp: { x: cpX, y: cpY },
+      curveMidpoint,
+      side,
+      curveAmount,
+      isAutoCurve: connector.curveDistance === undefined || connector.curveDistance === null
+    };
   } else {
     // Straight
     points = [start, end];

@@ -395,6 +395,85 @@ async function runSafariTests() {
       log('23. Interactive Curved Connector Flipping via Arc Handle & F Key', hasCurveHandle && flippedClick && undoClick && redoClick && fKeyFlip && undoF, 'hasHandle=' + hasCurveHandle + ' clickFlip=' + flippedClick + ' undoClick=' + undoClick + ' redoClick=' + redoClick + ' fKey=' + fKeyFlip + ' undoF=' + undoF);
     }
 
+    // Flow 24: Continuous Curved Depth Dragging & 1-Step Undo
+    {
+      app.workspace.selectedIds = ['conn_1'];
+      app.workspace.render();
+      await sleep(50);
+
+      const curveHandle = document.querySelector('[data-handle="conn-curve"]');
+      if (curveHandle) {
+        const hRect = curveHandle.getBoundingClientRect();
+        curveHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 150, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 150, button: 0, buttons: 0 }));
+        await sleep(50);
+      }
+
+      const deepCurvedOk = typeof app.doc.objects['conn_1']?.curveDistance === 'number' && app.doc.objects['conn_1'].curveDistance > 100;
+
+      // 1-step undo restores auto depth
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoDeepOk = app.doc.objects['conn_1']?.curveDistance === undefined;
+
+      log('24. Continuous Curved Depth Dragging & 1-Step Undo', deepCurvedOk && undoDeepOk, 'deep=' + deepCurvedOk + ' undo=' + undoDeepOk);
+    }
+
+    // Flow 25: Elbow U-Bypass Loop Dragging & 1-Step Undo
+    {
+      // Switch conn_1 to elbow
+      app.dispatchCommand({ type: 'configure_connector', id: 'conn_1', routing: 'elbow' });
+      app.workspace.selectedIds = ['conn_1'];
+      app.workspace.render();
+      await sleep(50);
+
+      const elbowHandle = document.querySelector('[data-handle="conn-elbow"]');
+      const hasElbowHandle = Boolean(elbowHandle);
+
+      if (elbowHandle) {
+        const hRect = elbowHandle.getBoundingClientRect();
+        elbowHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 120, button: 0, buttons: 1 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 120, button: 0, buttons: 0 }));
+        await sleep(50);
+      }
+
+      const hasBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset > 50;
+
+      // Click handle to flip side
+      const elbowHandle2 = document.querySelector('[data-handle="conn-elbow"]');
+      if (elbowHandle2) {
+        const hRect = elbowHandle2.getBoundingClientRect();
+        elbowHandle2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+        await sleep(30);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+        await sleep(50);
+      }
+
+      const flippedBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset < 0;
+
+      // 1-step undo restores downward bypass
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoFlipBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset > 0;
+
+      // 1-step undo restores standard elbow step
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(100);
+      const undoBypassOk = app.doc.objects['conn_1']?.elbowOffset === undefined;
+
+      // Restore conn_1 to curved routing
+      app.dispatchCommand({ type: 'configure_connector', id: 'conn_1', routing: 'curved' });
+      await sleep(50);
+
+      log('25. Elbow U-Bypass Loop Dragging & 1-Step Undo', hasElbowHandle && hasBypass && flippedBypass && undoFlipBypass && undoBypassOk, 'handle=' + hasElbowHandle + ' bypass=' + hasBypass + ' flipped=' + flippedBypass + ' undo=' + undoBypassOk);
+    }
+
     // Flow 1: Create a curved connector through the wheel
     const fab = document.querySelector('.wheel-trigger-fab');
     if (!fab) throw new Error('Wheel FAB not found');
@@ -1743,6 +1822,103 @@ const c23 = await evalInChrome(`(async () => {
 console.log('Chrome 23. Interactive Curved Connector Flipping via Arc Handle & F Key:', c23);
 if (!c23.hasCurveHandle || !c23.flippedClick || !c23.undoClick || !c23.redoClick || !c23.fKeyFlip || !c23.undoF) {
   throw new Error('Chrome: Interactive curved connector flipping failed');
+}
+
+// Flow 24: Continuous Curved Depth Dragging & 1-Step Undo
+const c24 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  app.workspace.selectedIds = ['conn_1'];
+  app.workspace.render();
+  await sleep(50);
+
+  const curveHandle = document.querySelector('[data-handle="conn-curve"]');
+  if (curveHandle) {
+    const hRect = curveHandle.getBoundingClientRect();
+    curveHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 150, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 150, button: 0, buttons: 0 }));
+    await sleep(50);
+  }
+
+  const deepCurvedOk = typeof app.doc.objects['conn_1']?.curveDistance === 'number' && app.doc.objects['conn_1'].curveDistance > 100;
+
+  // 1-step undo restores auto depth
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoDeepOk = app.doc.objects['conn_1']?.curveDistance === undefined;
+
+  return { deepCurvedOk, undoDeepOk };
+})()`);
+console.log('Chrome 24. Continuous Curved Depth Dragging & 1-Step Undo:', c24);
+if (!c24.deepCurvedOk || !c24.undoDeepOk) {
+  throw new Error('Chrome: Continuous curved depth dragging failed');
+}
+
+// Flow 25: Elbow U-Bypass Loop Dragging & 1-Step Undo
+const c25 = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
+
+  // Switch conn_1 to elbow
+  app.dispatchCommand({ type: 'configure_connector', id: 'conn_1', routing: 'elbow' });
+  app.workspace.selectedIds = ['conn_1'];
+  app.workspace.render();
+  await sleep(50);
+
+  const elbowHandle = document.querySelector('[data-handle="conn-elbow"]');
+  const hasElbowHandle = Boolean(elbowHandle);
+
+  if (elbowHandle) {
+    const hRect = elbowHandle.getBoundingClientRect();
+    elbowHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 120, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2 + 120, button: 0, buttons: 0 }));
+    await sleep(50);
+  }
+
+  const hasBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset > 50;
+
+  // Click handle to flip side
+  const elbowHandle2 = document.querySelector('[data-handle="conn-elbow"]');
+  if (elbowHandle2) {
+    const hRect = elbowHandle2.getBoundingClientRect();
+    elbowHandle2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hRect.left + hRect.width / 2, clientY: hRect.top + hRect.height / 2, button: 0 }));
+    await sleep(50);
+  }
+
+  const flippedBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset < 0;
+
+  // 1-step undo restores downward bypass
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoFlipBypass = typeof app.doc.objects['conn_1']?.elbowOffset === 'number' && app.doc.objects['conn_1'].elbowOffset > 0;
+
+  // 1-step undo restores standard elbow step
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(100);
+  const undoBypassOk = app.doc.objects['conn_1']?.elbowOffset === undefined;
+
+  // Restore conn_1 to curved routing
+  app.dispatchCommand({ type: 'configure_connector', id: 'conn_1', routing: 'curved' });
+  await sleep(50);
+
+  return { hasElbowHandle, hasBypass, flippedBypass, undoFlipBypass, undoBypassOk };
+})()`);
+console.log('Chrome 25. Elbow U-Bypass Loop Dragging & 1-Step Undo:', c25);
+if (!c25.hasElbowHandle || !c25.hasBypass || !c25.flippedBypass || !c25.undoFlipBypass || !c25.undoBypassOk) {
+  throw new Error('Chrome: Elbow U-Bypass loop dragging failed');
 }
 
 console.log('✓ All Chrome flows passed cleanly!');

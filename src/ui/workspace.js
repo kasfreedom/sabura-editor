@@ -235,7 +235,14 @@ export class Workspace {
     if (this.isCurvingConnector && this.curvingConnectorData) {
       const conn = doc.objects[this.curvingConnectorData.connectorId];
       if (conn) {
-        conn.curveSide = this.curvingConnectorData.initialSide;
+        if (this.curvingConnectorData.type === 'curve') {
+          conn.curveSide = this.curvingConnectorData.initialSide;
+          if (this.curvingConnectorData.initialDistance === null) delete conn.curveDistance;
+          else conn.curveDistance = this.curvingConnectorData.initialDistance;
+        } else if (this.curvingConnectorData.type === 'elbow') {
+          if (this.curvingConnectorData.initialOffset === null) delete conn.elbowOffset;
+          else conn.elbowOffset = this.curvingConnectorData.initialOffset;
+        }
       }
     }
 
@@ -339,9 +346,24 @@ export class Workspace {
         const doc = this.callbacks.getDocument();
         const conn = doc.objects[this.selectedIds[0]];
         this.curvingConnectorData = {
+          type: 'curve',
           connectorId: this.selectedIds[0],
           initialSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
           currentSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
+          initialDistance: conn?.curveDistance !== undefined ? conn.curveDistance : null,
+          currentDistance: conn?.curveDistance !== undefined ? conn.curveDistance : null,
+          startPt: { ...worldPt }
+        };
+        return;
+      } else if (handleId === 'conn-elbow') {
+        this.isCurvingConnector = true;
+        const doc = this.callbacks.getDocument();
+        const conn = doc.objects[this.selectedIds[0]];
+        this.curvingConnectorData = {
+          type: 'elbow',
+          connectorId: this.selectedIds[0],
+          initialOffset: conn?.elbowOffset !== undefined ? conn.elbowOffset : null,
+          currentOffset: conn?.elbowOffset !== undefined ? conn.elbowOffset : null,
           startPt: { ...worldPt }
         };
         return;
@@ -687,12 +709,33 @@ export class Workspace {
           const midY = (geom.start.y + geom.end.y) / 2;
           const dot = (worldPt.x - midX) * normal.x + (worldPt.y - midY) * normal.y;
           const newSide = dot >= 0 ? 1 : -1;
-          if (newSide !== conn.curveSide) {
-            conn.curveSide = newSide;
-            this.curvingConnectorData.currentSide = newSide;
-            this.render();
-          }
+          const chordDist = Math.abs(dot);
+          const newDistance = Math.round(Math.max(10, chordDist * 2));
+          conn.curveSide = newSide;
+          conn.curveDistance = newDistance;
+          this.curvingConnectorData.currentSide = newSide;
+          this.curvingConnectorData.currentDistance = newDistance;
+          this.render();
         }
+      } else if (conn && conn.routing === 'elbow') {
+        const geom = resolveConnectorGeometry(doc, conn);
+        const dx = geom.end.x - geom.start.x;
+        const dy = geom.end.y - geom.start.y;
+        let newOffset;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          const midY = (geom.start.y + geom.end.y) / 2;
+          const baseY = worldPt.y >= midY ? Math.max(geom.start.y, geom.end.y) : Math.min(geom.start.y, geom.end.y);
+          newOffset = Math.round(worldPt.y - baseY);
+          if (Math.abs(newOffset) < 15) newOffset = newOffset >= 0 ? 20 : -20;
+        } else {
+          const midX = (geom.start.x + geom.end.x) / 2;
+          const baseX = worldPt.x >= midX ? Math.max(geom.start.x, geom.end.x) : Math.min(geom.start.x, geom.end.x);
+          newOffset = Math.round(worldPt.x - baseX);
+          if (Math.abs(newOffset) < 15) newOffset = newOffset >= 0 ? 20 : -20;
+        }
+        conn.elbowOffset = newOffset;
+        this.curvingConnectorData.currentOffset = newOffset;
+        this.render();
       }
       return;
     }
@@ -888,23 +931,56 @@ export class Workspace {
         const worldPt = this.screenToWorld(e.clientX, e.clientY);
         const dragDist = Math.hypot(worldPt.x - data.startPt.x, worldPt.y - data.startPt.y);
 
-        let finalSide = data.currentSide;
-        // If static click (little or no drag movement), toggle the curve side
-        if (dragDist < 5) {
-          finalSide = data.initialSide === -1 ? 1 : -1;
-        }
+        if (data.type === 'curve') {
+          let finalSide = data.currentSide;
+          let finalDistance = data.currentDistance;
 
-        // Restore initial side before applying command so undo history records clean change
-        if (conn) {
-          conn.curveSide = data.initialSide;
-        }
+          if (dragDist < 5) {
+            // Static click: toggle side
+            finalSide = data.initialSide === -1 ? 1 : -1;
+            finalDistance = data.initialDistance;
+          }
 
-        if (finalSide !== data.initialSide) {
-          this.callbacks.onCommand({
-            type: 'configure_connector',
-            id: data.connectorId,
-            curveSide: finalSide
-          });
+          // Restore initial side and distance before applying command so undo history records clean change
+          if (conn) {
+            conn.curveSide = data.initialSide;
+            if (data.initialDistance === null) delete conn.curveDistance;
+            else conn.curveDistance = data.initialDistance;
+          }
+
+          if (finalSide !== data.initialSide || finalDistance !== data.initialDistance) {
+            this.callbacks.onCommand({
+              type: 'configure_connector',
+              id: data.connectorId,
+              curveSide: finalSide,
+              curveDistance: finalDistance
+            });
+          }
+        } else if (data.type === 'elbow') {
+          let finalOffset = data.currentOffset;
+
+          if (dragDist < 5) {
+            // Static click: toggle bypass side or set default bypass
+            if (data.initialOffset === null || data.initialOffset === 0) {
+              finalOffset = 80;
+            } else {
+              finalOffset = -data.initialOffset;
+            }
+          }
+
+          // Restore initial offset before applying command so undo history records clean change
+          if (conn) {
+            if (data.initialOffset === null) delete conn.elbowOffset;
+            else conn.elbowOffset = data.initialOffset;
+          }
+
+          if (finalOffset !== data.initialOffset) {
+            this.callbacks.onCommand({
+              type: 'configure_connector',
+              id: data.connectorId,
+              elbowOffset: finalOffset
+            });
+          }
         }
       }
       this.render();

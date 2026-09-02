@@ -99,7 +99,9 @@ export class HelpModal {
                 <li><span class="help-desc">Gentle Snapping</span> Snaps to side centers and corners</li>
                 <li><span class="help-desc">Auto Reset</span> Wheel &rarr; Points &rarr; Auto All/From/To</li>
                 <li><span class="help-desc">Routing & Arrows</span> Wheel &rarr; Route (Straight/Curved)</li>
-                <li><span class="help-desc">Flip Curve</span> Drag/click arc handle, or press <kbd class="kbd-badge">F</kbd></li>
+                <li><span class="help-desc">Curved Depth</span> Drag arc handle to bend deeper</li>
+                <li><span class="help-desc">Elbow Bypass</span> Drag middle handle to route around shapes</li>
+                <li><span class="help-desc">Flip / Reset</span> Press <kbd class="kbd-badge">F</kbd> or Wheel &rarr; Route</li>
               </ul>
             </section>
 

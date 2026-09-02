@@ -529,3 +529,106 @@ test('curved connector curveSide flipping, reflection geometry, and atomic undo/
   assert.equal(geomRedone.cp.y, geomFlipped.cp.y);
 });
 
+test('curved connector continuous curveDistance sets deep arc without 60px clamp and restores on undo', () => {
+  let doc = createDefaultDocument();
+  doc.objects = {
+    c1: createDefaultObject('connector', {
+      from: { point: { x: 100, y: 100 } },
+      to: { point: { x: 700, y: 100 } },
+      routing: 'curved'
+    })
+  };
+  doc.order = ['c1'];
+
+  // 1. Auto curve is clamped at 60px
+  const geomAuto = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomAuto.curveAmount, 60);
+  assert.equal(geomAuto.isAutoCurve, true);
+
+  // 2. Set deep curve distance: 300px
+  const setDeepCmd = {
+    type: 'configure_connector',
+    id: 'c1',
+    curveDistance: 300
+  };
+  const deepRes = applyCommand(doc, setDeepCmd);
+  doc = deepRes.doc;
+  assert.equal(doc.objects.c1.curveDistance, 300);
+
+  const geomDeep = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomDeep.curveAmount, 300);
+  assert.equal(geomDeep.isAutoCurve, false);
+  // Quadratic apex at curveAmount / 2 = 150
+  assert.equal(geomDeep.cp.y, 400); // 100 + 300
+  assert.equal(geomDeep.curveMidpoint.y, 250); // 100 + 150
+
+  // 3. Single-step undo restores auto curve
+  const undoRes = applyCommand(doc, deepRes.inverseCmd);
+  doc = undoRes.doc;
+  assert.equal(doc.objects.c1.curveDistance, undefined);
+  const geomRestored = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomRestored.curveAmount, 60);
+  assert.equal(geomRestored.isAutoCurve, true);
+});
+
+test('elbow connector orthogonal U-bypass loop with elbowOffset, reflection, and atomic undo/redo', () => {
+  let doc = createDefaultDocument();
+  doc.objects = {
+    c1: createDefaultObject('connector', {
+      from: { point: { x: 100, y: 100 } },
+      to: { point: { x: 500, y: 100 } },
+      routing: 'elbow'
+    })
+  };
+  doc.order = ['c1'];
+
+  // 1. Without elbowOffset: standard step
+  const geomStep = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomStep.isBypass, false);
+
+  // 2. Apply elbowOffset: 150 (routes 150px below the shapes)
+  const setBypassCmd = {
+    type: 'configure_connector',
+    id: 'c1',
+    elbowOffset: 150
+  };
+  const bypassRes = applyCommand(doc, setBypassCmd);
+  doc = bypassRes.doc;
+  assert.equal(doc.objects.c1.elbowOffset, 150);
+
+  const geomBypass = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomBypass.isBypass, true);
+  assert.equal(geomBypass.points.length, 4);
+  assert.deepEqual(geomBypass.points[0], { x: 100, y: 100 });
+  assert.deepEqual(geomBypass.points[1], { x: 100, y: 250 });
+  assert.deepEqual(geomBypass.points[2], { x: 500, y: 250 });
+  assert.deepEqual(geomBypass.points[3], { x: 500, y: 100 });
+  assert.deepEqual(geomBypass.elbowMidpoint, { x: 300, y: 250 });
+
+  // 3. Flip side to -120 (routes above the shapes)
+  const flipBypassCmd = {
+    type: 'configure_connector',
+    id: 'c1',
+    elbowOffset: -120
+  };
+  const flipRes = applyCommand(doc, flipBypassCmd);
+  doc = flipRes.doc;
+  assert.equal(doc.objects.c1.elbowOffset, -120);
+  const geomFlipped = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.deepEqual(geomFlipped.points[1], { x: 100, y: -20 });
+  assert.deepEqual(geomFlipped.points[2], { x: 500, y: -20 });
+  assert.deepEqual(geomFlipped.elbowMidpoint, { x: 300, y: -20 });
+
+  // 4. Single-step undo restores elbowOffset: 150
+  const undoRes = applyCommand(doc, flipRes.inverseCmd);
+  doc = undoRes.doc;
+  assert.equal(doc.objects.c1.elbowOffset, 150);
+
+  // 5. Undo again restores standard step
+  const undoStepRes = applyCommand(doc, bypassRes.inverseCmd);
+  doc = undoStepRes.doc;
+  assert.equal(doc.objects.c1.elbowOffset, undefined);
+  const geomRestored = resolveConnectorGeometry(doc, doc.objects.c1);
+  assert.equal(geomRestored.isBypass, false);
+});
+

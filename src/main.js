@@ -215,9 +215,17 @@ export class SaburaApp {
       onFlipCurve: () => {
         for (const id of this.workspace.selectedIds) {
           const conn = this.doc.objects[id];
-          if (conn && conn.type === 'connector' && conn.routing === 'curved') {
-            const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
-            this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+          if (conn && conn.type === 'connector') {
+            if (conn.routing === 'curved') {
+              const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
+              this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+            } else if (conn.routing === 'elbow') {
+              if (conn.elbowOffset !== undefined && conn.elbowOffset !== null) {
+                this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: -conn.elbowOffset });
+              } else {
+                this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: 80 });
+              }
+            }
           }
         }
       },
@@ -499,6 +507,25 @@ export class SaburaApp {
           const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
           this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
         }
+      }
+    } else if (actionId === 'conn_curve_auto') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, curveDistance: null });
+      }
+    } else if (actionId === 'conn_elbow_bypass') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: 80 });
+      }
+    } else if (actionId === 'conn_elbow_flip') {
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector' && conn.elbowOffset !== undefined) {
+          this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: -conn.elbowOffset });
+        }
+      }
+    } else if (actionId === 'conn_elbow_auto') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: null });
       }
     } else if (actionId.startsWith('conn_arrows_')) {
       for (const id of selectedIds) {

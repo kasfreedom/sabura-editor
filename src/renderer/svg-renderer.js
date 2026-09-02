@@ -421,6 +421,17 @@ export function renderSelectionOverlay(doc, selectedIds) {
       </g>`);
     }
 
+    // If elbow connector, render bypass handle at middle segment
+    if (conn.routing === 'elbow' && geom.elbowMidpoint) {
+      const ex = geom.elbowMidpoint.x;
+      const ey = geom.elbowMidpoint.y;
+      markup.push(`<g data-handle="conn-elbow" style="cursor: pointer;" title="Adjust or flip elbow bypass">
+        <circle cx="${ex}" cy="${ey}" r="14" fill="transparent" />
+        <circle cx="${ex}" cy="${ey}" r="5.5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2.5" pointer-events="none" />
+        <rect x="${ex - 2}" y="${ey - 2}" width="4" height="4" fill="${selStroke}" pointer-events="none" />
+      </g>`);
+    }
+
     return markup.join('\n');
   }
 

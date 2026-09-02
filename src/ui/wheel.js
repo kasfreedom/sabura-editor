@@ -272,6 +272,16 @@ export class ToolWheel {
       ];
       if (curRouting === 'curved') {
         routeSub.push({ id: 'conn_curve_flip', label: 'Flip Curve', icon: '⇄' });
+        if (conn?.curveDistance !== undefined && conn?.curveDistance !== null) {
+          routeSub.push({ id: 'conn_curve_auto', label: 'Auto Depth', icon: '↺' });
+        }
+      } else if (curRouting === 'elbow') {
+        if (conn?.elbowOffset !== undefined && conn?.elbowOffset !== null) {
+          routeSub.push({ id: 'conn_elbow_flip', label: 'Flip Side', icon: '⇄' });
+          routeSub.push({ id: 'conn_elbow_auto', label: 'Auto Step', icon: '↺' });
+        } else {
+          routeSub.push({ id: 'conn_elbow_bypass', label: 'Bypass Loop', icon: '⊔' });
+        }
       }
 
       // 1. Route

@@ -99,6 +99,8 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
     baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
     baseObject.curveSide = overrides.curveSide !== undefined ? overrides.curveSide : 1;
+    if (overrides.curveDistance !== undefined) baseObject.curveDistance = overrides.curveDistance;
+    if (overrides.elbowOffset !== undefined) baseObject.elbowOffset = overrides.elbowOffset;
     baseObject.startArrow = overrides.startArrow || false;
     baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
   } else {
@@ -194,6 +196,12 @@ export function validateDocument(doc) {
         }
         if (obj.curveSide !== undefined && obj.curveSide !== 1 && obj.curveSide !== -1) {
           errors.push(`Connector "${objId}" curveSide must be 1 or -1`);
+        }
+        if (obj.curveDistance !== undefined && obj.curveDistance !== null && (typeof obj.curveDistance !== 'number' || isNaN(obj.curveDistance) || obj.curveDistance < 0)) {
+          errors.push(`Connector "${objId}" curveDistance must be a non-negative number`);
+        }
+        if (obj.elbowOffset !== undefined && obj.elbowOffset !== null && (typeof obj.elbowOffset !== 'number' || isNaN(obj.elbowOffset))) {
+          errors.push(`Connector "${objId}" elbowOffset must be a number`);
         }
       }
     }

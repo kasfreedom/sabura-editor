@@ -724,7 +724,7 @@ body.in-presentation {
 {
   "assets": {},
   "groups": {},
-  "id": "board_fss2cfp8nok",
+  "id": "board_2zzanf58njp",
   "objects": {
     "conn_1": {
       "curveSide": 1,
@@ -740,7 +740,7 @@ body.in-presentation {
       "rotation": 0,
       "roughness": 1,
       "routing": "curved",
-      "seed": 2045662158,
+      "seed": 5630706,
       "startArrow": false,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
@@ -768,7 +768,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1290508659,
+      "seed": 465258463,
       "stroke": "#2f9e44",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -795,7 +795,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1818732139,
+      "seed": 601571710,
       "stroke": "#1971c2",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -822,7 +822,7 @@ body.in-presentation {
       "opacity": 1,
       "rotation": 0,
       "roughness": 1,
-      "seed": 1578673535,
+      "seed": 1892617168,
       "stroke": "#1e1e1e",
       "strokeStyle": "solid",
       "strokeWidth": 2,
@@ -1484,17 +1484,53 @@ function resolveConnectorGeometry(doc, connector) {
   let pathStr = '';
 
   if (routing === 'elbow') {
-    // Orthogonal routing: stepped 90 deg corner
     const dx = end.x - start.x;
     const dy = end.y - start.y;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      const midX = start.x + dx / 2;
-      points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
-      pathStr = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    let elbowMidpoint = null;
+
+    if (typeof connector.elbowOffset === 'number' && !isNaN(connector.elbowOffset)) {
+      // Orthogonal U-bypass loop routing
+      const offset = connector.elbowOffset;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        // Horizontal-dominant: route vertically out, across, and back in
+        const baseY = offset >= 0 ? Math.max(start.y, end.y) : Math.min(start.y, end.y);
+        const bypassY = baseY + offset;
+        points = [
+          start,
+          { x: start.x, y: bypassY },
+          { x: end.x, y: bypassY },
+          end
+        ];
+        pathStr = `M ${start.x} ${start.y} L ${start.x} ${bypassY} L ${end.x} ${bypassY} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: (start.x + end.x) / 2, y: bypassY };
+      } else {
+        // Vertical-dominant: route horizontally out, across, and back in
+        const baseX = offset >= 0 ? Math.max(start.x, end.x) : Math.min(start.x, end.x);
+        const bypassX = baseX + offset;
+        points = [
+          start,
+          { x: bypassX, y: start.y },
+          { x: bypassX, y: end.y },
+          end
+        ];
+        pathStr = `M ${start.x} ${start.y} L ${bypassX} ${start.y} L ${bypassX} ${end.y} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: bypassX, y: (start.y + end.y) / 2 };
+      }
+      return { start, end, points, path: pathStr, elbowMidpoint, isBypass: true, elbowOffset: offset };
     } else {
-      const midY = start.y + dy / 2;
-      points = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
-      pathStr = `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+      // Standard 2-corner Z-step
+      if (Math.abs(dx) > Math.abs(dy)) {
+        const midX = start.x + dx / 2;
+        points = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+        pathStr = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: midX, y: (start.y + end.y) / 2 };
+      } else {
+        const midY = start.y + dy / 2;
+        points = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+        pathStr = `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+        elbowMidpoint = { x: (start.x + end.x) / 2, y: midY };
+      }
+      return { start, end, points, path: pathStr, elbowMidpoint, isBypass: false };
     }
   } else if (routing === 'curved') {
     // Smooth bezier curve with perpendicular offset
@@ -1502,7 +1538,10 @@ function resolveConnectorGeometry(doc, connector) {
     const dy = end.y - start.y;
     const dist = Math.hypot(dx, dy);
     const normal = dist > 0 ? { x: -dy / dist, y: dx / dist } : { x: 0, y: 0 };
-    const curveAmount = Math.min(60, dist * 0.2);
+    const autoAmount = Math.min(60, dist * 0.2);
+    const curveAmount = (typeof connector.curveDistance === 'number' && !isNaN(connector.curveDistance))
+      ? Math.max(5, connector.curveDistance)
+      : autoAmount;
     const side = connector.curveSide === -1 ? -1 : 1;
     const cpX = (start.x + end.x) / 2 + normal.x * curveAmount * side;
     const cpY = (start.y + end.y) / 2 + normal.y * curveAmount * side;
@@ -1512,7 +1551,17 @@ function resolveConnectorGeometry(doc, connector) {
     };
     points = [start, { x: cpX, y: cpY }, end];
     pathStr = `M ${start.x} ${start.y} Q ${cpX} ${cpY} ${end.x} ${end.y}`;
-    return { start, end, points, path: pathStr, cp: { x: cpX, y: cpY }, curveMidpoint, side };
+    return {
+      start,
+      end,
+      points,
+      path: pathStr,
+      cp: { x: cpX, y: cpY },
+      curveMidpoint,
+      side,
+      curveAmount,
+      isAutoCurve: connector.curveDistance === undefined || connector.curveDistance === null
+    };
   } else {
     // Straight
     points = [start, end];
@@ -2042,6 +2091,8 @@ function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.paper) 
     baseObject.to = overrides.to || { point: { x: (overrides.x !== undefined ? overrides.x : 0) + 160, y: (overrides.y !== undefined ? overrides.y : 0) + 100 } };
     baseObject.routing = overrides.routing || 'straight'; // 'straight' | 'elbow' | 'curved'
     baseObject.curveSide = overrides.curveSide !== undefined ? overrides.curveSide : 1;
+    if (overrides.curveDistance !== undefined) baseObject.curveDistance = overrides.curveDistance;
+    if (overrides.elbowOffset !== undefined) baseObject.elbowOffset = overrides.elbowOffset;
     baseObject.startArrow = overrides.startArrow || false;
     baseObject.endArrow = overrides.endArrow !== undefined ? overrides.endArrow : true;
   } else {
@@ -2137,6 +2188,12 @@ function validateDocument(doc) {
         }
         if (obj.curveSide !== undefined && obj.curveSide !== 1 && obj.curveSide !== -1) {
           errors.push(`Connector "${objId}" curveSide must be 1 or -1`);
+        }
+        if (obj.curveDistance !== undefined && obj.curveDistance !== null && (typeof obj.curveDistance !== 'number' || isNaN(obj.curveDistance) || obj.curveDistance < 0)) {
+          errors.push(`Connector "${objId}" curveDistance must be a non-negative number`);
+        }
+        if (obj.elbowOffset !== undefined && obj.elbowOffset !== null && (typeof obj.elbowOffset !== 'number' || isNaN(obj.elbowOffset))) {
+          errors.push(`Connector "${objId}" elbowOffset must be a number`);
         }
       }
     }
@@ -2995,6 +3052,8 @@ function applyCommand(doc, cmd) {
       const prevConfig = {
         routing: conn.routing,
         curveSide: conn.curveSide !== undefined ? conn.curveSide : 1,
+        curveDistance: conn.curveDistance !== undefined ? conn.curveDistance : null,
+        elbowOffset: conn.elbowOffset !== undefined ? conn.elbowOffset : null,
         startArrow: conn.startArrow,
         endArrow: conn.endArrow,
         stacking: conn.stacking
@@ -3002,6 +3061,14 @@ function applyCommand(doc, cmd) {
 
       if (cmd.routing !== undefined) conn.routing = cmd.routing;
       if (cmd.curveSide !== undefined) conn.curveSide = cmd.curveSide;
+      if (cmd.curveDistance !== undefined) {
+        if (cmd.curveDistance === null) delete conn.curveDistance;
+        else conn.curveDistance = cmd.curveDistance;
+      }
+      if (cmd.elbowOffset !== undefined) {
+        if (cmd.elbowOffset === null) delete conn.elbowOffset;
+        else conn.elbowOffset = cmd.elbowOffset;
+      }
       if (cmd.startArrow !== undefined) conn.startArrow = cmd.startArrow;
       if (cmd.endArrow !== undefined) conn.endArrow = cmd.endArrow;
       if (cmd.stacking !== undefined) conn.stacking = cmd.stacking;
@@ -4248,6 +4315,17 @@ function renderSelectionOverlay(doc, selectedIds) {
       </g>`);
     }
 
+    // If elbow connector, render bypass handle at middle segment
+    if (conn.routing === 'elbow' && geom.elbowMidpoint) {
+      const ex = geom.elbowMidpoint.x;
+      const ey = geom.elbowMidpoint.y;
+      markup.push(`<g data-handle="conn-elbow" style="cursor: pointer;" title="Adjust or flip elbow bypass">
+        <circle cx="${ex}" cy="${ey}" r="14" fill="transparent" />
+        <circle cx="${ex}" cy="${ey}" r="5.5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2.5" pointer-events="none" />
+        <rect x="${ex - 2}" y="${ey - 2}" width="4" height="4" fill="${selStroke}" pointer-events="none" />
+      </g>`);
+    }
+
     return markup.join('\n');
   }
 
@@ -4575,6 +4653,16 @@ class ToolWheel {
       ];
       if (curRouting === 'curved') {
         routeSub.push({ id: 'conn_curve_flip', label: 'Flip Curve', icon: '⇄' });
+        if (conn?.curveDistance !== undefined && conn?.curveDistance !== null) {
+          routeSub.push({ id: 'conn_curve_auto', label: 'Auto Depth', icon: '↺' });
+        }
+      } else if (curRouting === 'elbow') {
+        if (conn?.elbowOffset !== undefined && conn?.elbowOffset !== null) {
+          routeSub.push({ id: 'conn_elbow_flip', label: 'Flip Side', icon: '⇄' });
+          routeSub.push({ id: 'conn_elbow_auto', label: 'Auto Step', icon: '↺' });
+        } else {
+          routeSub.push({ id: 'conn_elbow_bypass', label: 'Bypass Loop', icon: '⊔' });
+        }
       }
 
       // 1. Route
@@ -5628,7 +5716,9 @@ class HelpModal {
                 <li><span class="help-desc">Gentle Snapping</span> Snaps to side centers and corners</li>
                 <li><span class="help-desc">Auto Reset</span> Wheel &rarr; Points &rarr; Auto All/From/To</li>
                 <li><span class="help-desc">Routing & Arrows</span> Wheel &rarr; Route (Straight/Curved)</li>
-                <li><span class="help-desc">Flip Curve</span> Drag/click arc handle, or press <kbd class="kbd-badge">F</kbd></li>
+                <li><span class="help-desc">Curved Depth</span> Drag arc handle to bend deeper</li>
+                <li><span class="help-desc">Elbow Bypass</span> Drag middle handle to route around shapes</li>
+                <li><span class="help-desc">Flip / Reset</span> Press <kbd class="kbd-badge">F</kbd> or Wheel &rarr; Route</li>
               </ul>
             </section>
 
@@ -5928,7 +6018,14 @@ class Workspace {
     if (this.isCurvingConnector && this.curvingConnectorData) {
       const conn = doc.objects[this.curvingConnectorData.connectorId];
       if (conn) {
-        conn.curveSide = this.curvingConnectorData.initialSide;
+        if (this.curvingConnectorData.type === 'curve') {
+          conn.curveSide = this.curvingConnectorData.initialSide;
+          if (this.curvingConnectorData.initialDistance === null) delete conn.curveDistance;
+          else conn.curveDistance = this.curvingConnectorData.initialDistance;
+        } else if (this.curvingConnectorData.type === 'elbow') {
+          if (this.curvingConnectorData.initialOffset === null) delete conn.elbowOffset;
+          else conn.elbowOffset = this.curvingConnectorData.initialOffset;
+        }
       }
     }
 
@@ -6032,9 +6129,24 @@ class Workspace {
         const doc = this.callbacks.getDocument();
         const conn = doc.objects[this.selectedIds[0]];
         this.curvingConnectorData = {
+          type: 'curve',
           connectorId: this.selectedIds[0],
           initialSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
           currentSide: conn?.curveSide !== undefined ? conn.curveSide : 1,
+          initialDistance: conn?.curveDistance !== undefined ? conn.curveDistance : null,
+          currentDistance: conn?.curveDistance !== undefined ? conn.curveDistance : null,
+          startPt: { ...worldPt }
+        };
+        return;
+      } else if (handleId === 'conn-elbow') {
+        this.isCurvingConnector = true;
+        const doc = this.callbacks.getDocument();
+        const conn = doc.objects[this.selectedIds[0]];
+        this.curvingConnectorData = {
+          type: 'elbow',
+          connectorId: this.selectedIds[0],
+          initialOffset: conn?.elbowOffset !== undefined ? conn.elbowOffset : null,
+          currentOffset: conn?.elbowOffset !== undefined ? conn.elbowOffset : null,
           startPt: { ...worldPt }
         };
         return;
@@ -6380,12 +6492,33 @@ class Workspace {
           const midY = (geom.start.y + geom.end.y) / 2;
           const dot = (worldPt.x - midX) * normal.x + (worldPt.y - midY) * normal.y;
           const newSide = dot >= 0 ? 1 : -1;
-          if (newSide !== conn.curveSide) {
-            conn.curveSide = newSide;
-            this.curvingConnectorData.currentSide = newSide;
-            this.render();
-          }
+          const chordDist = Math.abs(dot);
+          const newDistance = Math.round(Math.max(10, chordDist * 2));
+          conn.curveSide = newSide;
+          conn.curveDistance = newDistance;
+          this.curvingConnectorData.currentSide = newSide;
+          this.curvingConnectorData.currentDistance = newDistance;
+          this.render();
         }
+      } else if (conn && conn.routing === 'elbow') {
+        const geom = resolveConnectorGeometry(doc, conn);
+        const dx = geom.end.x - geom.start.x;
+        const dy = geom.end.y - geom.start.y;
+        let newOffset;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          const midY = (geom.start.y + geom.end.y) / 2;
+          const baseY = worldPt.y >= midY ? Math.max(geom.start.y, geom.end.y) : Math.min(geom.start.y, geom.end.y);
+          newOffset = Math.round(worldPt.y - baseY);
+          if (Math.abs(newOffset) < 15) newOffset = newOffset >= 0 ? 20 : -20;
+        } else {
+          const midX = (geom.start.x + geom.end.x) / 2;
+          const baseX = worldPt.x >= midX ? Math.max(geom.start.x, geom.end.x) : Math.min(geom.start.x, geom.end.x);
+          newOffset = Math.round(worldPt.x - baseX);
+          if (Math.abs(newOffset) < 15) newOffset = newOffset >= 0 ? 20 : -20;
+        }
+        conn.elbowOffset = newOffset;
+        this.curvingConnectorData.currentOffset = newOffset;
+        this.render();
       }
       return;
     }
@@ -6581,23 +6714,56 @@ class Workspace {
         const worldPt = this.screenToWorld(e.clientX, e.clientY);
         const dragDist = Math.hypot(worldPt.x - data.startPt.x, worldPt.y - data.startPt.y);
 
-        let finalSide = data.currentSide;
-        // If static click (little or no drag movement), toggle the curve side
-        if (dragDist < 5) {
-          finalSide = data.initialSide === -1 ? 1 : -1;
-        }
+        if (data.type === 'curve') {
+          let finalSide = data.currentSide;
+          let finalDistance = data.currentDistance;
 
-        // Restore initial side before applying command so undo history records clean change
-        if (conn) {
-          conn.curveSide = data.initialSide;
-        }
+          if (dragDist < 5) {
+            // Static click: toggle side
+            finalSide = data.initialSide === -1 ? 1 : -1;
+            finalDistance = data.initialDistance;
+          }
 
-        if (finalSide !== data.initialSide) {
-          this.callbacks.onCommand({
-            type: 'configure_connector',
-            id: data.connectorId,
-            curveSide: finalSide
-          });
+          // Restore initial side and distance before applying command so undo history records clean change
+          if (conn) {
+            conn.curveSide = data.initialSide;
+            if (data.initialDistance === null) delete conn.curveDistance;
+            else conn.curveDistance = data.initialDistance;
+          }
+
+          if (finalSide !== data.initialSide || finalDistance !== data.initialDistance) {
+            this.callbacks.onCommand({
+              type: 'configure_connector',
+              id: data.connectorId,
+              curveSide: finalSide,
+              curveDistance: finalDistance
+            });
+          }
+        } else if (data.type === 'elbow') {
+          let finalOffset = data.currentOffset;
+
+          if (dragDist < 5) {
+            // Static click: toggle bypass side or set default bypass
+            if (data.initialOffset === null || data.initialOffset === 0) {
+              finalOffset = 80;
+            } else {
+              finalOffset = -data.initialOffset;
+            }
+          }
+
+          // Restore initial offset before applying command so undo history records clean change
+          if (conn) {
+            if (data.initialOffset === null) delete conn.elbowOffset;
+            else conn.elbowOffset = data.initialOffset;
+          }
+
+          if (finalOffset !== data.initialOffset) {
+            this.callbacks.onCommand({
+              type: 'configure_connector',
+              id: data.connectorId,
+              elbowOffset: finalOffset
+            });
+          }
         }
       }
       this.render();
@@ -7028,9 +7194,17 @@ class SaburaApp {
       onFlipCurve: () => {
         for (const id of this.workspace.selectedIds) {
           const conn = this.doc.objects[id];
-          if (conn && conn.type === 'connector' && conn.routing === 'curved') {
-            const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
-            this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+          if (conn && conn.type === 'connector') {
+            if (conn.routing === 'curved') {
+              const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
+              this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
+            } else if (conn.routing === 'elbow') {
+              if (conn.elbowOffset !== undefined && conn.elbowOffset !== null) {
+                this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: -conn.elbowOffset });
+              } else {
+                this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: 80 });
+              }
+            }
           }
         }
       },
@@ -7312,6 +7486,25 @@ class SaburaApp {
           const curSide = conn.curveSide !== undefined ? conn.curveSide : 1;
           this.dispatchCommand({ type: 'configure_connector', id, curveSide: curSide === -1 ? 1 : -1 });
         }
+      }
+    } else if (actionId === 'conn_curve_auto') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, curveDistance: null });
+      }
+    } else if (actionId === 'conn_elbow_bypass') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: 80 });
+      }
+    } else if (actionId === 'conn_elbow_flip') {
+      for (const id of selectedIds) {
+        const conn = this.doc.objects[id];
+        if (conn && conn.type === 'connector' && conn.elbowOffset !== undefined) {
+          this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: -conn.elbowOffset });
+        }
+      }
+    } else if (actionId === 'conn_elbow_auto') {
+      for (const id of selectedIds) {
+        this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: null });
       }
     } else if (actionId.startsWith('conn_arrows_')) {
       for (const id of selectedIds) {
