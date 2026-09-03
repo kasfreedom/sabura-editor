@@ -12,6 +12,28 @@ import {
   STROKE_STYLES
 } from './types.js';
 import { measureText } from './geometry.js';
+import {
+  REVISION_EXTENSION_KEY,
+  REVISION_ALLOWED_FIELDS,
+  computeSha256,
+  generateRevisionId,
+  getShortRevisionId,
+  computeContentDigest,
+  validateRevisionMetadata,
+  transitionRevision,
+  setDefaultNormalizeFn
+} from './revision.js';
+
+export {
+  REVISION_EXTENSION_KEY,
+  REVISION_ALLOWED_FIELDS,
+  computeSha256,
+  generateRevisionId,
+  getShortRevisionId,
+  computeContentDigest,
+  validateRevisionMetadata,
+  transitionRevision
+};
 
 /**
  * Generate a random stable alphanumeric ID.
@@ -360,7 +382,7 @@ function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
  * @param {any} doc
  * @returns {{ valid: boolean, errors: string[] }}
  */
-export function validateDocument(doc) {
+export function validateDocument(doc, options = {}) {
   const errors = [];
 
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
@@ -369,6 +391,13 @@ export function validateDocument(doc) {
 
   // Reject unknown unnamespaced properties at the document root
   checkUnknownProperties(doc, DOCUMENT_ALLOWED_FIELDS, 'document', errors);
+
+  if (REVISION_EXTENSION_KEY in doc) {
+    const revVal = validateRevisionMetadata(doc, options?.verifyDigest ? canonicalJson : null, normalizeDocument);
+    if (!revVal.valid) {
+      errors.push(...revVal.errors);
+    }
+  }
 
   if (doc.schemaVersion !== CANVAS_SCHEMA_VERSION) {
     errors.push(`Invalid schemaVersion: expected "${CANVAS_SCHEMA_VERSION}", received "${doc.schemaVersion}"`);
@@ -729,6 +758,8 @@ export function normalizeDocument(doc) {
 
   return doc;
 }
+
+setDefaultNormalizeFn(normalizeDocument);
 
 /**
  * Deep clones any JSON-compatible structure.

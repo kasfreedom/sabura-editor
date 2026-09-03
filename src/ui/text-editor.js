@@ -12,7 +12,14 @@ export class TextEditor {
     this.initialText = '';
 
     this.textarea = document.createElement('textarea');
+    this.textarea.id = 'sabura-inline-text-editor';
+    this.textarea.name = 'sabura-inline-text-editor';
     this.textarea.className = 'sabura-inline-text-editor';
+    this.textarea.setAttribute('aria-label', 'Edit shape or canvas text');
+    this.textarea.setAttribute('autocomplete', 'off');
+    this.textarea.setAttribute('autocorrect', 'off');
+    this.textarea.setAttribute('autocapitalize', 'off');
+    this.textarea.setAttribute('spellcheck', 'false');
     this.textarea.style.display = 'none';
     this.container.appendChild(this.textarea);
 

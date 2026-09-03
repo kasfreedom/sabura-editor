@@ -1,7 +1,7 @@
 # Sabura Project Context & Handover
 
 ## 1. Repository Location & State
-- **Root directory:** `/Users/kassem/Documents/Ideas/sabura`
+- **Root directory:** `/Users/kassem/Documents/Ideas/Sabura/editor`
 - **Core premise:** Sabura is a standalone, 100% offline, single-file visual whiteboard editor packaged in `sabura.html` (~235 KiB, zero external dependencies, no server).
 - **Git status:** `main` branch, clean working directory, 111 unit tests passing (`npm test`), full Chrome CDP and Safari E2E tests passing (`node scripts/verify-full-e2e.js`).
 - **Current document format:** `sabura/canvas/v1` embedded inside `<script type="application/json" id="sabura-document">` in `<head>`.

@@ -17,6 +17,7 @@ export class Workspace {
     this.activeTool = 'hand'; // Default tool: Hand/Pan!
     this.previousTool = 'select';
     this.connectorRouting = 'straight';
+    this.mode = 'reading'; // 'reading' | 'editing'
     this.selectedIds = [];
     this.activeGroupId = null;
     this.snapGrid = true;
@@ -52,7 +53,27 @@ export class Workspace {
     this.bindEvents();
   }
 
+  setMode(mode) {
+    this.mode = mode === 'editing' ? 'editing' : 'reading';
+    if (this.mode === 'reading') {
+      this.cancelGesture();
+      this.selectedIds = [];
+      this.activeGroupId = null;
+      this.activeTool = 'hand';
+      this.updateCursor();
+      this.render();
+    } else {
+      this.setTool('select');
+    }
+  }
+
   setTool(tool) {
+    if (this.mode === 'reading') {
+      this.activeTool = 'hand';
+      this.updateCursor();
+      this.render();
+      return;
+    }
     if (this.isDrawingLine && tool !== 'line') {
       this.cancelLine();
     }
@@ -70,6 +91,10 @@ export class Workspace {
   }
 
   updateCursor() {
+    if (this.mode === 'reading') {
+      this.container.style.cursor = this.isPanning ? 'grabbing' : 'grab';
+      return;
+    }
     if (this.spaceHeld || this.activeTool === 'hand') {
       this.container.style.cursor = this.isPanning ? 'grabbing' : 'grab';
     } else if (this.activeTool === 'select') {
@@ -202,9 +227,9 @@ export class Workspace {
       this.longPressTimer = null;
     }
 
-    const doc = this.callbacks.getDocument();
+    const doc = this.callbacks?.getDocument?.();
 
-    if (this.isDraggingSelection && this.dragInitialPositions) {
+    if (this.isDraggingSelection && this.dragInitialPositions && doc?.objects) {
       for (const [id, pos] of Object.entries(this.dragInitialPositions)) {
         const obj = doc.objects[id];
         if (obj) {
@@ -225,6 +250,13 @@ export class Workspace {
         obj.y = this.resizeOriginalBounds.y;
         obj.width = this.resizeOriginalBounds.width;
         obj.height = this.resizeOriginalBounds.height;
+        if (obj.textStyle) {
+          if (this.resizeOriginalBounds.hasResolvedSize) {
+            obj.textStyle.resolvedSize = this.resizeOriginalBounds.resolvedSize;
+          } else {
+            delete obj.textStyle.resolvedSize;
+          }
+        }
       }
     }
 
@@ -281,9 +313,13 @@ export class Workspace {
     this.snapGuides = [];
     this.marquee = null;
     this.draftObject = null;
-    this.setTool('select');
-    this.updateCursor();
-    this.render();
+    if (this.mode === 'reading') {
+      this.activeTool = 'hand';
+      this.updateCursor();
+      this.render();
+    } else {
+      this.setTool('select');
+    }
   }
 
   finishLine(closed = false) {
@@ -387,6 +423,7 @@ export class Workspace {
 
   onContextMenu(e) {
     e.preventDefault();
+    if (this.mode === 'reading') return;
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     const hitObj = this.findObjectAt(worldPt);
 
@@ -408,6 +445,7 @@ export class Workspace {
   }
 
   onDblClick(e) {
+    if (this.mode === 'reading') return;
     if (this.isDrawingLine && this.linePoints && this.linePoints.length >= 2) {
       this.finishLine(false);
       return;
@@ -426,6 +464,16 @@ export class Workspace {
 
   onPointerDown(e) {
     if (e.button !== 0 && e.button !== 1) return;
+
+    if (this.mode === 'reading') {
+      if (e.button === 0 || e.button === 1) {
+        this.isPanning = true;
+        this.panMoved = false;
+        this.dragStart = { x: e.clientX - this.camera.x, y: e.clientY - this.camera.y };
+        this.updateCursor();
+      }
+      return;
+    }
 
     const worldPt = this.screenToWorld(e.clientX, e.clientY);
     this.pointerStartScreen = { x: e.clientX, y: e.clientY };
@@ -496,7 +544,8 @@ export class Workspace {
           y: obj.y,
           width: obj.width,
           height: obj.height,
-          resolvedSize: obj.textStyle?.resolvedSize || 20
+          resolvedSize: obj.textStyle?.resolvedSize,
+          hasResolvedSize: Boolean(obj.textStyle && 'resolvedSize' in obj.textStyle)
         };
         this.latestResizeBounds = null;
         this.dragStart = { ...worldPt };
@@ -1001,9 +1050,10 @@ export class Workspace {
     if (this.isPanning) {
       this.isPanning = false;
       this.updateCursor();
-      if (!this.panMoved && e.button === 0 && !this.spaceHeld) {
+      if (this.mode !== 'reading' && !this.panMoved && e.button === 0 && !this.spaceHeld) {
         // Static click while in Hand mode: if clicked an object, select it and switch to select tool!
-        const hit = this.findObjectAt(worldPt);
+        const pt = this.screenToWorld(e.clientX, e.clientY);
+        const hit = this.findObjectAt(pt);
         if (hit) {
           this.selectedIds = [hit.id];
           this.setTool('select');
@@ -1191,6 +1241,13 @@ export class Workspace {
           obj.y = this.resizeOriginalBounds.y;
           obj.width = this.resizeOriginalBounds.width;
           obj.height = this.resizeOriginalBounds.height;
+          if (obj.textStyle) {
+            if (this.resizeOriginalBounds.hasResolvedSize) {
+              obj.textStyle.resolvedSize = this.resizeOriginalBounds.resolvedSize;
+            } else {
+              delete obj.textStyle.resolvedSize;
+            }
+          }
         }
       }
 
@@ -1311,14 +1368,15 @@ export class Workspace {
 
   render() {
     const doc = this.callbacks.getDocument();
+    const isReading = this.mode === 'reading';
     const runtime = {
       camera: this.camera,
-      selectedIds: this.selectedIds,
-      marquee: this.marquee,
-      snapGuides: this.snapGuides,
+      selectedIds: isReading ? [] : this.selectedIds,
+      marquee: isReading ? null : this.marquee,
+      snapGuides: isReading ? [] : this.snapGuides,
       showGrid: this.showGrid !== false,
-      reconnectSnapIndicator: this.isReconnecting ? this.reconnectSnapIndicator : null,
-      connectorDraft: this.draftObject?.type === 'connector' ? {
+      reconnectSnapIndicator: (this.isReconnecting && !isReading) ? this.reconnectSnapIndicator : null,
+      connectorDraft: (this.draftObject?.type === 'connector' && !isReading) ? {
         start: this.draftObject.from?.point || { x: this.draftObject.x, y: this.draftObject.y },
         end: this.draftObject.to?.point || { x: this.draftObject.x + this.draftObject.width, y: this.draftObject.y + this.draftObject.height }
       } : null
@@ -1327,7 +1385,7 @@ export class Workspace {
     let sceneSvg = renderSvgScene(doc, runtime);
 
     // If D-drag is in progress, insert duplicate preview clones before world-layer closing
-    if (this.isDDragging && this.dragAccumulatedDelta && this.selectedIds.length > 0) {
+    if (!isReading && this.isDDragging && this.dragAccumulatedDelta && this.selectedIds.length > 0) {
       const dx = this.dragAccumulatedDelta.dx;
       const dy = this.dragAccumulatedDelta.dy;
       const previews = this.selectedIds.map(id => {
@@ -1352,7 +1410,7 @@ export class Workspace {
     }
 
     // If a creation draft is in progress, insert it before world-layer closing
-    if (this.draftObject) {
+    if (!isReading && this.draftObject) {
       const draftSvg = renderObject(doc, this.draftObject, false);
       const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
       if (worldCloseIndex !== -1) {
@@ -1361,7 +1419,7 @@ export class Workspace {
     }
 
     // If line drafting is in progress, insert interactive preview before world-layer closing
-    if (this.isDrawingLine && this.linePoints && this.linePoints.length > 0) {
+    if (!isReading && this.isDrawingLine && this.linePoints && this.linePoints.length > 0) {
       const stroke = doc.theme?.defaultStroke || '#1e1e1e';
       const p0 = this.linePoints[0];
       let d = `M ${p0.x} ${p0.y}`;

@@ -63,6 +63,43 @@ export class ShortcutsCoordinator {
       return;
     }
 
+    const isReading = Boolean(this.handlers.isReadingMode?.());
+
+    // In Reading mode, permit navigation (zoom, fit, help, escape) but strictly suppress all editing actions
+    if (isReading) {
+      if ((e.key === '+' || e.key === '=') && !mod && !e.altKey) {
+        e.preventDefault();
+        this.handlers.onZoomIn?.();
+        return;
+      }
+      if ((e.key === '-' || e.key === '_') && !mod && !e.altKey) {
+        e.preventDefault();
+        this.handlers.onZoomOut?.();
+        return;
+      }
+      if (e.key === '0' && !mod && !e.altKey) {
+        e.preventDefault();
+        this.handlers.onResetZoom?.();
+        return;
+      }
+      if (e.key === '1' && !mod && !e.altKey) {
+        e.preventDefault();
+        this.handlers.onFitContent?.();
+        return;
+      }
+      if (e.key === '?' && !mod && !e.altKey) {
+        e.preventDefault();
+        this.handlers.onToggleHelp?.();
+        return;
+      }
+      if (e.key === 'Escape') {
+        this.handlers.onEscape?.();
+        return;
+      }
+      // All editing shortcuts and tools are ignored in Reading mode
+      return;
+    }
+
     // --- Tools & Navigation ---
     if (e.key.toLowerCase() === 'q' && !mod && !e.altKey) {
       e.preventDefault();

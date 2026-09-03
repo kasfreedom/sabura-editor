@@ -130,10 +130,20 @@ html, body {
   gap: 12px;
 }
 
+.topbar-left {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topbar-right {
+  flex: 0 0 auto;
+}
+
 .brand-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .brand-name {
@@ -149,6 +159,7 @@ html, body {
   font-size: 17px;
   font-weight: 600;
   color: var(--ui-text);
+  min-width: 40px;
   max-width: 180px;
   white-space: nowrap;
   overflow: hidden;
@@ -167,6 +178,19 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   color: var(--ui-text);
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: rgba(25, 113, 194, 0.12);
+  border: 1.5px solid var(--ui-accent);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ui-accent);
 }
 
 .status-dot {
@@ -265,6 +289,13 @@ html, body {
 
 .topbar-btn.save-btn:hover {
   background: #b2f2bb;
+}
+
+.topbar-btn:focus-visible,
+.topbar-select:focus-visible,
+.zoom-btn:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
 }
 
 .topbar-divider {
@@ -744,4 +775,84 @@ body.in-presentation {
   color: var(--ui-text-muted);
   background: var(--ui-surface);
   text-align: center;
+}
+
+.topbar-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .sabura-topbar {
+    left: 8px;
+    right: 8px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .topbar-left {
+    gap: 6px;
+  }
+  .topbar-right {
+    gap: 6px;
+  }
+  .brand-name {
+    display: none;
+  }
+  .doc-title {
+    max-width: 100px;
+  }
+  .topbar-btn {
+    padding: 4px 7px;
+    font-size: 12.5px;
+  }
+  .mode-editing .topbar-center {
+    display: none;
+  }
+  #btn-fullscreen {
+    display: none;
+  }
+  .topbar-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .sabura-topbar {
+    padding: 0 6px;
+    gap: 4px;
+  }
+  .topbar-left {
+    gap: 4px;
+  }
+  .topbar-right {
+    gap: 4px;
+  }
+  .mode-badge {
+    display: none;
+  }
+  .status-badge {
+    padding: 3px 6px;
+  }
+  .status-badge .status-text {
+    display: none;
+  }
+  .status-badge .status-dot {
+    margin: 0;
+  }
+  .doc-title {
+    max-width: 85px;
+    font-size: 15px;
+  }
+  .topbar-btn {
+    padding: 4px 6px;
+    font-size: 12px;
+    gap: 2px;
+  }
+  .topbar-secondary-actions {
+    display: none;
+  }
+  #btn-undo, #btn-redo, #btn-fullscreen, .topbar-divider {
+    display: none;
+  }
 }

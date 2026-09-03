@@ -5,7 +5,20 @@
  * top bar, keyboard shortcuts, presentation mode, and offline file persistence.
  */
 
-import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument, normalizeDocument, cloneDocument, generateId, generateSeed } from './core/document.js';
+import {
+  createDefaultDocument,
+  createDefaultObject,
+  canonicalJson,
+  validateDocument,
+  normalizeDocument,
+  cloneDocument,
+  generateId,
+  generateSeed,
+  REVISION_EXTENSION_KEY,
+  computeContentDigest,
+  getShortRevisionId,
+  transitionRevision
+} from './core/document.js';
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
 import { THEME_PRESETS, FONT_SIZES } from './core/types.js';
 import { resolveConnectorGeometry } from './core/geometry.js';
@@ -23,6 +36,10 @@ export class SaburaApp {
   constructor() {
     this.doc = null;
     this.status = 'Clean'; // 'Clean' | 'Changed' | 'Preparing copy' | 'Copy requested' | 'Error'
+    this.mode = 'reading'; // 'reading' | 'editing'
+    this.exportBaseline = null;
+    this.isSaving = false;
+    this.prePresentationMode = 'reading';
     this.interfaceTheme = (typeof localStorage !== 'undefined' ? localStorage.getItem('sabura_ui_theme') : null) || 'system';
     this.undoStack = [];
     this.redoStack = [];
@@ -66,9 +83,16 @@ export class SaburaApp {
 
     try {
       const parsed = JSON.parse(seamContent);
-      const val = validateDocument(parsed);
+      const val = validateDocument(parsed, { verifyDigest: true });
       if (val.valid) {
         this.doc = normalizeDocument(parsed);
+        if (this.doc[REVISION_EXTENSION_KEY]) {
+          this.exportBaseline = { ...this.doc[REVISION_EXTENSION_KEY] };
+        } else {
+          this.exportBaseline = null;
+        }
+        const objCount = Object.keys(this.doc.objects || {}).length;
+        this.mode = objCount === 0 ? 'editing' : 'reading';
         return;
       }
       this.isCorrupted = true;
@@ -84,6 +108,7 @@ export class SaburaApp {
   }
 
   renderCorruptedState() {
+    if (typeof document === 'undefined') return;
     const app = document.getElementById('app');
     if (!app) return;
     const escape = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -141,10 +166,12 @@ export class SaburaApp {
       onCommand: (cmd) => this.dispatchCommand(cmd),
       onCommandBatch: (cmds) => this.dispatchCommandBatch(cmds),
       onOpenWheel: (x, y, context, selectedObj) => {
+        if (this.mode === 'reading') return;
         const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
         this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onDoubleClickedObject: (obj) => {
+        if (this.mode === 'reading') return;
         if (!obj.locked && obj.type !== 'connector') {
           this.textEditor.open(obj, this.workspace.camera);
         }
@@ -153,6 +180,7 @@ export class SaburaApp {
         this.zoomToolbar?.setZoom(zoom);
       }
     });
+    this.workspace.setMode(this.mode);
 
     // In-place text editor
     this.textEditor = new TextEditor(document.getElementById('app'), (objId, newText) => {
@@ -182,6 +210,7 @@ export class SaburaApp {
 
     // Top Bar
     this.topbar = new TopBar(document.getElementById('app'), {
+      onSetMode: (mode) => this.setMode(mode),
       onSetBoardTheme: (themeId) => this.setBoardTheme(themeId),
       onSetInterfaceTheme: (uiTheme) => this.setInterfaceTheme(uiTheme),
       onToggleGridVisible: () => this.toggleGridVisible(),
@@ -207,7 +236,8 @@ export class SaburaApp {
 
     // Shortcuts coordinator
     this.shortcuts = new ShortcutsCoordinator({
-      isTextEditing: () => Boolean(this.textEditor?.activeEditor),
+      isReadingMode: () => this.mode === 'reading' || Boolean(this.inPresentation),
+      isTextEditing: () => Boolean(this.textEditor?.targetObject !== null || this.textEditor?.textarea?.style.display === 'block'),
       onTriggerWheel: (x, y) => {
         if (this.wheel.isOpen) {
           this.wheel.close();
@@ -437,6 +467,54 @@ export class SaburaApp {
 
     // Initial render
     this.updateUI();
+
+    if (this.mode === 'reading' && this.wheelFab) {
+      this.wheelFab.style.display = 'none';
+    }
+
+    const objCount = Object.keys(this.doc?.objects || {}).length;
+    if (objCount > 0) {
+      this.workspace.fitToContent(60);
+    }
+  }
+
+  setMode(mode) {
+    const targetMode = mode === 'editing' ? 'editing' : 'reading';
+    if (this.mode === targetMode) return;
+
+    if (targetMode === 'reading') {
+      if (this.textEditor) {
+        this.textEditor.close(true);
+      }
+      this.workspace.cancelGesture();
+      this.workspace.selectedIds = [];
+      this.wheel.close();
+      this.helpModal?.close();
+      if (this.wheelFab) {
+        this.wheelFab.style.display = 'none';
+      }
+      this.mode = 'reading';
+      this.workspace.setMode('reading');
+    } else {
+      this.mode = 'editing';
+      this.workspace.setMode('editing');
+      if (this.wheelFab) {
+        this.wheelFab.style.display = '';
+      }
+    }
+
+    this.updateUI();
+  }
+
+  updateDocumentStatus() {
+    const currentDigest = computeContentDigest(this.doc, canonicalJson);
+    if (this.exportBaseline && this.exportBaseline.contentDigest === currentDigest) {
+      this.status = 'Copy requested';
+    } else if (!this.exportBaseline && this.undoStack.length === 0) {
+      this.status = 'Clean';
+    } else {
+      this.status = 'Changed';
+    }
   }
 
   dispatchCommand(cmd) {
@@ -471,7 +549,7 @@ export class SaburaApp {
     if (redoCmd && redoCmd.type !== 'noop') {
       this.redoStack.push(redoCmd);
     }
-    this.status = 'Changed';
+    this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
     return true;
@@ -485,7 +563,7 @@ export class SaburaApp {
     if (undoCmd && undoCmd.type !== 'noop') {
       this.undoStack.push(undoCmd);
     }
-    this.status = 'Changed';
+    this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
     return true;
@@ -896,11 +974,19 @@ export class SaburaApp {
 
   enterPresentation() {
     this.prePresentationCamera = { ...this.workspace.camera };
-    this.textEditor.close(true);
+    this.prePresentationMode = this.mode;
+    if (this.textEditor) {
+      this.textEditor.close(true);
+    }
+    this.workspace.cancelGesture();
     this.workspace.selectedIds = [];
-    this.wheel.close();
+    this.wheel?.close();
     this.helpModal?.close();
+    if (this.wheelFab) {
+      this.wheelFab.style.display = 'none';
+    }
     this.inPresentation = true;
+    this.workspace.setMode('reading');
     document.body.classList.add('in-presentation');
 
     this.workspace.fitToContent(80);
@@ -937,9 +1023,13 @@ export class SaburaApp {
       this.workspace.camera = { ...this.prePresentationCamera };
       this.prePresentationCamera = null;
     }
-    // Return to Hand/Pan mode
-    this.workspace.setTool('hand');
+    // Restore previous mode and UI state
+    const prevMode = this.prePresentationMode || 'reading';
+    this.prePresentationMode = null;
+    this.mode = null; // Clear so setMode does not short-circuit
+    this.setMode(prevMode);
     this.workspace.render();
+    this.updateUI();
   }
 
   getCleanHtmlShell() {
@@ -961,44 +1051,71 @@ export class SaburaApp {
   saveCopy() {
     if (this.isCorrupted) {
       console.error('Cannot save copy: document is corrupted or invalid.');
-      return;
+      return { success: false, error: 'Document is corrupted or in safe failure mode' };
     }
-    this.status = 'Preparing copy';
-    this.updateUI();
+
+    if (this.isSaving) {
+      return { success: false, error: 'Save in progress' };
+    }
+    this.isSaving = true;
 
     try {
-      // Reconstruct self-contained HTML from clean application shell
+      if (this.textEditor) {
+        this.textEditor.close(true);
+      }
+      this.workspace.cancelGesture();
+
+      this.status = 'Preparing copy';
+      this.updateUI();
+
+      const transition = transitionRevision(this.doc, this.exportBaseline, canonicalJson);
+      const exportDoc = cloneDocument(this.doc);
+      exportDoc[REVISION_EXTENSION_KEY] = { ...transition.revisionRecord };
+
       const cleanShell = this.getCleanHtmlShell();
-      const packResult = packageHtmlWithDocument(cleanShell, this.doc);
+      const packResult = packageHtmlWithDocument(cleanShell, exportDoc);
 
       if (!packResult.success) {
-        alert('Failed to package document: ' + packResult.error);
+        if (typeof alert === 'function') {
+          try { alert('Failed to package document: ' + packResult.error); } catch (_) {}
+        }
         this.status = 'Error';
         this.updateUI();
-        return;
+        return { success: false, error: packResult.error };
       }
+
+      const shortRev = getShortRevisionId(transition.revisionRecord.revisionId);
+      const safeTitle = sanitizeFilenameTitle(exportDoc.title, 'document');
+      const filename = `sabura-${safeTitle}-r${shortRev}.html`;
+
+      const byteLength = triggerFileDownload(filename, packResult.html);
+
+      this.exportBaseline = { ...transition.revisionRecord };
+      this.doc[REVISION_EXTENSION_KEY] = { ...transition.revisionRecord };
 
       this.status = 'Copy requested';
       this.updateUI();
 
-      const safeTitle = sanitizeFilenameTitle(this.doc?.title, 'whiteboard');
-      const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
-
-      triggerFileDownload(filename, packResult.html);
-
-      setTimeout(() => {
-        this.status = 'Clean';
-        this.updateUI();
-      }, 500);
+      return {
+        success: true,
+        changed: transition.changed,
+        filename,
+        byteLength,
+        revisionId: transition.revisionRecord.revisionId,
+        parentId: transition.revisionRecord.parentId
+      };
     } catch (err) {
       console.error('Save Copy failed:', err);
       this.status = 'Error';
       this.updateUI();
+      return { success: false, error: err?.message || 'Save copy failed' };
+    } finally {
+      this.isSaving = false;
     }
   }
 
   updateUI() {
-    this.topbar.update(this.doc, this.status, this.interfaceTheme, this.workspace.snapGrid, this.workspace.showGrid);
+    this.topbar.update(this.doc, this.status, this.interfaceTheme, this.workspace.snapGrid, this.workspace.showGrid, this.mode);
     this.workspace.render();
   }
 
@@ -1018,6 +1135,9 @@ export class SaburaApp {
       getLoadErrors: () => [...this.loadErrors],
       getOriginalHtml: () => this.originalHtml,
       getDocument: () => this.doc ? cloneDocument(this.doc) : null,
+      getMode: () => this.mode,
+      setMode: (mode) => this.setMode(mode),
+      getExportBaseline: () => this.exportBaseline ? { ...this.exportBaseline } : null,
       saveCopy: () => this.saveCopy(),
 
       /**
@@ -1061,7 +1181,7 @@ export class SaburaApp {
       generateBoardFile: (doc) => {
         try {
           // 1. Validate supplied document
-          const validation = validateDocument(doc);
+          const validation = validateDocument(doc, { verifyDigest: true });
           if (!validation.valid) {
             return { success: false, errors: [...validation.errors] };
           }
@@ -1069,21 +1189,29 @@ export class SaburaApp {
           // 2. Build clean shell — DOM clone excludes canvas SVG, selection, wheel, modal state
           const shell = this.getCleanHtmlShell();
 
-          // 3. Replace only the sabura-document seam
-          const packResult = packageHtmlWithDocument(shell, doc);
+          // 3. Ensure valid revision snapshot for the board file
+          const exportDoc = cloneDocument(doc);
+          if (!exportDoc[REVISION_EXTENSION_KEY]) {
+            const transition = transitionRevision(exportDoc, null, canonicalJson);
+            exportDoc[REVISION_EXTENSION_KEY] = transition.revisionRecord;
+          }
+
+          // 4. Replace only the sabura-document seam
+          const packResult = packageHtmlWithDocument(shell, exportDoc);
           if (!packResult.success) {
             return { success: false, errors: [packResult.error || 'Failed to package document'] };
           }
 
-          // 4. Filename from supplied title (sanitized first, then fallback to 'board')
-          const safeTitle = sanitizeFilenameTitle(doc?.title, 'board');
-          const filename = `sabura-${safeTitle}-${Date.now().toString(36)}.html`;
+          // 5. Filename from supplied title (sanitized first, then fallback to 'board')
+          const shortRev = getShortRevisionId(exportDoc[REVISION_EXTENSION_KEY].revisionId);
+          const safeTitle = sanitizeFilenameTitle(exportDoc?.title, 'board');
+          const filename = `sabura-${safeTitle}-r${shortRev}.html`;
 
-          // 5. Download. triggerFileDownload returns the actual UTF-8 Blob.size.
+          // 6. Download. triggerFileDownload returns the actual UTF-8 Blob.size.
           //    The HTML string is never returned through this API.
           const byteLength = triggerFileDownload(filename, packResult.html);
 
-          return { success: true, filename, byteLength };
+          return { success: true, filename, byteLength, revisionId: exportDoc[REVISION_EXTENSION_KEY].revisionId };
         } catch (err) {
           const rawMsg = err && err.message ? String(err.message) : 'Operational failure during board generation';
           // Sanitize error message to ensure no HTML or runtime source is exposed

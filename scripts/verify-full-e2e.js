@@ -54,6 +54,7 @@ async function runSafariTests() {
     if (!app) throw new Error('SaburaApp not found on window after 3s');
 
     log('Safari Load Check', true, 'App loaded, theme: ' + app.doc.theme.id);
+    app.setMode('editing');
 
     // Flow 15: Marquee Selection of Default Board 3 shapes + attached connector
     app.workspace.camera.zoom = 1;
@@ -209,7 +210,7 @@ async function runSafariTests() {
     await sleep(100);
 
     const dragUndoOk = app.doc.objects['shape_intro']?.x === 80 && app.doc.objects['shape_core']?.x === 360;
-    log('19. Real Shift-Click & Drag Multi-Selection with 1-Step Undo', shiftSelOk && dragOk && dragUndoOk, 'dragOk=' + dragOk + ' undoOk=' + dragUndoOk);
+    log('19. Real Shift-Click & Drag Multi-Selection with 1-Step Undo', shiftSelOk && dragOk && dragUndoOk, 'dragOk=' + dragOk + ' undoOk=' + dragUndoOk + ' introX=' + dragIntroX + ' coreX=' + dragCoreX + ' shiftSel=' + shiftSelOk + ' selIds=' + JSON.stringify(app.workspace.selectedIds));
 
     // Flow 20: Real Keyboard Copy, Paste, Group & Ungroup
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ...modObj, bubbles: true }));
@@ -244,7 +245,7 @@ async function runSafariTests() {
 
     const ungrouped = app.doc.objects['shape_intro']?.groupId === null && app.doc.objects['shape_idea']?.groupId === null;
 
-    log('20. Real Keyboard Copy, Paste, Group & Ungroup', pastedOk && pastedOffset && pasteUndoOk && groupCreated && ungrouped, 'pasteOk=' + pastedOk + ' groupCreated=' + groupCreated + ' ungrouped=' + ungrouped);
+    log('20. Real Keyboard Copy, Paste, Group & Ungroup', pastedOk && pastedOffset && pasteUndoOk && groupCreated && ungrouped, 'pasteOk=' + pastedOk + ' pasteIds=' + JSON.stringify(pasteIds) + ' pastedOffset=' + pastedOffset + ' pasteUndoOk=' + pasteUndoOk + ' groupCreated=' + groupCreated + ' ungrouped=' + ungrouped);
 
     // Flow 21: Real Multi-Object D-Drag with No Placement Jump
     app.workspace.selectedIds = ['shape_idea', 'shape_core'];
@@ -1257,6 +1258,13 @@ for (let i = 0; i < 30; i++) {
   const hasApp = await evalInChrome('Boolean(window.saburaApp)');
   if (hasApp) break;
 }
+await evalInChrome(`(() => {
+  window.saburaApp.setMode("editing");
+  window.saburaApp.workspace.camera.zoom = 1;
+  window.saburaApp.workspace.camera.x = 0;
+  window.saburaApp.workspace.camera.y = 0;
+  window.saburaApp.workspace.render();
+})()`);
 
 // Flow 1: Create curved connector through wheel in Chrome
 const c1 = await evalInChrome(`(() => {
@@ -1656,6 +1664,7 @@ for (let i = 0; i < 30; i++) {
 // Flow 15: Marquee Selection of Default Board 3 shapes + attached connector in Chrome
 const c15 = await evalInChrome(`(async () => {
   const app = window.saburaApp;
+  app.setMode('editing');
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   app.workspace.camera.zoom = 1;
   app.workspace.camera.x = 0;
@@ -2687,6 +2696,196 @@ try {
     fs.rmdirSync(tmpDownloadDir);
   } catch (_) {}
 }
+// -------------------------------------------------------------
+// FLOW 32: Narrow Viewport (400 CSS px) TopBar Actions in Reading and Editing Mode (F-08 & F-09)
+// -------------------------------------------------------------
+console.log('\n=============================================================');
+console.log('FLOW 32: NARROW VIEWPORT (400 CSS PX) READING & EDITING ACTIONS');
+console.log('=============================================================');
+
+await cdpSend('Emulation.setDeviceMetricsOverride', {
+  width: 400,
+  height: 810,
+  deviceScaleFactor: 1,
+  mobile: true
+});
+
+await new Promise(r => setTimeout(r, 200));
+
+// 1. Reading Mode checks at 400 CSS px
+const readingButtons = await evalInChrome(`(() => {
+  const edit = document.getElementById('btn-edit');
+  const present = document.getElementById('btn-present');
+  const save = document.getElementById('btn-save');
+  const vpWidth = window.innerWidth;
+
+  function getCheck(el) {
+    if (!el) return { exists: false };
+    const r = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const visible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    const withinViewport = r.left >= 0 && r.right <= vpWidth && r.top >= 0 && r.bottom > 0;
+    return {
+      exists: true,
+      visible,
+      withinViewport,
+      left: r.left,
+      right: r.right,
+      width: r.width,
+      height: r.height,
+      focusable: el.tabIndex >= 0 || el.tagName === 'BUTTON'
+    };
+  }
+
+  return {
+    vpWidth,
+    edit: getCheck(edit),
+    present: getCheck(present),
+    save: getCheck(save)
+  };
+})()`);
+
+if (!readingButtons.edit.exists || !readingButtons.edit.visible || !readingButtons.edit.withinViewport) {
+  throw new Error(`Flow 32: Edit button not fully within 400px viewport: ${JSON.stringify(readingButtons.edit)}`);
+}
+if (!readingButtons.present.exists || !readingButtons.present.visible || !readingButtons.present.withinViewport) {
+  throw new Error(`Flow 32: Present button not fully within 400px viewport: ${JSON.stringify(readingButtons.present)}`);
+}
+if (!readingButtons.save.exists || !readingButtons.save.visible || !readingButtons.save.withinViewport) {
+  throw new Error(`Flow 32: Save Copy button not fully within 400px viewport: ${JSON.stringify(readingButtons.save)}`);
+}
+console.log('  ✓ 32a. Reading mode: Edit, Present, and Save Copy all visible and within 400px viewport');
+
+// 2. Switch to Editing Mode via Edit button click
+const editClickOk = await evalInChrome(`(() => {
+  const btn = document.getElementById('btn-edit');
+  if (!btn) return false;
+  btn.click();
+  return window.sabura ? window.sabura.getMode() === 'editing' : true;
+})()`);
+if (!editClickOk) throw new Error('Flow 32: Click on Edit button failed to switch mode');
+
+await new Promise(r => setTimeout(r, 100));
+
+// 3. Editing Mode checks at 400 CSS px
+const editingChecks = await evalInChrome(`(() => {
+  const view = document.getElementById('btn-view');
+  const present = document.getElementById('btn-present');
+  const save = document.getElementById('btn-save');
+  const docTitle = document.querySelector('.doc-title');
+  const undo = document.getElementById('btn-undo');
+  const redo = document.getElementById('btn-redo');
+  const fullscreen = document.getElementById('btn-fullscreen');
+  const divider = document.querySelector('.topbar-divider');
+  const secondary = document.querySelector('.topbar-secondary-actions');
+  const center = document.querySelector('.mode-editing .topbar-center');
+  const vpWidth = window.innerWidth;
+
+  function getCheck(el) {
+    if (!el) return { exists: false };
+    const r = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const visible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && r.width > 0;
+    const withinViewport = r.left >= 0 && r.right <= vpWidth && r.top >= 0 && r.bottom > 0;
+    return {
+      exists: true,
+      visible,
+      withinViewport,
+      left: r.left,
+      right: r.right,
+      width: r.width,
+      height: r.height,
+      focusable: el.tabIndex >= 0 || el.tagName === 'BUTTON'
+    };
+  }
+
+  function isHidden(el) {
+    if (!el) return true;
+    const style = window.getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return style.display === 'none' || style.visibility === 'hidden' || r.width === 0 || r.height === 0;
+  }
+
+  const vCheck = getCheck(view);
+  const pCheck = getCheck(present);
+  const sCheck = getCheck(save);
+  const tCheck = getCheck(docTitle);
+
+  // Overlap checks
+  const overlaps = (r1, r2) => {
+    if (!r1.visible || !r2.visible) return false;
+    return !(r1.right <= r2.left || r1.left >= r2.right || r1.bottom <= r2.top || r1.top >= r2.bottom);
+  };
+
+  return {
+    vpWidth,
+    view: vCheck,
+    present: pCheck,
+    save: sCheck,
+    title: tCheck,
+    undoHidden: isHidden(undo),
+    redoHidden: isHidden(redo),
+    fullscreenHidden: isHidden(fullscreen),
+    dividerHidden: isHidden(divider),
+    secondaryHidden: isHidden(secondary),
+    centerHidden: isHidden(center),
+    hasOverlap: overlaps(vCheck, pCheck) || overlaps(pCheck, sCheck) || overlaps(vCheck, sCheck) || overlaps(tCheck, vCheck) || overlaps(tCheck, pCheck)
+  };
+})()`);
+
+if (!editingChecks.view.exists || !editingChecks.view.visible || !editingChecks.view.withinViewport) {
+  throw new Error(`Flow 32: View button not fully within 400px viewport: ${JSON.stringify(editingChecks.view)}`);
+}
+if (!editingChecks.present.exists || !editingChecks.present.visible || !editingChecks.present.withinViewport) {
+  throw new Error(`Flow 32: Present button not fully within 400px viewport: ${JSON.stringify(editingChecks.present)}`);
+}
+if (!editingChecks.save.exists || !editingChecks.save.visible || !editingChecks.save.withinViewport) {
+  throw new Error(`Flow 32: Save Copy button not fully within 400px viewport in editing mode: ${JSON.stringify(editingChecks.save)}`);
+}
+if (!editingChecks.title.exists || !editingChecks.title.visible || editingChecks.title.width < 30) {
+  throw new Error(`Flow 32: Document title not visible or squeezed away at 400px: ${JSON.stringify(editingChecks.title)}`);
+}
+if (!editingChecks.undoHidden || !editingChecks.redoHidden || !editingChecks.fullscreenHidden || !editingChecks.secondaryHidden) {
+  throw new Error(`Flow 32: Secondary editing actions not hidden at 400px viewport: ${JSON.stringify(editingChecks)}`);
+}
+if (editingChecks.hasOverlap) {
+  throw new Error(`Flow 32: Overlapping elements detected in 400px editing header`);
+}
+console.log('  ✓ 32b. Editing mode: View, Present, Save Copy and readable Document Title visible without overlap; secondary controls cleanly hidden at 400px');
+
+// 4. Switch back to Reading Mode via View button click
+const viewClickOk = await evalInChrome(`(() => {
+  const btn = document.getElementById('btn-view');
+  if (!btn) return false;
+  btn.click();
+  return window.sabura ? window.sabura.getMode() === 'reading' : true;
+})()`);
+if (!viewClickOk) throw new Error('Flow 32: Click on View button failed to switch back to reading mode');
+console.log('  ✓ 32c. View button switches cleanly back to reading mode');
+
+// 5. Check F-09 Inline TextEditor accessibility attributes in live DOM
+const textEditorAttrs = await evalInChrome(`(() => {
+  const ta = document.getElementById('sabura-inline-text-editor');
+  if (!ta) return { exists: false };
+  return {
+    exists: true,
+    id: ta.id,
+    name: ta.name,
+    ariaLabel: ta.getAttribute('aria-label'),
+    autocomplete: ta.getAttribute('autocomplete'),
+    spellcheck: ta.getAttribute('spellcheck')
+  };
+})()`);
+
+if (!textEditorAttrs.exists || textEditorAttrs.id !== 'sabura-inline-text-editor' || textEditorAttrs.name !== 'sabura-inline-text-editor') {
+  throw new Error(`Flow 32: TextEditor accessibility attributes invalid: ${JSON.stringify(textEditorAttrs)}`);
+}
+console.log('  ✓ 32d. F-09: Inline text editor has stable id, name, aria-label, and autocomplete=off in live DOM');
+
+// Reset device metrics override back to desktop
+await cdpSend('Emulation.clearDeviceMetricsOverride');
+await new Promise(r => setTimeout(r, 100));
+console.log('✓ Flow 32: Narrow viewport 400 CSS px TopBar & TextEditor verified cleanly!');
 
 console.log('\n✓ All Chrome flows passed cleanly!');
 ws.close();

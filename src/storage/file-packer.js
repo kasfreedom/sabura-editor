@@ -2,7 +2,7 @@
  * Sabura File Packer: Single-file HTML packaging, canonical seam embedding, and save/download coordinator.
  */
 
-import { canonicalJson, validateDocument, normalizeDocument } from '../core/document.js';
+import { canonicalJson, validateDocument, normalizeDocument, cloneDocument } from '../core/document.js';
 
 export const DOCUMENT_SEAM_ID = 'sabura-document';
 export const DOCUMENT_SCRIPT_REGEX = /<script\s+(?:type=["']application\/json["']\s+id=["']sabura-document["']|id=["']sabura-document["']\s+type=["']application\/json["'])>([\s\S]*?)<\/script>/i;
@@ -34,7 +34,7 @@ export function extractDocumentFromHtml(htmlContent) {
     return { valid: false, document: null, errors: [`JSON parse error in document seam: ${err.message}`] };
   }
 
-  const validation = validateDocument(parsed);
+  const validation = validateDocument(parsed, { verifyDigest: true });
   if (!validation.valid) {
     return { valid: false, document: parsed, errors: validation.errors };
   }
@@ -50,7 +50,7 @@ export function extractDocumentFromHtml(htmlContent) {
  * @returns {{ success: boolean, html: string, error?: string }}
  */
 export function packageHtmlWithDocument(htmlShell, doc) {
-  const validation = validateDocument(doc);
+  const validation = validateDocument(doc, { verifyDigest: true });
   if (!validation.valid) {
     return {
       success: false,
@@ -59,7 +59,8 @@ export function packageHtmlWithDocument(htmlShell, doc) {
     };
   }
 
-  const serialized = canonicalJson(doc);
+  const normalizedDoc = normalizeDocument(cloneDocument(doc));
+  const serialized = canonicalJson(normalizedDoc);
   const seamReplacement = '<script type="application/json" id="' + DOCUMENT_SEAM_ID + '">\n' + serialized + '\n<' + '/script>';
 
   if (!DOCUMENT_SCRIPT_REGEX.test(htmlShell)) {
@@ -116,7 +117,7 @@ export function triggerFileDownload(filename, htmlContent) {
  * @param {string} [fallback='board']
  * @returns {string}
  */
-export function sanitizeFilenameTitle(title, fallback = 'board') {
+export function sanitizeFilenameTitle(title, fallback = 'document') {
   const rawTitle = typeof title === 'string' ? title : '';
   const sanitized = rawTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return sanitized || fallback;
