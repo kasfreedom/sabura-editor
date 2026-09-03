@@ -30,7 +30,7 @@ export class TextEditor {
     this.textarea.addEventListener('keydown', this.onKeyDown);
   }
 
-  open(object, camera) {
+  open(object, camera = { x: 0, y: 0, zoom: 1 }) {
     this.targetObject = object;
     this.initialText = object.text || '';
 
@@ -41,16 +41,22 @@ export class TextEditor {
     const align = textStyle.align || (object.type === 'text' ? 'left' : 'center');
     const color = textStyle.color || object.stroke || '#1e1e1e';
 
-    const screenX = object.x * camera.zoom + camera.x;
-    const screenY = object.y * camera.zoom + camera.y;
+    const rot = object.rotation || 0;
+    const centerScreenX = (object.x + object.width / 2) * camera.zoom + camera.x;
+    const centerScreenY = (object.y + object.height / 2) * camera.zoom + camera.y;
+
     const screenW = Math.max(120, object.width * camera.zoom);
     const screenH = Math.max(40, object.height * camera.zoom);
+    const screenX = centerScreenX - screenW / 2;
+    const screenY = centerScreenY - screenH / 2;
 
     this.textarea.style.display = 'block';
     this.textarea.style.left = `${screenX}px`;
     this.textarea.style.top = `${screenY}px`;
     this.textarea.style.width = `${screenW}px`;
     this.textarea.style.height = `${screenH}px`;
+    this.textarea.style.transform = rot !== 0 ? `rotate(${rot}deg)` : 'none';
+    this.textarea.style.transformOrigin = '50% 50%';
     this.textarea.style.fontSize = `${fontSize}px`;
     this.textarea.style.fontFamily = fontFamily;
     this.textarea.style.fontWeight = fontWeight;
@@ -67,6 +73,7 @@ export class TextEditor {
     const newText = this.textarea.value;
     const objId = this.targetObject?.id;
     this.textarea.style.display = 'none';
+    this.textarea.style.transform = 'none';
 
     if (commit && objId && newText !== this.initialText) {
       this.onCommit(objId, newText);

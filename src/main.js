@@ -411,7 +411,7 @@ export class SaburaApp {
           this.wheel.close();
         } else if (this.textEditor?.activeEditor) {
           this.textEditor.close(true);
-        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isReconnecting || this.workspace.isCreating || this.workspace.isDraggingVertex) {
+        } else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isRotating || this.workspace.isReconnecting || this.workspace.isCreating || this.workspace.isDraggingVertex) {
           this.workspace.cancelGesture();
         } else if (this.workspace.activeGroupId) {
           const gId = this.workspace.activeGroupId;

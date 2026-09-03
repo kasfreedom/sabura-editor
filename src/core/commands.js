@@ -46,6 +46,7 @@ export const SUPPORTED_COMMAND_TYPES = new Set([
   'set_board_theme',
   'set_title',
   'update_path_points',
+  'rotate_objects',
   'batch',
   'noop'
 ]);
@@ -267,6 +268,72 @@ export function validateCommand(cmd, doc = null) {
     }
     if (doc && doc.objects && doc.objects[cmd.id] && doc.objects[cmd.id].type !== 'path') {
       errors.push(`Cannot update path points on non-path object "${cmd.id}" of type "${doc.objects[cmd.id].type}"`);
+    }
+  } else if (cmd.type === 'rotate_objects') {
+    if (!cmd.objects || typeof cmd.objects !== 'object' || Array.isArray(cmd.objects)) {
+      errors.push('rotate_objects requires an objects map');
+    } else {
+      const keys = Object.keys(cmd.objects);
+      if (keys.length === 0) {
+        errors.push('rotate_objects requires at least one object entry');
+      }
+      for (const [id, entry] of Object.entries(cmd.objects)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push(`rotate_objects entry for "${id}" must be an object`);
+          continue;
+        }
+        if (typeof entry.rotation !== 'number' || !Number.isFinite(entry.rotation)) {
+          errors.push(`rotate_objects entry for "${id}" requires a finite numeric rotation`);
+        }
+        if (entry.x !== undefined || entry.y !== undefined) {
+          if (!isValidFinite(entry.x) || !isValidFinite(entry.y)) {
+            errors.push(`rotate_objects entry for "${id}" position coordinates must be finite numbers`);
+          }
+        }
+        if (doc && doc.objects) {
+          const target = doc.objects[id];
+          if (!target) {
+            errors.push(`rotate_objects references non-existent object ID "${id}"`);
+          } else if (target.locked) {
+            errors.push(`Cannot rotate locked object "${id}"`);
+          } else if (target.type === 'connector') {
+            errors.push(`Cannot directly rotate connector "${id}"`);
+          }
+        }
+      }
+    }
+    if (cmd.freeEndpoints !== undefined) {
+      if (cmd.freeEndpoints === null || typeof cmd.freeEndpoints !== 'object' || Array.isArray(cmd.freeEndpoints)) {
+        errors.push('rotate_objects freeEndpoints must be a non-null object');
+      } else {
+        for (const [connId, ep] of Object.entries(cmd.freeEndpoints)) {
+          if (doc && doc.objects) {
+            const target = doc.objects[connId];
+            if (!target) {
+              errors.push(`rotate_objects freeEndpoints references non-existent connector ID "${connId}"`);
+            } else if (target.type !== 'connector') {
+              errors.push(`rotate_objects freeEndpoints ID "${connId}" is not a connector`);
+            }
+          }
+          if (!ep || typeof ep !== 'object' || Array.isArray(ep)) {
+            errors.push(`rotate_objects freeEndpoints entry for "${connId}" must be an object`);
+            continue;
+          }
+          if (!ep.from && !ep.to) {
+            errors.push(`rotate_objects freeEndpoints entry for "${connId}" must contain "from" or "to" endpoint`);
+          }
+          if (ep.from !== undefined) {
+            if (!ep.from || typeof ep.from !== 'object' || Array.isArray(ep.from) || !isValidFinite(ep.from.x) || !isValidFinite(ep.from.y)) {
+              errors.push(`rotate_objects freeEndpoints "${connId}".from must be an object with finite numeric coordinates`);
+            }
+          }
+          if (ep.to !== undefined) {
+            if (!ep.to || typeof ep.to !== 'object' || Array.isArray(ep.to) || !isValidFinite(ep.to.x) || !isValidFinite(ep.to.y)) {
+              errors.push(`rotate_objects freeEndpoints "${connId}".to must be an object with finite numeric coordinates`);
+            }
+          }
+        }
+      }
     }
   } else if (cmd.type === 'batch') {
     if (!Array.isArray(cmd.commands)) {
@@ -1144,6 +1211,54 @@ export function applyCommand(doc, cmd) {
         id: cmd.id,
         points: prevPoints,
         bounds: prevBounds
+      };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'rotate_objects': {
+      const prevObjects = {};
+      const prevFreeEndpoints = {};
+
+      if (cmd.objects && typeof cmd.objects === 'object') {
+        for (const [id, entry] of Object.entries(cmd.objects)) {
+          const obj = newDoc.objects[id];
+          if (!obj || obj.locked) continue;
+          prevObjects[id] = {
+            rotation: obj.rotation !== undefined ? obj.rotation : 0,
+            x: obj.x,
+            y: obj.y
+          };
+          obj.rotation = entry.rotation;
+          if (entry.x !== undefined && typeof obj.x === 'number') obj.x = entry.x;
+          if (entry.y !== undefined && typeof obj.y === 'number') obj.y = entry.y;
+        }
+      }
+
+      if (cmd.freeEndpoints && typeof cmd.freeEndpoints === 'object') {
+        for (const [connId, ep] of Object.entries(cmd.freeEndpoints)) {
+          const conn = newDoc.objects[connId];
+          if (!conn || conn.locked || conn.type !== 'connector') continue;
+          const prevEp = {};
+          if (ep.from && conn.from && conn.from.point) {
+            prevEp.from = { x: conn.from.point.x, y: conn.from.point.y };
+            conn.from.point.x = ep.from.x;
+            conn.from.point.y = ep.from.y;
+          }
+          if (ep.to && conn.to && conn.to.point) {
+            prevEp.to = { x: conn.to.point.x, y: conn.to.point.y };
+            conn.to.point.x = ep.to.x;
+            conn.to.point.y = ep.to.y;
+          }
+          if (Object.keys(prevEp).length > 0) {
+            prevFreeEndpoints[connId] = prevEp;
+          }
+        }
+      }
+
+      const inverseCmd = {
+        type: 'rotate_objects',
+        objects: prevObjects,
+        freeEndpoints: prevFreeEndpoints
       };
       return { doc: newDoc, inverseCmd };
     }

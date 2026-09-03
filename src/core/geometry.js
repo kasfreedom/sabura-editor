@@ -5,8 +5,111 @@
 import { MIN_OBJECT_SIZE, FONT_FAMILIES } from './types.js';
 
 /**
+ * Rotates a 2D point around a pivot by an angle in degrees.
+ * @param {{ x: number, y: number }} point
+ * @param {{ x: number, y: number }} pivot
+ * @param {number} angleDegrees
+ * @returns {{ x: number, y: number }}
+ */
+export function rotatePoint(point, pivot, angleDegrees) {
+  if (!angleDegrees || angleDegrees === 0) return { x: point.x, y: point.y };
+  const rad = (angleDegrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = point.x - pivot.x;
+  const dy = point.y - pivot.y;
+  return {
+    x: pivot.x + dx * cos - dy * sin,
+    y: pivot.y + dx * sin + dy * cos
+  };
+}
+
+/**
+ * Unrotates a 2D point around a pivot by an angle in degrees (inverse rotation).
+ * @param {{ x: number, y: number }} point
+ * @param {{ x: number, y: number }} pivot
+ * @param {number} angleDegrees
+ * @returns {{ x: number, y: number }}
+ */
+export function unrotatePoint(point, pivot, angleDegrees) {
+  return rotatePoint(point, pivot, -angleDegrees);
+}
+
+/**
+ * Rotates a vector (dx, dy) by an angle in degrees.
+ * @param {number} dx
+ * @param {number} dy
+ * @param {number} angleDegrees
+ * @returns {{ dx: number, dy: number }}
+ */
+export function rotateVector(dx, dy, angleDegrees) {
+  if (!angleDegrees || angleDegrees === 0) return { dx, dy };
+  const rad = (angleDegrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    dx: dx * cos - dy * sin,
+    dy: dx * sin + dy * cos
+  };
+}
+
+/**
+ * Unrotates a vector (dx, dy) by an angle in degrees.
+ * @param {number} dx
+ * @param {number} dy
+ * @param {number} angleDegrees
+ * @returns {{ dx: number, dy: number }}
+ */
+export function unrotateVector(dx, dy, angleDegrees) {
+  return rotateVector(dx, dy, -angleDegrees);
+}
+
+/**
+ * Normalizes an angle in degrees to [0, 360).
+ * @param {number} angle
+ * @returns {number}
+ */
+export function normalizeAngle(angle) {
+  if (typeof angle !== 'number' || !Number.isFinite(angle)) return 0;
+  let a = angle % 360;
+  if (a < 0) a += 360;
+  return Math.round(a * 100) / 100;
+}
+
+/**
+ * Gets the 4 corners of an object in world space (rotated by obj.rotation around center).
+ * @param {Object} obj
+ * @returns {Array<{ x: number, y: number }>} [nw, ne, se, sw]
+ */
+export function getObjectCorners(obj) {
+  if (!obj) return [];
+  const x = typeof obj.x === 'number' && !isNaN(obj.x) ? obj.x : 0;
+  const y = typeof obj.y === 'number' && !isNaN(obj.y) ? obj.y : 0;
+  const width = typeof obj.width === 'number' && !isNaN(obj.width) ? obj.width : 0;
+  const height = typeof obj.height === 'number' && !isNaN(obj.height) ? obj.height : 0;
+  const rot = obj.rotation || 0;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const pivot = { x: cx, y: cy };
+
+  const nw = { x, y };
+  const ne = { x: x + width, y };
+  const se = { x: x + width, y: y + height };
+  const sw = { x, y: y + height };
+
+  if (!rot) return [nw, ne, se, sw];
+  return [
+    rotatePoint(nw, pivot, rot),
+    rotatePoint(ne, pivot, rot),
+    rotatePoint(se, pivot, rot),
+    rotatePoint(sw, pivot, rot)
+  ];
+}
+
+/**
  * Gets axis-aligned bounding box of an object.
  * For connectors, calculates the true bounds from resolved/rendered geometry without phantom zero-origin.
+ * For rotated objects, calculates enclosing world AABB containing all rotated visual corners.
  * @param {Object} obj
  * @param {Object|null} doc
  * @returns {{ x: number, y: number, width: number, height: number, cx: number, cy: number, right: number, bottom: number } | null}
@@ -67,6 +170,45 @@ export function getBoundingBox(obj, doc = null) {
   const y = typeof obj.y === 'number' && !isNaN(obj.y) ? obj.y : 0;
   const width = typeof obj.width === 'number' && !isNaN(obj.width) ? obj.width : 0;
   const height = typeof obj.height === 'number' && !isNaN(obj.height) ? obj.height : 0;
+
+  if (obj.rotation && typeof obj.rotation === 'number' && Number.isFinite(obj.rotation) && obj.rotation !== 0) {
+    let pts;
+    if (obj.type === 'path' && Array.isArray(obj.points) && obj.points.length > 0) {
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      const pivot = { x: cx, y: cy };
+      pts = obj.points.map(pt => {
+        const px = x + (Array.isArray(pt) ? pt[0] : pt.x);
+        const py = y + (Array.isArray(pt) ? pt[1] : pt.y);
+        return rotatePoint({ x: px, y: py }, pivot, obj.rotation);
+      });
+    } else {
+      pts = getObjectCorners(obj);
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const rWidth = Math.max(0, maxX - minX);
+    const rHeight = Math.max(0, maxY - minY);
+    return {
+      x: minX,
+      y: minY,
+      width: rWidth,
+      height: rHeight,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2,
+      right: maxX,
+      bottom: maxY
+    };
+  }
+
   return {
     x,
     y,
@@ -146,51 +288,59 @@ function lineIntersect(p1, p2, p3, p4) {
  * @returns {{ x: number, y: number }}
  */
 export function getShapeBoundaryPoint(shape, targetPoint) {
-  const box = getBoundingBox(shape);
-  const center = { x: box.cx, y: box.cy };
+  const rot = shape.rotation || 0;
+  const cx = shape.x + shape.width / 2;
+  const cy = shape.y + shape.height / 2;
+  const center = { x: cx, y: cy };
 
   if (Math.abs(targetPoint.x - center.x) < 1e-4 && Math.abs(targetPoint.y - center.y) < 1e-4) {
     return center;
   }
 
-  const dx = targetPoint.x - center.x;
-  const dy = targetPoint.y - center.y;
+  // If shape is rotated, transform targetPoint into unrotated local coordinates
+  const localTarget = rot ? unrotatePoint(targetPoint, center, rot) : targetPoint;
+
+  const dx = localTarget.x - center.x;
+  const dy = localTarget.y - center.y;
+
+  const x = shape.x;
+  const y = shape.y;
+  const right = shape.x + shape.width;
+  const bottom = shape.y + shape.height;
+  const width = shape.width;
+  const height = shape.height;
+
+  let localBoundary = center;
 
   if (shape.type === 'ellipse') {
-    // Ray from center: (dx, dy)
-    // Ellipse equation: (x/a)^2 + (y/b)^2 = 1
-    const a = box.width / 2;
-    const b = box.height / 2;
+    const a = width / 2;
+    const b = height / 2;
     const angle = Math.atan2(dy, dx);
-    return {
+    localBoundary = {
       x: center.x + a * Math.cos(angle),
       y: center.y + b * Math.sin(angle)
     };
-  }
-
-  if (shape.type === 'diamond') {
-    const top = { x: box.cx, y: box.y };
-    const right = { x: box.right, y: box.cy };
-    const bottom = { x: box.cx, y: box.bottom };
-    const left = { x: box.x, y: box.cy };
+  } else if (shape.type === 'diamond') {
+    const top = { x: cx, y };
+    const r = { x: right, y: cy };
+    const bot = { x: cx, y: bottom };
+    const l = { x, y: cy };
 
     const segments = [
-      [top, right],
-      [right, bottom],
-      [bottom, left],
-      [left, top]
+      [top, r],
+      [r, bot],
+      [bot, l],
+      [l, top]
     ];
 
     for (const [p1, p2] of segments) {
-      const pt = lineIntersect(center, targetPoint, p1, p2);
-      if (pt) return pt;
+      const pt = lineIntersect(center, localTarget, p1, p2);
+      if (pt) { localBoundary = pt; break; }
     }
-  }
-
-  if (shape.type === 'triangle') {
-    const top = { x: box.cx, y: box.y };
-    const br = { x: box.right, y: box.bottom };
-    const bl = { x: box.x, y: box.bottom };
+  } else if (shape.type === 'triangle') {
+    const top = { x: cx, y };
+    const br = { x: right, y: bottom };
+    const bl = { x, y: bottom };
 
     const segments = [
       [top, br],
@@ -199,25 +349,36 @@ export function getShapeBoundaryPoint(shape, targetPoint) {
     ];
 
     for (const [p1, p2] of segments) {
-      const pt = lineIntersect(center, targetPoint, p1, p2);
-      if (pt) return pt;
+      const pt = lineIntersect(center, localTarget, p1, p2);
+      if (pt) { localBoundary = pt; break; }
+    }
+  } else if (shape.type === 'path') {
+    const vertices = (shape.points || []).map(pt => Array.isArray(pt)
+      ? { x: shape.x + pt[0], y: shape.y + pt[1] }
+      : { x: shape.x + pt.x, y: shape.y + pt.y });
+    const count = shape.closed ? vertices.length : Math.max(0, vertices.length - 1);
+    for (let i = 0; i < count; i++) {
+      const p1 = vertices[i];
+      const p2 = vertices[(i + 1) % vertices.length];
+      const pt = lineIntersect(center, localTarget, p1, p2);
+      if (pt) { localBoundary = pt; break; }
+    }
+  } else {
+    // Default: Rectangle & Text & other shapes
+    const segments = [
+      [{ x, y }, { x: right, y }], // top
+      [{ x: right, y }, { x: right, y: bottom }], // right
+      [{ x: right, y: bottom }, { x, y: bottom }], // bottom
+      [{ x, y: bottom }, { x, y }] // left
+    ];
+
+    for (const [p1, p2] of segments) {
+      const pt = lineIntersect(center, localTarget, p1, p2);
+      if (pt) { localBoundary = pt; break; }
     }
   }
 
-  // Default: Rectangle & Text & other shapes
-  const segments = [
-    [{ x: box.x, y: box.y }, { x: box.right, y: box.y }], // top
-    [{ x: box.right, y: box.y }, { x: box.right, y: box.bottom }], // right
-    [{ x: box.right, y: box.bottom }, { x: box.x, y: box.bottom }], // bottom
-    [{ x: box.x, y: box.bottom }, { x: box.x, y: box.y }] // left
-  ];
-
-  for (const [p1, p2] of segments) {
-    const pt = lineIntersect(center, targetPoint, p1, p2);
-    if (pt) return pt;
-  }
-
-  return center;
+  return rot ? rotatePoint(localBoundary, center, rot) : localBoundary;
 }
 
 /**
@@ -241,66 +402,73 @@ export function projectPointToSegment(px, py, x1, y1, x2, y2) {
  * @returns {Array<{ name: string, point: { x: number, y: number }, anchor: { x: number, y: number } }>}
  */
 export function getShapeSnapPoints(shape) {
-  const box = getBoundingBox(shape);
-  const snapPoints = [];
+  const rot = shape.rotation || 0;
+  const x = shape.x;
+  const y = shape.y;
+  const width = shape.width;
+  const height = shape.height;
+  const right = x + width;
+  const bottom = y + height;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const center = { x: cx, y: cy };
+
+  const rawPoints = [];
 
   if (shape.type === 'diamond') {
     // 4 Vertices
-    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
-    snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
-    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
-    snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+    rawPoints.push({ name: 'top', point: { x: cx, y }, anchor: { x: 0.5, y: 0 } });
+    rawPoints.push({ name: 'right', point: { x: right, y: cy }, anchor: { x: 1, y: 0.5 } });
+    rawPoints.push({ name: 'bottom', point: { x: cx, y: bottom }, anchor: { x: 0.5, y: 1 } });
+    rawPoints.push({ name: 'left', point: { x, y: cy }, anchor: { x: 0, y: 0.5 } });
     // 4 Edge midpoints
-    snapPoints.push({ name: 'top-right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.cy) / 2 }, anchor: { x: 0.75, y: 0.25 } });
-    snapPoints.push({ name: 'bottom-right', point: { x: (box.right + box.cx) / 2, y: (box.cy + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.75 } });
-    snapPoints.push({ name: 'bottom-left', point: { x: (box.cx + box.x) / 2, y: (box.bottom + box.cy) / 2 }, anchor: { x: 0.25, y: 0.75 } });
-    snapPoints.push({ name: 'top-left', point: { x: (box.x + box.cx) / 2, y: (box.cy + box.y) / 2 }, anchor: { x: 0.25, y: 0.25 } });
-    return snapPoints;
-  }
-
-  if (shape.type === 'triangle') {
+    rawPoints.push({ name: 'top-right', point: { x: (cx + right) / 2, y: (y + cy) / 2 }, anchor: { x: 0.75, y: 0.25 } });
+    rawPoints.push({ name: 'bottom-right', point: { x: (right + cx) / 2, y: (cy + bottom) / 2 }, anchor: { x: 0.75, y: 0.75 } });
+    rawPoints.push({ name: 'bottom-left', point: { x: (cx + x) / 2, y: (bottom + cy) / 2 }, anchor: { x: 0.25, y: 0.75 } });
+    rawPoints.push({ name: 'top-left', point: { x: (x + cx) / 2, y: (cy + y) / 2 }, anchor: { x: 0.25, y: 0.25 } });
+  } else if (shape.type === 'triangle') {
     // 3 Vertices
-    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
-    snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
-    snapPoints.push({ name: 'bottom-left', point: { x: box.x, y: box.bottom }, anchor: { x: 0, y: 1 } });
+    rawPoints.push({ name: 'top', point: { x: cx, y }, anchor: { x: 0.5, y: 0 } });
+    rawPoints.push({ name: 'bottom-right', point: { x: right, y: bottom }, anchor: { x: 1, y: 1 } });
+    rawPoints.push({ name: 'bottom-left', point: { x: x, y: bottom }, anchor: { x: 0, y: 1 } });
     // 3 Edge midpoints
-    snapPoints.push({ name: 'right', point: { x: (box.cx + box.right) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.75, y: 0.5 } });
-    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
-    snapPoints.push({ name: 'left', point: { x: (box.cx + box.x) / 2, y: (box.y + box.bottom) / 2 }, anchor: { x: 0.25, y: 0.5 } });
-    return snapPoints;
-  }
-
-  if (shape.type === 'ellipse') {
-    const a = box.width / 2;
-    const b = box.height / 2;
+    rawPoints.push({ name: 'right', point: { x: (cx + right) / 2, y: (y + bottom) / 2 }, anchor: { x: 0.75, y: 0.5 } });
+    rawPoints.push({ name: 'bottom', point: { x: cx, y: bottom }, anchor: { x: 0.5, y: 1 } });
+    rawPoints.push({ name: 'left', point: { x: (cx + x) / 2, y: (y + bottom) / 2 }, anchor: { x: 0.25, y: 0.5 } });
+  } else if (shape.type === 'ellipse') {
+    const a = width / 2;
+    const b = height / 2;
     // 4 Cardinal points
-    snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
-    snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
-    snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
-    snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
+    rawPoints.push({ name: 'top', point: { x: cx, y }, anchor: { x: 0.5, y: 0 } });
+    rawPoints.push({ name: 'right', point: { x: right, y: cy }, anchor: { x: 1, y: 0.5 } });
+    rawPoints.push({ name: 'bottom', point: { x: cx, y: bottom }, anchor: { x: 0.5, y: 1 } });
+    rawPoints.push({ name: 'left', point: { x, y: cy }, anchor: { x: 0, y: 0.5 } });
     // 4 Diagonals (45 deg)
     const cos45 = Math.SQRT1_2;
     const sin45 = Math.SQRT1_2;
-    snapPoints.push({ name: 'top-right', point: { x: box.cx + a * cos45, y: box.cy - b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
-    snapPoints.push({ name: 'bottom-right', point: { x: box.cx + a * cos45, y: box.cy + b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
-    snapPoints.push({ name: 'bottom-left', point: { x: box.cx - a * cos45, y: box.cy + b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
-    snapPoints.push({ name: 'top-left', point: { x: box.cx - a * cos45, y: box.cy - b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
-    return snapPoints;
+    rawPoints.push({ name: 'top-right', point: { x: cx + a * cos45, y: cy - b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
+    rawPoints.push({ name: 'bottom-right', point: { x: cx + a * cos45, y: cy + b * sin45 }, anchor: { x: 0.5 + 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
+    rawPoints.push({ name: 'bottom-left', point: { x: cx - a * cos45, y: cy + b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 + 0.5 * sin45 } });
+    rawPoints.push({ name: 'top-left', point: { x: cx - a * cos45, y: cy - b * sin45 }, anchor: { x: 0.5 - 0.5 * cos45, y: 0.5 - 0.5 * sin45 } });
+  } else {
+    // Rectangle & Text & other shapes
+    rawPoints.push({ name: 'top', point: { x: cx, y }, anchor: { x: 0.5, y: 0 } });
+    rawPoints.push({ name: 'right', point: { x: right, y: cy }, anchor: { x: 1, y: 0.5 } });
+    rawPoints.push({ name: 'bottom', point: { x: cx, y: bottom }, anchor: { x: 0.5, y: 1 } });
+    rawPoints.push({ name: 'left', point: { x, y: cy }, anchor: { x: 0, y: 0.5 } });
+    rawPoints.push({ name: 'top-left', point: { x, y }, anchor: { x: 0, y: 0 } });
+    rawPoints.push({ name: 'top-right', point: { x: right, y }, anchor: { x: 1, y: 0 } });
+    rawPoints.push({ name: 'bottom-right', point: { x: right, y: bottom }, anchor: { x: 1, y: 1 } });
+    rawPoints.push({ name: 'bottom-left', point: { x: x, y: bottom }, anchor: { x: 0, y: 1 } });
   }
 
-  // Rectangle & Text & other shapes
-  // 4 Side centers
-  snapPoints.push({ name: 'top', point: { x: box.cx, y: box.y }, anchor: { x: 0.5, y: 0 } });
-  snapPoints.push({ name: 'right', point: { x: box.right, y: box.cy }, anchor: { x: 1, y: 0.5 } });
-  snapPoints.push({ name: 'bottom', point: { x: box.cx, y: box.bottom }, anchor: { x: 0.5, y: 1 } });
-  snapPoints.push({ name: 'left', point: { x: box.x, y: box.cy }, anchor: { x: 0, y: 0.5 } });
-  // 4 Corners
-  snapPoints.push({ name: 'top-left', point: { x: box.x, y: box.y }, anchor: { x: 0, y: 0 } });
-  snapPoints.push({ name: 'top-right', point: { x: box.right, y: box.y }, anchor: { x: 1, y: 0 } });
-  snapPoints.push({ name: 'bottom-right', point: { x: box.right, y: box.bottom }, anchor: { x: 1, y: 1 } });
-  snapPoints.push({ name: 'bottom-left', point: { x: box.x, y: box.bottom }, anchor: { x: 0, y: 1 } });
+  if (!rot) return rawPoints;
 
-  return snapPoints;
+  return rawPoints.map(s => ({
+    name: s.name,
+    point: rotatePoint(s.point, center, rot),
+    anchor: s.anchor
+  }));
 }
 
 /**
@@ -311,31 +479,43 @@ export function getShapeSnapPoints(shape) {
  * @returns {{ point: { x: number, y: number }, anchor: { x: number, y: number }, snapped: boolean, snapName?: string }}
  */
 export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
-  const box = getBoundingBox(shape);
-  const px = worldPoint.x;
-  const py = worldPoint.y;
-  let closestPt = null;
+  const rot = shape.rotation || 0;
+  const cx = shape.x + shape.width / 2;
+  const cy = shape.y + shape.height / 2;
+  const center = { x: cx, y: cy };
+
+  const localPt = rot ? unrotatePoint(worldPoint, center, rot) : worldPoint;
+  const px = localPt.x;
+  const py = localPt.y;
+  const x = shape.x;
+  const y = shape.y;
+  const right = shape.x + shape.width;
+  const bottom = shape.y + shape.height;
+  const width = shape.width;
+  const height = shape.height;
+
+  let closestLocalPt = null;
 
   if (shape.type === 'ellipse') {
-    const a = Math.max(1, box.width / 2);
-    const b = Math.max(1, box.height / 2);
-    const dx = px - box.cx;
-    const dy = py - box.cy;
+    const a = Math.max(1, width / 2);
+    const b = Math.max(1, height / 2);
+    const dx = px - cx;
+    const dy = py - cy;
     const angle = (dx === 0 && dy === 0) ? -Math.PI / 2 : Math.atan2(dy, dx);
-    closestPt = {
-      x: box.cx + a * Math.cos(angle),
-      y: box.cy + b * Math.sin(angle)
+    closestLocalPt = {
+      x: cx + a * Math.cos(angle),
+      y: cy + b * Math.sin(angle)
     };
   } else if (shape.type === 'diamond') {
-    const top = { x: box.cx, y: box.y };
-    const right = { x: box.right, y: box.cy };
-    const bottom = { x: box.cx, y: box.bottom };
-    const left = { x: box.x, y: box.cy };
+    const top = { x: cx, y };
+    const r = { x: right, y: cy };
+    const bot = { x: cx, y: bottom };
+    const l = { x, y: cy };
     const segments = [
-      [top, right],
-      [right, bottom],
-      [bottom, left],
-      [left, top]
+      [top, r],
+      [r, bot],
+      [bot, l],
+      [l, top]
     ];
     let minDist = Infinity;
     for (const [p1, p2] of segments) {
@@ -343,13 +523,13 @@ export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
       const d = Math.hypot(px - proj.x, py - proj.y);
       if (d < minDist) {
         minDist = d;
-        closestPt = proj;
+        closestLocalPt = proj;
       }
     }
   } else if (shape.type === 'triangle') {
-    const top = { x: box.cx, y: box.y };
-    const br = { x: box.right, y: box.bottom };
-    const bl = { x: box.x, y: box.bottom };
+    const top = { x: cx, y };
+    const br = { x: right, y: bottom };
+    const bl = { x, y: bottom };
     const segments = [
       [top, br],
       [br, bl],
@@ -361,15 +541,15 @@ export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
       const d = Math.hypot(px - proj.x, py - proj.y);
       if (d < minDist) {
         minDist = d;
-        closestPt = proj;
+        closestLocalPt = proj;
       }
     }
   } else {
     // Rectangle, Text, and general boxes
-    const topProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.y };
-    const bottomProj = { x: Math.max(box.x, Math.min(box.right, px)), y: box.bottom };
-    const leftProj = { x: box.x, y: Math.max(box.y, Math.min(box.bottom, py)) };
-    const rightProj = { x: box.right, y: Math.max(box.y, Math.min(box.bottom, py)) };
+    const topProj = { x: Math.max(x, Math.min(right, px)), y };
+    const bottomProj = { x: Math.max(x, Math.min(right, px)), y: bottom };
+    const leftProj = { x, y: Math.max(y, Math.min(bottom, py)) };
+    const rightProj = { x: right, y: Math.max(y, Math.min(bottom, py)) };
 
     const candidates = [
       { pt: topProj, dist: Math.hypot(px - topProj.x, py - topProj.y) },
@@ -378,16 +558,17 @@ export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
       { pt: leftProj, dist: Math.hypot(px - leftProj.x, py - leftProj.y) }
     ];
     candidates.sort((a, b) => a.dist - b.dist);
-    closestPt = candidates[0].pt;
+    closestLocalPt = candidates[0].pt;
   }
 
-  // Check gentle snapping against useful snap points
-  const snapPoints = getShapeSnapPoints(shape);
+  // Snap against local unrotated snap points
+  const unrotatedShape = rot ? { ...shape, rotation: 0 } : shape;
+  const snapPoints = getShapeSnapPoints(unrotatedShape);
   let bestSnap = null;
   let bestSnapDist = Infinity;
 
   for (const s of snapPoints) {
-    const d = Math.hypot(closestPt.x - s.point.x, closestPt.y - s.point.y);
+    const d = Math.hypot(closestLocalPt.x - s.point.x, closestLocalPt.y - s.point.y);
     if (d <= snapDistance && d < bestSnapDist) {
       bestSnapDist = d;
       bestSnap = s;
@@ -395,19 +576,21 @@ export function getClosestBoundaryPoint(shape, worldPoint, snapDistance = 14) {
   }
 
   if (bestSnap) {
+    const worldSnapPoint = rot ? rotatePoint(bestSnap.point, center, rot) : bestSnap.point;
     return {
-      point: bestSnap.point,
+      point: worldSnapPoint,
       anchor: bestSnap.anchor,
       snapped: true,
       snapName: bestSnap.name
     };
   }
 
-  const anchorX = box.width > 0 ? (closestPt.x - box.x) / box.width : 0.5;
-  const anchorY = box.height > 0 ? (closestPt.y - box.y) / box.height : 0.5;
+  const anchorX = width > 0 ? (closestLocalPt.x - x) / width : 0.5;
+  const anchorY = height > 0 ? (closestLocalPt.y - y) / height : 0.5;
+  const worldPointOut = rot ? rotatePoint(closestLocalPt, center, rot) : closestLocalPt;
 
   return {
-    point: closestPt,
+    point: worldPointOut,
     anchor: {
       x: Math.round(anchorX * 10000) / 10000,
       y: Math.round(anchorY * 10000) / 10000
@@ -433,12 +616,12 @@ export function resolveConnectorGeometry(doc, connector) {
   let start;
   if (fromObj) {
     if (connector.from?.anchor && typeof connector.from.anchor.x === 'number' && typeof connector.from.anchor.y === 'number') {
-      const fromBox = getBoundingBox(fromObj);
-      const targetPt = {
-        x: fromBox.x + connector.from.anchor.x * fromBox.width,
-        y: fromBox.y + connector.from.anchor.y * fromBox.height
+      const localPt = {
+        x: fromObj.x + connector.from.anchor.x * fromObj.width,
+        y: fromObj.y + connector.from.anchor.y * fromObj.height
       };
-      start = getShapeBoundaryPoint(fromObj, targetPt);
+      const center = { x: fromObj.x + fromObj.width / 2, y: fromObj.y + fromObj.height / 2 };
+      start = fromObj.rotation ? rotatePoint(localPt, center, fromObj.rotation) : localPt;
     } else {
       start = getShapeBoundaryPoint(fromObj, endCenter);
     }
@@ -449,12 +632,12 @@ export function resolveConnectorGeometry(doc, connector) {
   let end;
   if (toObj) {
     if (connector.to?.anchor && typeof connector.to.anchor.x === 'number' && typeof connector.to.anchor.y === 'number') {
-      const toBox = getBoundingBox(toObj);
-      const targetPt = {
-        x: toBox.x + connector.to.anchor.x * toBox.width,
-        y: toBox.y + connector.to.anchor.y * toBox.height
+      const localPt = {
+        x: toObj.x + connector.to.anchor.x * toObj.width,
+        y: toObj.y + connector.to.anchor.y * toObj.height
       };
-      end = getShapeBoundaryPoint(toObj, targetPt);
+      const center = { x: toObj.x + toObj.width / 2, y: toObj.y + toObj.height / 2 };
+      end = toObj.rotation ? rotatePoint(localPt, center, toObj.rotation) : localPt;
     } else {
       end = getShapeBoundaryPoint(toObj, startCenter);
     }
@@ -1090,4 +1273,182 @@ export function measureText(text, fontSize = 20, fontFamilyToken = 'hand') {
     width: Math.max(24, Math.ceil(maxChars * charWidth + 14)),
     height: Math.max(24, Math.ceil(lines.length * lineHeight + 4))
   };
+}
+
+/**
+ * Calculates resize transformations for a single rotated object along its local axes.
+ *
+ * @param {string} handle - One of 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
+ * @param {{ x: number, y: number, width: number, height: number }} orig - Original unrotated local bounds
+ * @param {number} worldDx - Pointer delta X in world coordinates
+ * @param {number} worldDy - Pointer delta Y in world coordinates
+ * @param {number} rotation - Object rotation in degrees
+ * @param {{ keepAspect?: boolean, fromCenter?: boolean, minSize?: number }} options
+ * @returns {{ x: number, y: number, width: number, height: number }}
+ */
+export function calculateRotatedResize(handle, orig, worldDx, worldDy, rotation, options = {}) {
+  const rot = rotation || 0;
+  if (!rot) {
+    return calculateResize(handle, orig, worldDx, worldDy, options);
+  }
+
+  // Transform world delta into local coordinates
+  const localDelta = unrotateVector(worldDx, worldDy, rot);
+  const newLocal = calculateResize(handle, orig, localDelta.dx, localDelta.dy, options);
+
+  // Initial center in world space
+  const oldCenter = {
+    x: orig.x + orig.width / 2,
+    y: orig.y + orig.height / 2
+  };
+
+  // New center in local coordinates
+  const newLocalCenter = {
+    x: newLocal.x + newLocal.width / 2,
+    y: newLocal.y + newLocal.height / 2
+  };
+
+  // Rotate local center shift by +rot to get new world center
+  const newWorldCenter = rotatePoint(newLocalCenter, oldCenter, rot);
+
+  return {
+    x: Math.round((newWorldCenter.x - newLocal.width / 2) * 100) / 100,
+    y: Math.round((newWorldCenter.y - newLocal.height / 2) * 100) / 100,
+    width: newLocal.width,
+    height: newLocal.height
+  };
+}
+
+/**
+ * Computes rotated geometry for a set of objects and free connector endpoints
+ * around a shared pivot by an angle delta.
+ *
+ * @param {Array<Object>} objects - Original object snapshots
+ * @param {{ x: number, y: number }} pivot - Shared rotation pivot
+ * @param {number} angleDelta - Rotation delta in degrees
+ * @returns {Array<Object>} Transformed objects
+ */
+export function rotateObjects(objects, pivot, angleDelta) {
+  if (!Array.isArray(objects) || objects.length === 0 || !pivot || !angleDelta) return objects;
+
+  return objects.map(obj => {
+    if (!obj || obj.locked) return obj;
+
+    if (obj.type === 'connector') {
+      const transformedConn = { ...obj };
+      if (obj.from?.point && !obj.from.id) {
+        transformedConn.from = {
+          ...obj.from,
+          point: rotatePoint(obj.from.point, pivot, angleDelta)
+        };
+      }
+      if (obj.to?.point && !obj.to.id) {
+        transformedConn.to = {
+          ...obj.to,
+          point: rotatePoint(obj.to.point, pivot, angleDelta)
+        };
+      }
+      return transformedConn;
+    }
+
+    // Spatial object
+    const objCenter = {
+      x: obj.x + obj.width / 2,
+      y: obj.y + obj.height / 2
+    };
+    const newCenter = rotatePoint(objCenter, pivot, angleDelta);
+    const newX = newCenter.x - obj.width / 2;
+    const newY = newCenter.y - obj.height / 2;
+    const currentRot = typeof obj.rotation === 'number' && Number.isFinite(obj.rotation) ? obj.rotation : 0;
+    const newRot = normalizeAngle(currentRot + angleDelta);
+
+    return {
+      ...obj,
+      x: Math.round(newX * 100) / 100,
+      y: Math.round(newY * 100) / 100,
+      rotation: newRot
+    };
+  });
+}
+
+/**
+ * Precision hit test for an object taking rotation into account.
+ *
+ * @param {{ x: number, y: number }} point - World coordinate
+ * @param {Object} obj - Sabura object
+ * @param {Object|null} doc - Document context
+ * @param {number} hitThreshold - Tolerance
+ * @returns {boolean}
+ */
+export function isPointInsideObject(point, obj, doc = null, hitThreshold = 10) {
+  if (!obj) return false;
+
+  if (obj.type === 'connector') {
+    return distanceToConnector(point, obj, doc) <= hitThreshold;
+  }
+
+  const cx = obj.x + obj.width / 2;
+  const cy = obj.y + obj.height / 2;
+  const center = { x: cx, y: cy };
+  const rot = obj.rotation || 0;
+  const localPt = unrotatePoint(point, center, rot);
+
+  if (obj.type === 'path') {
+    if (!obj.closed) {
+      // Open path: distance from localPt to unrotated path points
+      const unrotatedObj = { ...obj, rotation: 0 };
+      return distanceToPath(localPt, unrotatedObj) <= hitThreshold;
+    }
+    // Closed path: point-in-polygon on local points or near perimeter
+    const vertices = (obj.points || []).map(pt => Array.isArray(pt)
+      ? { x: obj.x + pt[0], y: obj.y + pt[1] }
+      : { x: obj.x + pt.x, y: obj.y + pt.y });
+    if (vertices.length < 3) return false;
+
+    // Ray casting point in polygon
+    let inside = false;
+    for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+      const xi = vertices[i].x, yi = vertices[i].y;
+      const xj = vertices[j].x, yj = vertices[j].y;
+      const intersect = ((yi > localPt.y) !== (yj > localPt.y)) &&
+        (localPt.x < (xj - xi) * (localPt.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    if (inside) return true;
+    const unrotatedObj = { ...obj, rotation: 0 };
+    return distanceToPath(localPt, unrotatedObj) <= hitThreshold;
+  }
+
+  if (obj.type === 'ellipse') {
+    const a = Math.max(1, obj.width / 2);
+    const b = Math.max(1, obj.height / 2);
+    const dx = localPt.x - cx;
+    const dy = localPt.y - cy;
+    return (dx * dx) / (a * a) + (dy * dy) / (b * b) <= 1.0;
+  }
+
+  if (obj.type === 'diamond') {
+    const hw = Math.max(1, obj.width / 2);
+    const hh = Math.max(1, obj.height / 2);
+    return Math.abs(localPt.x - cx) / hw + Math.abs(localPt.y - cy) / hh <= 1.0;
+  }
+
+  if (obj.type === 'triangle') {
+    const p1 = { x: cx, y: obj.y };
+    const p2 = { x: obj.x + obj.width, y: obj.y + obj.height };
+    const p3 = { x: obj.x, y: obj.y + obj.height };
+    const area = 0.5 * (-p2.y * p3.x + p1.y * (-p2.x + p3.x) + p1.x * (p2.y - p3.y) + p2.x * p3.y);
+    if (area === 0) return false;
+    const s = 1 / (2 * area) * (p1.y * p3.x - p1.x * p3.y + (p3.y - p1.y) * localPt.x + (p1.x - p3.x) * localPt.y);
+    const t = 1 / (2 * area) * (p1.x * p2.y - p1.y * p2.x + (p1.y - p2.y) * localPt.x + (p2.x - p1.x) * localPt.y);
+    return s >= 0 && t >= 0 && (s + t) <= 1;
+  }
+
+  // Rectangle, text, and other boxes
+  return (
+    localPt.x >= obj.x &&
+    localPt.x <= obj.x + obj.width &&
+    localPt.y >= obj.y &&
+    localPt.y <= obj.y + obj.height
+  );
 }

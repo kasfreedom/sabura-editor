@@ -5,8 +5,24 @@
 
 import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
 import { createDefaultObject, cloneDocument } from '../core/document.js';
-import { MIN_OBJECT_SIZE } from '../core/types.js';
-import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, distanceToPath, getClosestBoundaryPoint, getShapeSnapPoints, measureText, transformObjects } from '../core/geometry.js';
+import {
+  calculateResize,
+  calculateRotatedResize,
+  calculateSnapping,
+  getBoundingBox,
+  getUnionBoundingBox,
+  distanceToConnector,
+  distanceToPath,
+  getClosestBoundaryPoint,
+  getShapeSnapPoints,
+  measureText,
+  transformObjects,
+  rotateObjects,
+  rotatePoint,
+  unrotatePoint,
+  normalizeAngle,
+  isPointInsideObject
+} from '../core/geometry.js';
 
 export class Workspace {
   constructor(svgContainer, callbacks) {
@@ -31,6 +47,9 @@ export class Workspace {
     this.isDHeld = false;
     this.isDDragging = false;
     this.isResizing = false;
+    this.isRotating = false;
+    this.rotateData = null;
+    this.latestRotateResult = null;
     this.isCreating = false;
     this.isReconnecting = false;
     this.reconnectSnapIndicator = null;
@@ -197,6 +216,8 @@ export class Workspace {
     this.onWheel = this.onWheel.bind(this);
     this.onContextMenu = this.onContextMenu.bind(this);
     this.onDblClick = this.onDblClick.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
+    this.onKeyUp = this.onKeyUp.bind(this);
 
     this.onPointerCancel = this.onPointerCancel.bind(this);
 
@@ -204,6 +225,8 @@ export class Workspace {
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('pointercancel', this.onPointerCancel);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
     this.container.addEventListener('wheel', this.onWheel, { passive: false });
     this.container.addEventListener('contextmenu', this.onContextMenu);
     this.container.addEventListener('dblclick', this.onDblClick);
@@ -214,9 +237,122 @@ export class Workspace {
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('pointercancel', this.onPointerCancel);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
     this.container.removeEventListener('wheel', this.onWheel);
     this.container.removeEventListener('contextmenu', this.onContextMenu);
     this.container.removeEventListener('dblclick', this.onDblClick);
+  }
+
+  onKeyDown(e) {
+    if (this.isRotating && this.rotateData && e.key === 'Shift') {
+      this.updateRotationPreview(this.rotateData.lastWorldPt, true);
+    }
+  }
+
+  onKeyUp(e) {
+    if (this.isRotating && this.rotateData && e.key === 'Shift') {
+      this.updateRotationPreview(this.rotateData.lastWorldPt, false);
+    }
+  }
+
+  updateRotationPreview(worldPt, shiftKey) {
+    if (!this.isRotating || !this.rotateData || !worldPt) return;
+    this.rotateData.lastWorldPt = { ...worldPt };
+    const { pivot, snapshotObjects, snapshotFreeEndpoints, isSingle } = this.rotateData;
+    const currentAngle = Math.atan2(worldPt.y - pivot.y, worldPt.x - pivot.x) * (180 / Math.PI);
+
+    const isShift = Boolean(shiftKey);
+    if (this.rotateData.lastShiftKey !== isShift) {
+      if (isShift) {
+        // Shift pressed mid-gesture: anchor at current pointer angle and lock in current effective delta
+        this.rotateData.shiftAnchorAngle = currentAngle;
+        this.rotateData.shiftBaseDelta = this.rotateData.lastEffectiveDelta || 0;
+      } else {
+        // Shift released mid-gesture: anchor at current pointer angle and lock in current effective delta
+        this.rotateData.unsnappedAnchorAngle = currentAngle;
+        this.rotateData.unsnappedBaseDelta = this.rotateData.lastEffectiveDelta || 0;
+      }
+      this.rotateData.lastShiftKey = isShift;
+    }
+
+    let angleDelta;
+    if (isShift) {
+      // Step in 15-degree increments relative to the anchor when Shift was held/pressed
+      const rawShiftDelta = currentAngle - (this.rotateData.shiftAnchorAngle !== undefined ? this.rotateData.shiftAnchorAngle : this.rotateData.startAngle);
+      const snappedStep = Math.round(rawShiftDelta / 15) * 15;
+      angleDelta = (this.rotateData.shiftBaseDelta || 0) + snappedStep;
+    } else {
+      // Smooth continuous delta from unsnapped anchor
+      const rawUnsnappedDelta = currentAngle - (this.rotateData.unsnappedAnchorAngle !== undefined ? this.rotateData.unsnappedAnchorAngle : this.rotateData.startAngle);
+      angleDelta = (this.rotateData.unsnappedBaseDelta || 0) + rawUnsnappedDelta;
+    }
+
+    this.rotateData.lastEffectiveDelta = angleDelta;
+
+    const doc = this.callbacks.getDocument();
+
+    if (isSingle) {
+      const snap = snapshotObjects[0];
+      const targetAngle = (snap.rotation || 0) + angleDelta;
+
+      const liveObj = doc.objects[snap.id];
+      if (liveObj) {
+        liveObj.rotation = normalizeAngle(targetAngle);
+      }
+      this.latestRotateResult = {
+        objects: {
+          [snap.id]: {
+            rotation: normalizeAngle(targetAngle)
+          }
+        }
+      };
+    } else {
+      const transformedSpatial = rotateObjects(snapshotObjects, pivot, angleDelta);
+      const objectsPayload = {};
+
+      for (const tObj of transformedSpatial) {
+        const liveObj = doc.objects[tObj.id];
+        if (!liveObj) continue;
+        liveObj.x = tObj.x;
+        liveObj.y = tObj.y;
+        liveObj.rotation = tObj.rotation;
+        objectsPayload[tObj.id] = {
+          rotation: tObj.rotation,
+          x: tObj.x,
+          y: tObj.y
+        };
+      }
+
+      const freeEndpointsPayload = {};
+      if (snapshotFreeEndpoints) {
+        for (const [connId, ep] of Object.entries(snapshotFreeEndpoints)) {
+          const liveConn = doc.objects[connId];
+          if (!liveConn) continue;
+          const epResult = {};
+          if (ep.from) {
+            const rotatedFrom = rotatePoint(ep.from, pivot, angleDelta);
+            liveConn.from.point = { x: Math.round(rotatedFrom.x * 100) / 100, y: Math.round(rotatedFrom.y * 100) / 100 };
+            epResult.from = { ...liveConn.from.point };
+          }
+          if (ep.to) {
+            const rotatedTo = rotatePoint(ep.to, pivot, angleDelta);
+            liveConn.to.point = { x: Math.round(rotatedTo.x * 100) / 100, y: Math.round(rotatedTo.y * 100) / 100 };
+            epResult.to = { ...liveConn.to.point };
+          }
+          if (Object.keys(epResult).length > 0) {
+            freeEndpointsPayload[connId] = epResult;
+          }
+        }
+      }
+
+      this.latestRotateResult = {
+        objects: objectsPayload,
+        freeEndpoints: Object.keys(freeEndpointsPayload).length > 0 ? freeEndpointsPayload : undefined
+      };
+    }
+
+    this.render();
   }
 
   onPointerCancel(e) {
@@ -243,6 +379,27 @@ export class Workspace {
           }
         }
       }
+    }
+
+    if (this.isRotating && this.rotateData && doc?.objects) {
+      for (const snap of this.rotateData.snapshotObjects) {
+        const liveObj = doc.objects[snap.id];
+        if (!liveObj) continue;
+        liveObj.rotation = snap.rotation;
+        if (snap.x !== undefined) liveObj.x = snap.x;
+        if (snap.y !== undefined) liveObj.y = snap.y;
+      }
+      if (this.rotateData.snapshotFreeEndpoints) {
+        for (const [connId, ep] of Object.entries(this.rotateData.snapshotFreeEndpoints)) {
+          const liveConn = doc.objects[connId];
+          if (!liveConn) continue;
+          if (ep.from && liveConn.from && liveConn.from.point) liveConn.from.point = { ...ep.from };
+          if (ep.to && liveConn.to && liveConn.to.point) liveConn.to.point = { ...ep.to };
+        }
+      }
+      this.isRotating = false;
+      this.rotateData = null;
+      this.latestRotateResult = null;
     }
 
     if (this.isResizing && this.resizeData) {
@@ -307,6 +464,9 @@ export class Workspace {
     this.isPanning = false;
     this.isDraggingSelection = false;
     this.isResizing = false;
+    this.isRotating = false;
+    this.rotateData = null;
+    this.latestRotateResult = null;
     this.isCreating = false;
     this.isReconnecting = false;
     this.isCurvingConnector = false;
@@ -399,32 +559,13 @@ export class Workspace {
 
   findObjectAt(worldPoint) {
     const doc = this.callbacks.getDocument();
-    // Search backwards from topmost (end of doc.order) to bottom
+    const hitThreshold = Math.max(12, 14 / this.camera.zoom);
     for (let i = doc.order.length - 1; i >= 0; i--) {
       const objId = doc.order[i];
       const obj = doc.objects[objId];
       if (!obj) continue;
-
-      if (obj.type === 'connector') {
-        // Precision hit test: close to the actual line with zoom-adaptive comfortable hit area
-        const dist = distanceToConnector(worldPoint, obj, doc);
-        const hitThreshold = Math.max(12, 14 / this.camera.zoom);
-        if (dist <= hitThreshold) {
-          return obj;
-        }
-      } else if (obj.type === 'path' && !obj.closed) {
-        // Precision hit test for open lines
-        const dist = distanceToPath(worldPoint, obj);
-        const hitThreshold = Math.max(12, 14 / this.camera.zoom);
-        if (dist <= hitThreshold) {
-          return obj;
-        }
-      } else {
-        const box = getBoundingBox(obj);
-        if (worldPoint.x >= box.x && worldPoint.x <= box.right &&
-            worldPoint.y >= box.y && worldPoint.y <= box.bottom) {
-          return obj;
-        }
+      if (isPointInsideObject(worldPoint, obj, doc, hitThreshold)) {
+        return obj;
       }
     }
     return null;
@@ -539,10 +680,57 @@ export class Workspace {
             objId: obj.id,
             vertexIndex,
             initialPoints: cloneDocument(obj.points),
+            initialBounds: { x: obj.x, y: obj.y, width: obj.width, height: obj.height },
+            initialRotation: obj.rotation || 0,
             startPt: { ...worldPt }
           };
           return;
         }
+      } else if (handleId === 'rotate') {
+        const doc = this.callbacks.getDocument();
+        const spatialObjects = this.selectedIds.map(id => doc.objects[id]).filter(o => o && o.type !== 'connector' && !o.locked);
+        if (spatialObjects.length === 0) return;
+
+        let pivot;
+        if (this.selectedIds.length === 1 && !doc.objects[this.selectedIds[0]].locked) {
+          const singleObj = doc.objects[this.selectedIds[0]];
+          pivot = { x: singleObj.x + singleObj.width / 2, y: singleObj.y + singleObj.height / 2 };
+        } else {
+          const unionBox = getUnionBoundingBox(spatialObjects, doc);
+          if (!unionBox) return;
+          pivot = { x: unionBox.cx, y: unionBox.cy };
+        }
+
+        const selectedConnectors = this.selectedIds.map(id => doc.objects[id]).filter(o => o && o.type === 'connector' && !o.locked);
+        const snapshotObjects = spatialObjects.map(o => cloneDocument(o));
+        const snapshotFreeEndpoints = {};
+        for (const conn of selectedConnectors) {
+          const ep = {};
+          if (conn.from?.point && !conn.from.id) ep.from = { ...conn.from.point };
+          if (conn.to?.point && !conn.to.id) ep.to = { ...conn.to.point };
+          if (Object.keys(ep).length > 0) snapshotFreeEndpoints[conn.id] = ep;
+        }
+
+        const startAngle = Math.atan2(worldPt.y - pivot.y, worldPt.x - pivot.x) * (180 / Math.PI);
+
+        this.isRotating = true;
+        const initialShift = Boolean(e.shiftKey);
+        this.rotateData = {
+          pivot,
+          startAngle,
+          snapshotObjects,
+          snapshotFreeEndpoints,
+          isSingle: spatialObjects.length === 1 && this.selectedIds.length === 1,
+          lastShiftKey: initialShift,
+          lastEffectiveDelta: 0,
+          shiftAnchorAngle: startAngle,
+          shiftBaseDelta: 0,
+          unsnappedAnchorAngle: startAngle,
+          unsnappedBaseDelta: 0,
+          lastWorldPt: { ...worldPt }
+        };
+        this.latestRotateResult = null;
+        return;
       } else {
         this.isResizing = true;
         this.activeHandle = handleId;
@@ -554,9 +742,13 @@ export class Workspace {
           return;
         }
 
-        const origBox = (this.selectedIds.length === 1 && !doc.objects[this.selectedIds[0]].locked)
-          ? getBoundingBox(doc.objects[this.selectedIds[0]])
-          : getUnionBoundingBox(spatialObjects, doc);
+        const isSingleRotated = (this.selectedIds.length === 1 && !doc.objects[this.selectedIds[0]].locked && Boolean(doc.objects[this.selectedIds[0]].rotation));
+        const singleObj = this.selectedIds.length === 1 ? doc.objects[this.selectedIds[0]] : null;
+        const origBox = isSingleRotated
+          ? { x: singleObj.x, y: singleObj.y, width: singleObj.width, height: singleObj.height }
+          : ((this.selectedIds.length === 1 && !doc.objects[this.selectedIds[0]].locked)
+              ? getBoundingBox(doc.objects[this.selectedIds[0]])
+              : getUnionBoundingBox(spatialObjects, doc));
 
         if (!origBox || origBox.width < 0 || origBox.height < 0) {
           this.isResizing = false;
@@ -570,7 +762,9 @@ export class Workspace {
         this.resizeData = {
           handle: handleId,
           origBox: { ...origBox },
-          snapshotObjects
+          snapshotObjects,
+          isSingleRotated,
+          rotation: isSingleRotated ? (singleObj.rotation || 0) : 0
         };
         this.latestResizeResult = null;
         this.dragStart = { ...worldPt };
@@ -876,11 +1070,75 @@ export class Workspace {
       return;
     }
 
+    if (this.isRotating && this.rotateData) {
+      this.rotateData.lastWorldPt = { ...worldPt };
+      this.updateRotationPreview(worldPt, e.shiftKey);
+      return;
+    }
+
     if (this.isResizing && this.resizeData) {
       const dx = worldPt.x - this.dragStart.x;
       const dy = worldPt.y - this.dragStart.y;
       const keepAspect = e.shiftKey;
       const fromCenter = e.altKey;
+
+      if (this.resizeData.isSingleRotated) {
+        const snap = this.resizeData.snapshotObjects[0];
+        const newBox = calculateRotatedResize(
+          this.activeHandle,
+          this.resizeData.origBox,
+          dx,
+          dy,
+          this.resizeData.rotation,
+          { keepAspect, fromCenter }
+        );
+
+        const doc = this.callbacks.getDocument();
+        const liveObj = doc.objects[snap.id];
+        if (liveObj) {
+          liveObj.x = newBox.x;
+          liveObj.y = newBox.y;
+          liveObj.width = newBox.width;
+          liveObj.height = newBox.height;
+
+          const scaleX = this.resizeData.origBox.width > 0 ? newBox.width / this.resizeData.origBox.width : 1;
+          const scaleY = this.resizeData.origBox.height > 0 ? newBox.height / this.resizeData.origBox.height : 1;
+          const textScale = (scaleX + scaleY) / 2;
+
+          if (snap.type === 'path' && Array.isArray(snap.points)) {
+            liveObj.points = snap.points.map(pt => {
+              const px = Array.isArray(pt) ? pt[0] : pt.x;
+              const py = Array.isArray(pt) ? pt[1] : pt.y;
+              return {
+                x: Math.round(px * scaleX),
+                y: Math.round(py * scaleY)
+              };
+            });
+          }
+
+          if (snap.textStyle) {
+            const baseSize = snap.textStyle.resolvedSize || 20;
+            const newResolvedSize = Math.max(10, Math.min(120, Math.round(baseSize * textScale)));
+            liveObj.textStyle = {
+              ...snap.textStyle,
+              resolvedSize: newResolvedSize
+            };
+            if (snap.type === 'text') {
+              const familyToken = snap.textStyle?.fontFamily || 'hand';
+              const m = measureText(snap.text, newResolvedSize, familyToken);
+              liveObj.width = m.width;
+              liveObj.height = m.height;
+            }
+          }
+        }
+
+        this.latestResizeResult = {
+          newBox,
+          transformed: [cloneDocument(liveObj)]
+        };
+        this.render();
+        return;
+      }
 
       const newBox = calculateResize(this.activeHandle, this.resizeData.origBox, dx, dy, {
         keepAspect,
@@ -1028,8 +1286,13 @@ export class Workspace {
       const obj = doc.objects[this.draggingVertexData.objId];
       if (obj && obj.type === 'path' && Array.isArray(obj.points)) {
         const idx = this.draggingVertexData.vertexIndex;
-        const relX = worldPt.x - obj.x;
-        const relY = worldPt.y - obj.y;
+        const rot = this.draggingVertexData.initialRotation || 0;
+        const origBounds = this.draggingVertexData.initialBounds;
+        const cx = origBounds.x + origBounds.width / 2;
+        const cy = origBounds.y + origBounds.height / 2;
+        const localPt = rot ? unrotatePoint(worldPt, { x: cx, y: cy }, rot) : worldPt;
+        const relX = localPt.x - origBounds.x;
+        const relY = localPt.y - origBounds.y;
         obj.points[idx] = [Math.round(relX), Math.round(relY)];
         this.render();
       }
@@ -1240,12 +1503,20 @@ export class Workspace {
         const finalPoints = cloneDocument(obj.points);
         obj.points = cloneDocument(data.initialPoints);
 
-        const worldPts = finalPoints.map(p => ({
-          x: obj.x + (Array.isArray(p) ? p[0] : p.x),
-          y: obj.y + (Array.isArray(p) ? p[1] : p.y)
+        const origBounds = data.initialBounds;
+        const rot = data.initialRotation || 0;
+        const origCenter = {
+          x: origBounds.x + origBounds.width / 2,
+          y: origBounds.y + origBounds.height / 2
+        };
+
+        const unrotatedPts = finalPoints.map(p => ({
+          x: origBounds.x + (Array.isArray(p) ? p[0] : p.x),
+          y: origBounds.y + (Array.isArray(p) ? p[1] : p.y)
         }));
+
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const p of worldPts) {
+        for (const p of unrotatedPts) {
           if (p.x < minX) minX = p.x;
           if (p.x > maxX) maxX = p.x;
           if (p.y < minY) minY = p.y;
@@ -1253,15 +1524,80 @@ export class Workspace {
         }
         const width = Math.max(16, maxX - minX);
         const height = Math.max(16, maxY - minY);
-        const normalizedPoints = worldPts.map(p => [Math.round(p.x - minX), Math.round(p.y - minY)]);
+        const normalizedPoints = unrotatedPts.map(p => [Math.round(p.x - minX), Math.round(p.y - minY)]);
+
+        let finalX = minX;
+        let finalY = minY;
+        if (rot !== 0) {
+          const newLocalCenter = { x: minX + width / 2, y: minY + height / 2 };
+          const newWorldCenter = rotatePoint(newLocalCenter, origCenter, rot);
+          finalX = Math.round((newWorldCenter.x - width / 2) * 100) / 100;
+          finalY = Math.round((newWorldCenter.y - height / 2) * 100) / 100;
+        }
 
         this.callbacks.onCommand({
           type: 'update_path_points',
           id: data.objId,
           points: normalizedPoints,
-          bounds: { x: minX, y: minY, width, height }
+          bounds: { x: finalX, y: finalY, width, height }
         });
       }
+      this.render();
+      return;
+    }
+
+    if (this.isRotating) {
+      this.isRotating = false;
+      const doc = this.callbacks.getDocument();
+
+      // Restore document objects to initial snapshot baseline before dispatching command
+      if (this.rotateData) {
+        for (const snap of this.rotateData.snapshotObjects) {
+          const liveObj = doc.objects[snap.id];
+          if (!liveObj) continue;
+          liveObj.rotation = snap.rotation;
+          if (snap.x !== undefined) liveObj.x = snap.x;
+          if (snap.y !== undefined) liveObj.y = snap.y;
+        }
+        if (this.rotateData.snapshotFreeEndpoints) {
+          for (const [connId, ep] of Object.entries(this.rotateData.snapshotFreeEndpoints)) {
+            const liveConn = doc.objects[connId];
+            if (!liveConn) continue;
+            if (ep.from && liveConn.from && liveConn.from.point) liveConn.from.point = { ...ep.from };
+            if (ep.to && liveConn.to && liveConn.to.point) liveConn.to.point = { ...ep.to };
+          }
+        }
+      }
+
+      if (this.latestRotateResult && this.rotateData) {
+        let hasChange = false;
+        if (this.latestRotateResult.objects) {
+          for (const [id, entry] of Object.entries(this.latestRotateResult.objects)) {
+            const origSnap = this.rotateData.snapshotObjects.find(s => s.id === id);
+            const origRot = origSnap ? (origSnap.rotation || 0) : 0;
+            const newRot = entry.rotation || 0;
+            if (Math.abs(normalizeAngle(newRot) - normalizeAngle(origRot)) > 0.01) {
+              hasChange = true;
+              break;
+            }
+            if (entry.x !== undefined && origSnap && (entry.x !== origSnap.x || entry.y !== origSnap.y)) {
+              hasChange = true;
+              break;
+            }
+          }
+        }
+
+        if (hasChange) {
+          this.callbacks.onCommand({
+            type: 'rotate_objects',
+            objects: this.latestRotateResult.objects,
+            freeEndpoints: this.latestRotateResult.freeEndpoints
+          });
+        }
+      }
+
+      this.rotateData = null;
+      this.latestRotateResult = null;
       this.render();
       return;
     }

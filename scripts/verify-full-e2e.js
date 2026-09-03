@@ -1,4 +1,4 @@
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execSync } from 'child_process';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -15,23 +15,32 @@ const saburaHtml = fs.readFileSync(path.join(rootDir, 'sabura.html'), 'utf8');
 
 // 2. Prepare Safari test script
 const safariRunnerCode = `
+fetch('/api/safari-log', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ msg: 'SAFARI RUNNER SCRIPT EVALUATED' })
+}).catch(() => {});
+
+window.onerror = (msg, url, line) => {
+  fetch('/api/safari-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ msg: 'WINDOW ERROR: ' + msg + ' at line ' + line })
+  }).catch(() => {});
+};
+window.onunhandledrejection = (e) => {
+  const reason = e.reason?.stack || e.reason?.message || String(e.reason);
+  fetch('/api/safari-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ msg: 'UNHANDLED REJECTION: ' + reason })
+  }).catch(() => {});
+};
+
 async function runSafariTests() {
   const results = [];
-  window.onerror = (msg, url, line) => {
-    fetch('/api/safari-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msg: 'WINDOW ERROR: ' + msg + ' at line ' + line })
-    }).catch(() => {});
-  };
-  window.onunhandledrejection = (e) => {
-    const reason = e.reason?.stack || e.reason?.message || String(e.reason);
-    fetch('/api/safari-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msg: 'UNHANDLED REJECTION: ' + reason })
-    }).catch(() => {});
-  };
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modObj = isMac ? { metaKey: true } : { ctrlKey: true };
   const log = (step, ok, detail) => {
     results.push({ step, ok, detail });
     fetch('/api/safari-log', {
@@ -1703,6 +1712,440 @@ async function runSafariTests() {
       log('15. AI API Checks (Safari)', false, aiErr.message);
     }
 
+    // Flow 16: Rotation Foundation in Safari (Comprehensive Verification)
+    try {
+      app.setMode('editing');
+
+      // 16a. Single object rotation with Shift snapping & continuous rebase under non-default camera
+      const rotShapeId = 'safari_rot_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: rotShapeId, type: 'rectangle', x: 200, y: 200, width: 100, height: 100, stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.workspace.selectedIds = [rotShapeId];
+      app.workspace.render();
+      await sleep(30);
+
+      // Set non-default camera
+      app.workspace.camera.zoom = 1.5;
+      app.workspace.camera.x = 100;
+      app.workspace.camera.y = 50;
+      app.workspace.render();
+      await sleep(30);
+
+      const rotHandle = document.querySelector('[data-handle="rotate"]');
+      const hasRotHandle = Boolean(rotHandle);
+      const startScreen = app.workspace.worldToScreen(250, 172);
+      const targetScreen = app.workspace.worldToScreen(328, 250);
+
+      // 1. Rotate to 90 degrees
+      if (rotHandle) {
+        rotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: startScreen.x, clientY: startScreen.y, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: targetScreen.x, clientY: targetScreen.y, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: targetScreen.x, clientY: targetScreen.y, button: 0, buttons: 0 }));
+        await sleep(30);
+      }
+
+      const objAfterRot = app.doc.objects[rotShapeId];
+      const rotDegrees = Math.round(objAfterRot?.rotation || 0);
+      const rotOk = Math.abs(rotDegrees - 90) <= 2;
+
+      // 2. Undo & Redo rotation in Safari
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(25);
+      const rotUndone = (app.doc.objects[rotShapeId].rotation || 0) === 0;
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+      await sleep(25);
+      const rotRedone = Math.abs(Math.round(app.doc.objects[rotShapeId].rotation || 0) - 90) <= 2;
+
+      // 3. Shift press and release mid-gesture check
+      let jumpOnPress = 999;
+      let jumpOnRelease = 999;
+      const shiftRotHandle = document.querySelector('[data-handle="rotate"]');
+      if (shiftRotHandle) {
+        const hBox = shiftRotHandle.getBoundingClientRect();
+        shiftRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hBox.left + hBox.width / 2, clientY: hBox.top + hBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 50, clientY: hBox.top + hBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+
+        const angleBeforeShift = app.doc.objects[rotShapeId].rotation;
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft', shiftKey: true, bubbles: true }));
+        await sleep(25);
+        const angleOnShiftPress = app.doc.objects[rotShapeId].rotation;
+        jumpOnPress = Math.abs(angleOnShiftPress - angleBeforeShift);
+
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 70, clientY: hBox.top + hBox.height / 2 + 70, button: 0, buttons: 1, shiftKey: true }));
+        await sleep(25);
+        const angleWithShift = app.doc.objects[rotShapeId].rotation;
+
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', shiftKey: false, bubbles: true }));
+        await sleep(25);
+        const angleOnShiftRelease = app.doc.objects[rotShapeId].rotation;
+        jumpOnRelease = Math.abs(angleOnShiftRelease - angleWithShift);
+
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 70, clientY: hBox.top + hBox.height / 2 + 70, button: 0, buttons: 0 }));
+        await sleep(30);
+
+        // Undo Shift test gesture so rotShapeId is back at 90 deg for 16b
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+        await sleep(25);
+      }
+      const shiftRebaseOk = jumpOnPress < 0.1 && jumpOnRelease < 0.1;
+
+      // Reset camera
+      app.workspace.camera.zoom = 1;
+      app.workspace.camera.x = 0;
+      app.workspace.camera.y = 0;
+      app.workspace.render();
+      await sleep(25);
+
+      log('16a. Single object rotation handle drag & continuous Shift rebase (Safari)', hasRotHandle && rotOk && shiftRebaseOk && rotUndone && rotRedone, 'rotation=' + rotDegrees + ' deg jumpPress=' + jumpOnPress.toFixed(2) + ' jumpRel=' + jumpOnRelease.toFixed(2));
+
+      // 16b. Rotated single-object resize along local axes
+      const seHandle = document.querySelector('[data-handle="se"]');
+      if (seHandle) {
+        const seBox = seHandle.getBoundingClientRect();
+        const startSeX = seBox.left + seBox.width / 2;
+        const startSeY = seBox.top + seBox.height / 2;
+        seHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: startSeX, clientY: startSeY, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: startSeX, clientY: startSeY + 40, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: startSeX, clientY: startSeY + 40, button: 0, buttons: 0 }));
+        await sleep(30);
+      }
+
+      const objAfterResize = app.doc.objects[rotShapeId];
+      const rotPreserved = Math.abs(Math.round(objAfterResize?.rotation || 0) - 90) <= 2;
+      const sizeChanged = objAfterResize.width !== 100 || objAfterResize.height !== 100;
+      log('16b. Rotated single-object resize preserves rotation angle (Safari)', rotPreserved && sizeChanged, 'w=' + objAfterResize?.width + ' h=' + objAfterResize?.height + ' rot=' + objAfterResize?.rotation);
+
+      // 16c1. Ordinary multi-selection rotation vs Persisted group comparison
+      const sm1Id = 'safari_m1_' + Date.now();
+      const sm2Id = 'safari_m2_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: sm1Id, type: 'diamond', x: 100, y: 100, width: 80, height: 80, rotation: 30, stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: sm2Id, type: 'rectangle', x: 220, y: 100, width: 80, height: 80, rotation: 0, stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.workspace.selectedIds = [sm1Id, sm2Id];
+      app.workspace.render();
+      await sleep(25);
+
+      const smRotHandle = document.querySelector('[data-handle="rotate"]');
+      if (smRotHandle) {
+        const smBox = smRotHandle.getBoundingClientRect();
+        smRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: smBox.left + smBox.width / 2, clientY: smBox.top + smBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: smBox.left + smBox.width / 2 + 50, clientY: smBox.top + smBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: smBox.left + smBox.width / 2 + 50, clientY: smBox.top + smBox.height / 2 + 50, button: 0, buttons: 0 }));
+        await sleep(30);
+      }
+      const sm1RotMulti = app.doc.objects[sm1Id].rotation;
+      const sm2RotMulti = app.doc.objects[sm2Id].rotation;
+      const sm1PosMulti = { x: app.doc.objects[sm1Id].x, y: app.doc.objects[sm1Id].y };
+      const sm2PosMulti = { x: app.doc.objects[sm2Id].x, y: app.doc.objects[sm2Id].y };
+
+      // Undo multi rotation
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(25);
+
+      // Group sm1 and sm2
+      const sGrpCmpId = 'safari_grpcmp_' + Date.now();
+      app.dispatchCommand({
+        type: 'group_objects',
+        groupId: sGrpCmpId,
+        ids: [sm1Id, sm2Id]
+      });
+      app.workspace.selectedIds = [sm1Id, sm2Id];
+      app.workspace.render();
+      await sleep(25);
+
+      const sGrpRotHandle = document.querySelector('[data-handle="rotate"]');
+      if (sGrpRotHandle) {
+        const sBox = sGrpRotHandle.getBoundingClientRect();
+        sGrpRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: sBox.left + sBox.width / 2, clientY: sBox.top + sBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: sBox.left + sBox.width / 2 + 50, clientY: sBox.top + sBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: sBox.left + sBox.width / 2 + 50, clientY: sBox.top + sBox.height / 2 + 50, button: 0, buttons: 0 }));
+        await sleep(30);
+      }
+      const sm1RotGroup = app.doc.objects[sm1Id].rotation;
+      const sm2RotGroup = app.doc.objects[sm2Id].rotation;
+      const sm1PosGroup = { x: app.doc.objects[sm1Id].x, y: app.doc.objects[sm1Id].y };
+      const sm2PosGroup = { x: app.doc.objects[sm2Id].x, y: app.doc.objects[sm2Id].y };
+
+      const ordinaryMultiMatchesGroup = (
+        Math.abs(sm1RotMulti - sm1RotGroup) < 0.1 &&
+        Math.abs(sm2RotMulti - sm2RotGroup) < 0.1 &&
+        Math.hypot(sm1PosMulti.x - sm1PosGroup.x, sm1PosMulti.y - sm1PosGroup.y) < 0.1 &&
+        Math.hypot(sm2PosMulti.x - sm2PosGroup.x, sm2PosMulti.y - sm2PosGroup.y) < 0.1
+      );
+
+      // Undo group rotation
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+      await sleep(25);
+
+      // 16c2. Persisted group with pre-rotated members, locked member, curved connector & elbow connector
+      const g1Id = 'safari_g1_' + Date.now();
+      const g2Id = 'safari_g2_' + Date.now();
+      const gLockedId = 'safari_glock_' + Date.now();
+      const gStraightId = 'safari_catt_' + Date.now();
+      const gCurvedId = 'safari_ccurv_' + Date.now();
+      const gElbowId = 'safari_celb_' + Date.now();
+      const gFreeId = 'safari_cfree_' + Date.now();
+
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: g1Id, type: 'diamond', x: 400, y: 100, width: 80, height: 80, rotation: 30, stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: g2Id, type: 'rectangle', x: 550, y: 100, width: 80, height: 80, rotation: 0, stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: gLockedId, type: 'ellipse', x: 700, y: 100, width: 70, height: 70, rotation: 45, locked: true, stroke: '#1e1e1e', fill: '#eeeeee' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: gStraightId, type: 'connector', from: { id: g1Id, anchor: { x: 0.25, y: 0.75 } }, to: { id: g2Id }, routing: 'straight' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: gCurvedId, type: 'connector', from: { id: g1Id }, to: { id: g2Id }, routing: 'curved', curveSide: 1, curveDistance: 50 }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: gElbowId, type: 'connector', from: { id: g1Id }, to: { id: g2Id }, routing: 'elbow', elbowOffset: 40 }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: gFreeId, type: 'connector', from: { id: g1Id }, to: { point: { x: 600, y: 350 } }, routing: 'straight' }
+      });
+
+      const safariGrpId = 'safari_grp_' + Date.now();
+      app.dispatchCommand({
+        type: 'group_objects',
+        groupId: safariGrpId,
+        ids: [g1Id, g2Id, gLockedId, gStraightId, gCurvedId, gElbowId, gFreeId]
+      });
+      app.workspace.selectedIds = [g1Id, g2Id, gLockedId, gStraightId, gCurvedId, gElbowId, gFreeId];
+      app.workspace.render();
+      await sleep(30);
+
+      const grpRotHandle = document.querySelector('[data-handle="rotate"]');
+      const hasGrpRotHandle = Boolean(grpRotHandle);
+      if (grpRotHandle) {
+        const grpBox = grpRotHandle.getBoundingClientRect();
+        grpRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: grpBox.left + grpBox.width / 2, clientY: grpBox.top + grpBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: grpBox.left + grpBox.width / 2 + 50, clientY: grpBox.top + grpBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: grpBox.left + grpBox.width / 2 + 50, clientY: grpBox.top + grpBox.height / 2 + 50, button: 0, buttons: 0 }));
+        await sleep(30);
+      }
+      const g1RotAfter = app.doc.objects[g1Id]?.rotation;
+      const g2RotAfter = app.doc.objects[g2Id]?.rotation;
+      const gLockRotAfter = app.doc.objects[gLockedId]?.rotation;
+      const gStraightAnchorAfter = app.doc.objects[gStraightId]?.from?.anchor;
+      const gCurvedAfter = app.doc.objects[gCurvedId];
+      const gElbowAfter = app.doc.objects[gElbowId];
+      const gFreeToPointAfter = app.doc.objects[gFreeId]?.to?.point;
+
+      const grpRotOk = (
+        hasGrpRotHandle &&
+        ordinaryMultiMatchesGroup &&
+        g1RotAfter !== 30 &&
+        g2RotAfter !== 0 &&
+        gLockRotAfter === 45 && // Locked member preserved
+        gStraightAnchorAfter?.x === 0.25 && gStraightAnchorAfter?.y === 0.75 &&
+        gCurvedAfter?.routing === 'curved' && gCurvedAfter?.curveSide === 1 &&
+        gElbowAfter?.routing === 'elbow' && gElbowAfter?.elbowOffset === 40 &&
+        gFreeToPointAfter && (gFreeToPointAfter.x !== 600 || gFreeToPointAfter.y !== 350) &&
+        Boolean(app.doc.groups[safariGrpId])
+      );
+      log('16c. Persisted group shared rotation & member updates (Safari)', Boolean(grpRotOk), 'g1Rot=' + g1RotAfter + ' g2Rot=' + g2RotAfter + ' multiMatch=' + ordinaryMultiMatchesGroup);
+
+      // 16d. Rotated open and closed path vertex dragging with 0 pointerup commit jump
+      const pathOpenId = 'safari_path_open_' + Date.now();
+      const pathClosedId = 'safari_path_closed_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: pathOpenId, type: 'path', x: 100, y: 400, width: 100, height: 100, rotation: 45, points: [[0, 0], [100, 100]], stroke: '#1e1e1e', fill: 'none' }
+      });
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: pathClosedId, type: 'path', x: 300, y: 400, width: 100, height: 100, rotation: 75, closed: true, points: [[0, 0], [100, 0], [100, 100], [0, 100]], stroke: '#1e1e1e', fill: '#ffcccc' }
+      });
+
+      // 1. Open path vertex-0 drag
+      app.workspace.selectedIds = [pathOpenId];
+      app.workspace.render();
+      await sleep(30);
+
+      let v1Jump = 0;
+      const v0Handle = document.querySelector('[data-handle="vertex-0"]');
+      if (v0Handle) {
+        const v0Box = v0Handle.getBoundingClientRect();
+        v0Handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: v0Box.left + v0Box.width / 2, clientY: v0Box.top + v0Box.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: v0Box.left + v0Box.width / 2 - 30, clientY: v0Box.top + v0Box.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        const v1El = document.querySelector('[data-handle="vertex-1"]');
+        const v1PreviewBox = v1El?.getBoundingClientRect();
+
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: v0Box.left + v0Box.width / 2 - 30, clientY: v0Box.top + v0Box.height / 2, button: 0, buttons: 0 }));
+        await sleep(30);
+
+        const v1CommittedBox = document.querySelector('[data-handle="vertex-1"]')?.getBoundingClientRect();
+        v1Jump = Math.hypot((v1CommittedBox?.left || 0) - (v1PreviewBox?.left || 0), (v1CommittedBox?.top || 0) - (v1PreviewBox?.top || 0));
+      }
+      const pathRotPreserved = app.doc.objects[pathOpenId]?.rotation === 45;
+
+      // 2. Closed path vertex-2 drag
+      app.workspace.selectedIds = [pathClosedId];
+      app.workspace.render();
+      await sleep(30);
+
+      let cv0Jump = 0;
+      const cv2Handle = document.querySelector('[data-handle="vertex-2"]');
+      if (cv2Handle) {
+        const cv2Box = cv2Handle.getBoundingClientRect();
+        cv2Handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: cv2Box.left + cv2Box.width / 2, clientY: cv2Box.top + cv2Box.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: cv2Box.left + cv2Box.width / 2 + 25, clientY: cv2Box.top + cv2Box.height / 2 + 25, button: 0, buttons: 1 }));
+        await sleep(25);
+        const cv0El = document.querySelector('[data-handle="vertex-0"]');
+        const cv0PreviewBox = cv0El?.getBoundingClientRect();
+
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: cv2Box.left + cv2Box.width / 2 + 25, clientY: cv2Box.top + cv2Box.height / 2 + 25, button: 0, buttons: 0 }));
+        await sleep(30);
+
+        const cv0CommittedBox = document.querySelector('[data-handle="vertex-0"]')?.getBoundingClientRect();
+        cv0Jump = Math.hypot((cv0CommittedBox?.left || 0) - (cv0PreviewBox?.left || 0), (cv0CommittedBox?.top || 0) - (cv0PreviewBox?.top || 0));
+      }
+      const closedPathRotPreserved = app.doc.objects[pathClosedId]?.rotation === 75;
+      const pathsOk = v1Jump < 1.0 && pathRotPreserved && cv0Jump < 1.0 && closedPathRotPreserved;
+
+      log('16d. Rotated open and closed path vertex dragging with zero commit jump (Safari)', pathsOk, 'openJump=' + v1Jump.toFixed(2) + 'px closedJump=' + cv0Jump.toFixed(2) + 'px');
+
+      // 16e. Rotated text in-place editing (Standalone text & Text-bearing shape)
+      const textId = 'safari_text_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: textId, type: 'text', x: 300, y: 400, width: 120, height: 40, rotation: 45, text: 'Safari Rotated', textStyle: { resolvedSize: 16 } }
+      });
+      app.workspace.selectedIds = [textId];
+      app.workspace.render();
+      await sleep(25);
+      app.textEditor.open(app.doc.objects[textId], app.workspace.camera);
+      const textarea = document.querySelector('.sabura-inline-text-editor');
+      const standaloneTrans = textarea ? textarea.style.transform : '';
+      const textareaTransformed = standaloneTrans.includes('rotate(');
+      textarea.value = 'Updated Safari Standalone';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      app.textEditor.close(true);
+
+      const sShapeTextId = 'safari_shape_text_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: sShapeTextId, type: 'rectangle', x: 500, y: 500, width: 120, height: 60, rotation: 35, text: 'Shape Text', stroke: '#1e1e1e', fill: '#eeeeee' }
+      });
+      app.workspace.selectedIds = [sShapeTextId];
+      app.workspace.render();
+      await sleep(25);
+      app.textEditor.open(app.doc.objects[sShapeTextId], app.workspace.camera);
+      const shapeTextarea = document.querySelector('.sabura-inline-text-editor');
+      const shapeTrans = shapeTextarea ? shapeTextarea.style.transform : '';
+      const shapeTextareaTransformed = shapeTrans.includes('rotate(35deg)');
+      shapeTextarea.value = 'Updated Safari Shape Text';
+      shapeTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+      app.textEditor.close(true);
+
+      const textEditsOk = Boolean(textareaTransformed && shapeTextareaTransformed && app.doc.objects[textId].text === 'Updated Safari Standalone' && app.doc.objects[sShapeTextId].text === 'Updated Safari Shape Text');
+      log('16e. Rotated standalone text & text-bearing shape in-place editing (Safari)', textEditsOk, 'standaloneTrans=' + standaloneTrans + ' shapeTrans=' + shapeTrans);
+
+      // 16f. Precision hit testing & locked rotated overlay
+      const lockedId = 'safari_locked_' + Date.now();
+      app.dispatchCommand({
+        type: 'create_object',
+        object: { id: lockedId, type: 'rectangle', x: 500, y: 400, width: 100, height: 100, rotation: 45, locked: true, stroke: '#1e1e1e', fill: '#cccccc' }
+      });
+      const hitCenter = app.workspace.findObjectAt({ x: 550, y: 450 });
+      const hitCorner = app.workspace.findObjectAt({ x: 500, y: 400 }); // Empty AABB corner
+      const hitTestOk = hitCenter?.id === lockedId && hitCorner?.id !== lockedId;
+
+      app.workspace.selectedIds = [lockedId];
+      app.workspace.render();
+      await sleep(25);
+      const lockedOverlay = document.querySelector('.selection-single-overlay');
+      const lockedRotAttr = lockedOverlay?.getAttribute('transform')?.includes('rotate(45');
+      const lockedHasNoHandles = !document.querySelector('[data-handle="rotate"]') && !document.querySelector('[data-handle="nw"]');
+      log('16f. Precision hit testing & locked rotated overlay orientation (Safari)', Boolean(hitTestOk && lockedRotAttr && lockedHasNoHandles), 'overlayTrans=' + lockedOverlay?.getAttribute('transform'));
+
+      // 16g. Gesture cancellation (Escape & Reading Mode)
+      const histCountBefore = app.undoStack.length;
+      app.workspace.selectedIds = [rotShapeId];
+      app.workspace.render();
+      await sleep(25);
+      const curRotBefore = app.doc.objects[rotShapeId].rotation;
+      const cancelRotHandle = document.querySelector('[data-handle="rotate"]');
+      if (cancelRotHandle) {
+        const hBox = cancelRotHandle.getBoundingClientRect();
+        // Cancel with Escape
+        cancelRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hBox.left + hBox.width / 2, clientY: hBox.top + hBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 50, clientY: hBox.top + hBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 50, clientY: hBox.top + hBox.height / 2 + 50, button: 0, buttons: 0 }));
+        await sleep(25);
+      }
+      const curRotAfterEscape = app.doc.objects[rotShapeId].rotation;
+      const histCountAfterEscape = app.undoStack.length;
+
+      // Cancel with Reading Mode
+      if (cancelRotHandle) {
+        const hBox = cancelRotHandle.getBoundingClientRect();
+        cancelRotHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: hBox.left + hBox.width / 2, clientY: hBox.top + hBox.height / 2, button: 0, buttons: 1 }));
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 50, clientY: hBox.top + hBox.height / 2 + 50, button: 0, buttons: 1 }));
+        await sleep(25);
+        app.setMode('reading');
+        await sleep(25);
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: hBox.left + hBox.width / 2 + 50, clientY: hBox.top + hBox.height / 2 + 50, button: 0, buttons: 0 }));
+        await sleep(25);
+        app.setMode('editing');
+        await sleep(25);
+      }
+      const curRotAfterReading = app.doc.objects[rotShapeId].rotation;
+      const histCountAfterReading = app.undoStack.length;
+
+      const cancelOk = (
+        curRotBefore === curRotAfterEscape &&
+        curRotBefore === curRotAfterReading &&
+        histCountBefore === histCountAfterEscape &&
+        histCountBefore === histCountAfterReading
+      );
+      log('16g. Rotation gesture cancellation (Escape & Reading mode) restores baseline with 0 history (Safari)', cancelOk, 'rot=' + curRotAfterReading + ' histDiff=' + (histCountAfterReading - histCountBefore));
+
+      // 16h. generateBoardFile document validity in Safari
+      const safariBoardGen = window.sabura.generateBoardFile(app.doc);
+      log('16h. generateBoardFile generates valid rotated board artifact (Safari)', safariBoardGen.success && safariBoardGen.byteLength > 200000, 'bytes=' + safariBoardGen.byteLength);
+
+    } catch (rotErr) {
+      log('16. Rotation Foundation (Safari)', false, rotErr.message);
+    }
 
   } catch (err) {
     log('Safari Execution Error', false, err.message);
@@ -1744,10 +2187,10 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(generatedE2eHtml);
     }
-  } else if (req.url === '/sabura-safari.html') {
-    // Inject Safari runner script
-    const injected = freshHtml.replace('</body>', '<script type="module" src="/safari-e2e-runner.js"></script></body>');
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  } else if (new URL(req.url, `http://127.0.0.1:${port}`).pathname === '/sabura-safari.html') {
+    // Inject Safari runner script inline
+    const injected = freshHtml.replace('</body>', '<script type="module">\n' + safariRunnerCode + '\n</script></body>');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(injected);
   } else if (req.url === '/safari-e2e-runner.js') {
     res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
@@ -4172,6 +4615,694 @@ console.log('  ✓ 33e. No outline (strokeWidth: 0) applied with fill rendered, 
 console.log('  ✓ 33f. Complete regression: Group, Duplicate, Connect interactively, Save Copy generation via window.sabura.generateBoardFile & Node-side extraction/validation');
 console.log('✓ Flow 33: Resizing and Transform Foundation verified cleanly!');
 
+// =========================================================================
+// Flow 34: Rotation Foundation Comprehensive Verification
+// =========================================================================
+console.log('\n--- Flow 34: Rotation Foundation ---');
+const flow34Result = await evalInChrome(`(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const app = window.saburaApp;
+  const modObj = navigator.platform.includes('Mac') ? { metaKey: true } : { ctrlKey: true };
+
+  // Setup Blob interceptor for Save Copy verification
+  window._lastSaburaBlob = null;
+  const origCreateObjectURL = URL.createObjectURL;
+  URL.createObjectURL = (blob) => {
+    const reader = new FileReader();
+    reader.onloadend = () => { window._lastSaburaBlob = reader.result; };
+    reader.readAsDataURL(blob);
+    return origCreateObjectURL(blob);
+  };
+
+  app.setMode('editing');
+  app.workspace.camera.zoom = 1;
+  app.workspace.camera.x = 0;
+  app.workspace.camera.y = 0;
+
+  async function dragRotationHandle(screenDx, screenDy, options = {}) {
+    const rotHandle = document.querySelector('[data-handle="rotate"]');
+    if (!rotHandle) throw new Error('Rotation handle not found');
+    const rBox = rotHandle.getBoundingClientRect();
+    const startX = rBox.left + rBox.width / 2;
+    const startY = rBox.top + rBox.height / 2;
+
+    rotHandle.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+      buttons: 1,
+      ...options
+    }));
+    await sleep(35);
+
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX + screenDx,
+      clientY: startY + screenDy,
+      button: 0,
+      buttons: 1,
+      ...options
+    }));
+    await sleep(35);
+
+    if (options.testShiftRebase) {
+      // 1. Record angle before Shift press at unchanged pointer position
+      const angleBeforeShift = app.doc.objects[options.targetId]?.rotation;
+
+      // 2. Press Shift without moving pointer
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft', shiftKey: true, bubbles: true }));
+      await sleep(25);
+      const angleOnShiftPress = app.doc.objects[options.targetId]?.rotation;
+
+      // 3. Move pointer by 15 deg with Shift held
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: startX + screenDx * 1.2,
+        clientY: startY + screenDy * 1.2,
+        button: 0,
+        buttons: 1,
+        shiftKey: true
+      }));
+      await sleep(25);
+      const angleWithShift = app.doc.objects[options.targetId]?.rotation;
+
+      // 4. Release Shift without moving pointer
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', shiftKey: false, bubbles: true }));
+      await sleep(25);
+      const angleOnShiftRelease = app.doc.objects[options.targetId]?.rotation;
+
+      const jumpOnPress = Math.abs(angleOnShiftPress - angleBeforeShift);
+      const jumpOnRelease = Math.abs(angleOnShiftRelease - angleWithShift);
+      options.jumpOnPress = jumpOnPress;
+      options.jumpOnRelease = jumpOnRelease;
+      options.shiftRebaseOk = jumpOnPress < 0.1 && jumpOnRelease < 0.1;
+    }
+
+    if (options.cancelWithEscape) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+      await sleep(25);
+      window.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: startX + screenDx,
+        clientY: startY + screenDy,
+        button: 0,
+        buttons: 0
+      }));
+      await sleep(25);
+      return true;
+    }
+
+    if (options.cancelWithReadingMode) {
+      app.setMode('reading');
+      await sleep(25);
+      window.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: startX + screenDx,
+        clientY: startY + screenDy,
+        button: 0,
+        buttons: 0
+      }));
+      await sleep(25);
+      app.setMode('editing');
+      return true;
+    }
+
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX + screenDx,
+      clientY: startY + screenDy,
+      button: 0,
+      buttons: 0
+    }));
+    await sleep(35);
+    return true;
+  }
+
+  async function dragHandle(handleId, screenDx, screenDy, options = {}) {
+    const handle = document.querySelector('[data-handle="' + handleId + '"]');
+    if (!handle) throw new Error('Handle ' + handleId + ' not found');
+    const hBox = handle.getBoundingClientRect();
+    const startX = hBox.left + hBox.width / 2;
+    const startY = hBox.top + hBox.height / 2;
+
+    handle.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+      buttons: 1,
+      ...options
+    }));
+    await sleep(35);
+
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX + screenDx,
+      clientY: startY + screenDy,
+      button: 0,
+      buttons: 1,
+      ...options
+    }));
+    await sleep(35);
+
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: startX + screenDx,
+      clientY: startY + screenDy,
+      button: 0,
+      buttons: 0
+    }));
+    await sleep(35);
+    return true;
+  }
+
+  // -------------------------------------------------------------
+  // 34a: Single object rotation, non-default camera, Shift rebase
+  // -------------------------------------------------------------
+  const r1Id = 'rot_test_r1_' + Date.now();
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: r1Id, type: 'rectangle', x: 200, y: 200, width: 100, height: 100, stroke: '#1e1e1e', fill: 'none' }
+  });
+  app.workspace.selectedIds = [r1Id];
+  app.workspace.render();
+  await sleep(50);
+
+  // Set non-default camera
+  app.workspace.camera.zoom = 1.5;
+  app.workspace.camera.x = 100;
+  app.workspace.camera.y = 50;
+  app.workspace.render();
+  await sleep(30);
+
+  // Compute dynamic screen delta for 90 deg rotation under current camera
+  const r1StartScreen = app.workspace.worldToScreen(250, 172);
+  const r1TargetScreen90 = app.workspace.worldToScreen(328, 250);
+  const dx90 = r1TargetScreen90.x - r1StartScreen.x;
+  const dy90 = r1TargetScreen90.y - r1StartScreen.y;
+
+  // 1. Rotate to 90 degrees
+  await dragRotationHandle(dx90, dy90);
+  const r1Rot90 = Math.abs(Math.round(app.doc.objects[r1Id].rotation || 0) - 90) <= 2;
+
+  // 2. Undo rotation -> restores 0 deg
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+  const r1Undone = (app.doc.objects[r1Id].rotation || 0) === 0;
+
+  // 3. Redo rotation -> restores 90 deg
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(30);
+  const r1Redone = Math.abs(Math.round(app.doc.objects[r1Id].rotation || 0) - 90) <= 2;
+
+  // 4. Test Shift rebase (press and release mid-gesture without angular jump)
+  const rebaseOpts = { targetId: r1Id, testShiftRebase: true };
+  await dragRotationHandle(50, 50, rebaseOpts);
+  const shiftRebaseOk = Boolean(rebaseOpts.shiftRebaseOk);
+
+  // Undo Shift rebase drag so r1 is back at 90 deg
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+
+  // 5. Test Shift snapping (drag with Shift held)
+  await dragRotationHandle(dx90 * 0.5, dy90 * 0.5, { shiftKey: true });
+  const shiftSnapped = Math.round(app.doc.objects[r1Id].rotation || 0) % 15 === 0;
+
+  // Undo Shift snap so r1 is back at 90 degrees for 34b
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+  await sleep(30);
+
+  // Reset camera
+  app.workspace.camera.zoom = 1;
+  app.workspace.camera.x = 0;
+  app.workspace.camera.y = 0;
+  app.workspace.render();
+  await sleep(30);
+
+  // -------------------------------------------------------------
+  // 34b: Rotated single-object local-axis resize
+  // -------------------------------------------------------------
+  await dragHandle('e', 0, 40);
+  const r1ResizedW = app.doc.objects[r1Id].width === 140 && app.doc.objects[r1Id].height === 100;
+  const r1ResizedRot = Math.abs(Math.round(app.doc.objects[r1Id].rotation || 0) - 90) <= 2;
+
+  // -------------------------------------------------------------
+  // 34c1: Ordinary multi-selection rotation vs Persisted Group rotation
+  // -------------------------------------------------------------
+  const m1Id = 'rot_m1_' + Date.now();
+  const m2Id = 'rot_m2_' + Date.now();
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: m1Id, type: 'diamond', x: 100, y: 100, width: 80, height: 80, rotation: 30, stroke: '#1e1e1e', fill: 'none' }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: m2Id, type: 'rectangle', x: 220, y: 100, width: 80, height: 80, rotation: 0, stroke: '#1e1e1e', fill: 'none' }
+  });
+
+  // Ordinary multi-selection rotation
+  app.workspace.selectedIds = [m1Id, m2Id];
+  app.workspace.render();
+  await sleep(30);
+  await dragRotationHandle(50, 50);
+  const m1RotMulti = app.doc.objects[m1Id].rotation;
+  const m2RotMulti = app.doc.objects[m2Id].rotation;
+  const m1PosMulti = { x: app.doc.objects[m1Id].x, y: app.doc.objects[m1Id].y };
+  const m2PosMulti = { x: app.doc.objects[m2Id].x, y: app.doc.objects[m2Id].y };
+
+  // Undo ordinary multi-selection rotation
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+
+  // Group m1 and m2 and rotate
+  const grpCompareId = 'grp_cmp_' + Date.now();
+  app.dispatchCommand({
+    type: 'group_objects',
+    groupId: grpCompareId,
+    ids: [m1Id, m2Id]
+  });
+  app.workspace.selectedIds = [m1Id, m2Id];
+  app.workspace.render();
+  await sleep(30);
+  await dragRotationHandle(50, 50);
+  const m1RotGroup = app.doc.objects[m1Id].rotation;
+  const m2RotGroup = app.doc.objects[m2Id].rotation;
+  const m1PosGroup = { x: app.doc.objects[m1Id].x, y: app.doc.objects[m1Id].y };
+  const m2PosGroup = { x: app.doc.objects[m2Id].x, y: app.doc.objects[m2Id].y };
+
+  const ordinaryMultiMatchesGroup = (
+    Math.abs(m1RotMulti - m1RotGroup) < 0.1 &&
+    Math.abs(m2RotMulti - m2RotGroup) < 0.1 &&
+    Math.hypot(m1PosMulti.x - m1PosGroup.x, m1PosMulti.y - m1PosGroup.y) < 0.1 &&
+    Math.hypot(m2PosMulti.x - m2PosGroup.x, m2PosMulti.y - m2PosGroup.y) < 0.1
+  );
+
+  // Undo group rotation
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+
+  // -------------------------------------------------------------
+  // 34c2: Persisted group with pre-rotated members, locked members & heterogeneous connectors
+  // -------------------------------------------------------------
+  const d1Id = 'rot_test_d1_' + Date.now();
+  const r2Id = 'rot_test_r2_' + Date.now();
+  const eLockedId = 'rot_test_eLock_' + Date.now();
+  const t1Id = 'rot_test_t1_' + Date.now();
+  const cAttachedId = 'rot_test_cAtt_' + Date.now();
+  const cCurvedId = 'rot_test_cCurv_' + Date.now();
+  const cElbowId = 'rot_test_cElb_' + Date.now();
+  const cFreeId = 'rot_test_cFree_' + Date.now();
+
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: d1Id, type: 'diamond', x: 400, y: 200, width: 100, height: 100, rotation: 30, stroke: '#1e1e1e', fill: 'none' }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: r2Id, type: 'rectangle', x: 550, y: 200, width: 100, height: 100, rotation: 0, stroke: '#1e1e1e', fill: 'none' }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: eLockedId, type: 'ellipse', x: 700, y: 200, width: 80, height: 80, rotation: 45, locked: true, stroke: '#1e1e1e', fill: '#eeeeee' }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: t1Id, type: 'text', x: 400, y: 350, width: 120, height: 40, rotation: 0, text: 'Hello Rotated', textStyle: { resolvedSize: 16 } }
+  });
+  // Connector with custom anchor attached to rotated diamond
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: cAttachedId, type: 'connector', from: { id: d1Id, anchor: { x: 0.25, y: 0.75 } }, to: { id: r2Id }, routing: 'straight' }
+  });
+  // Curved connector
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: cCurvedId, type: 'connector', from: { id: d1Id }, to: { id: r2Id }, routing: 'curved', curveSide: 1, curveDistance: 50 }
+  });
+  // Elbow connector
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: cElbowId, type: 'connector', from: { id: d1Id }, to: { id: r2Id }, routing: 'elbow', elbowOffset: 40 }
+  });
+  // Connector with free endpoint
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: cFreeId, type: 'connector', from: { id: d1Id }, to: { point: { x: 600, y: 350 } }, routing: 'straight' }
+  });
+
+  const grp1Id = 'rot_grp1_' + Date.now();
+  app.dispatchCommand({
+    type: 'group_objects',
+    groupId: grp1Id,
+    ids: [d1Id, r2Id, eLockedId, t1Id, cAttachedId, cCurvedId, cElbowId, cFreeId]
+  });
+
+  app.workspace.selectedIds = [d1Id, r2Id, eLockedId, t1Id, cAttachedId, cCurvedId, cElbowId, cFreeId];
+  app.workspace.render();
+  await sleep(50);
+
+  const sharedRotHandle = document.querySelector('[data-handle="rotate"]');
+  const hasSharedRot = Boolean(sharedRotHandle);
+
+  // Drag shared rotation handle by 45 degrees
+  await dragRotationHandle(100, 100);
+  const d1RotAfter = app.doc.objects[d1Id]?.rotation;
+  const r2RotAfter = app.doc.objects[r2Id]?.rotation;
+  const eLockRotAfter = app.doc.objects[eLockedId]?.rotation;
+  const t1RotAfter = app.doc.objects[t1Id]?.rotation;
+  const cFreeToPointAfter = app.doc.objects[cFreeId]?.to?.point;
+  const cStraightAnchorAfter = app.doc.objects[cAttachedId]?.from?.anchor;
+  const cCurvedAfter = app.doc.objects[cCurvedId];
+  const cElbowAfter = app.doc.objects[cElbowId];
+
+  const d1Rotated = d1RotAfter !== 30;
+  const r2Rotated = r2RotAfter !== 0;
+  const eLockPreserved = eLockRotAfter === 45; // Locked object must NOT rotate
+  const t1Rotated = t1RotAfter !== 0;
+  const cFreeRotated = cFreeToPointAfter && (cFreeToPointAfter.x !== 600 || cFreeToPointAfter.y !== 350);
+  const cStraightAttached = Boolean(cStraightAnchorAfter && cStraightAnchorAfter.x === 0.25 && cStraightAnchorAfter.y === 0.75);
+  const curvedConnectorValid = Boolean(cCurvedAfter && cCurvedAfter.routing === 'curved' && cCurvedAfter.curveSide === 1 && cCurvedAfter.curveDistance === 50);
+  const elbowConnectorValid = Boolean(cElbowAfter && cElbowAfter.routing === 'elbow' && cElbowAfter.elbowOffset === 40);
+  const grpPreserved = Boolean(app.doc.groups[grp1Id]);
+
+  // Undo group rotation
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, bubbles: true }));
+  await sleep(30);
+  const d1Undone = app.doc.objects[d1Id]?.rotation === 30;
+  const r2Undone = app.doc.objects[r2Id]?.rotation === 0;
+
+  // Redo group rotation
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ...modObj, shiftKey: true, bubbles: true }));
+  await sleep(30);
+  const d1Redone = app.doc.objects[d1Id]?.rotation === d1RotAfter;
+
+  // -------------------------------------------------------------
+  // 34d: Open and closed paths vertex dragging after rotation
+  // -------------------------------------------------------------
+  const pOpenId = 'rot_test_pOpen_' + Date.now();
+  const pClosedId = 'rot_test_pClosed_' + Date.now();
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: pOpenId, type: 'path', x: 100, y: 500, width: 100, height: 100, rotation: 45, points: [[0, 0], [100, 100]], stroke: '#1e1e1e', fill: 'none' }
+  });
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: pClosedId, type: 'path', x: 300, y: 500, width: 100, height: 100, rotation: 75, closed: true, points: [[0, 0], [100, 0], [100, 100], [0, 100]], stroke: '#1e1e1e', fill: '#ffcccc' }
+  });
+
+  // 1. Open path vertex-0 drag
+  app.workspace.selectedIds = [pOpenId];
+  app.workspace.render();
+  await sleep(50);
+
+  const pv0Handle = document.querySelector('[data-handle="vertex-0"]');
+  let pOpenJump = 0;
+  if (pv0Handle) {
+    const vBox = pv0Handle.getBoundingClientRect();
+    pv0Handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: vBox.left + vBox.width / 2, clientY: vBox.top + vBox.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: vBox.left + vBox.width / 2 - 30, clientY: vBox.top + vBox.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+
+    const pv1El = document.querySelector('[data-handle="vertex-1"]');
+    const pv1Preview = pv1El?.getBoundingClientRect();
+
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: vBox.left + vBox.width / 2 - 30, clientY: vBox.top + vBox.height / 2, button: 0, buttons: 0 }));
+    await sleep(50);
+
+    const pv1Committed = document.querySelector('[data-handle="vertex-1"]')?.getBoundingClientRect();
+    pOpenJump = Math.hypot((pv1Committed?.left || 0) - (pv1Preview?.left || 0), (pv1Committed?.top || 0) - (pv1Preview?.top || 0));
+  }
+  const pOpenRotPreserved = app.doc.objects[pOpenId]?.rotation === 45;
+  const pOpenOk = pOpenJump < 1.0 && pOpenRotPreserved;
+
+  // 2. Closed path vertex-2 drag
+  app.workspace.selectedIds = [pClosedId];
+  app.workspace.render();
+  await sleep(50);
+
+  const pcv2Handle = document.querySelector('[data-handle="vertex-2"]');
+  let pClosedJump = 0;
+  if (pcv2Handle) {
+    const vBox = pcv2Handle.getBoundingClientRect();
+    pcv2Handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: vBox.left + vBox.width / 2, clientY: vBox.top + vBox.height / 2, button: 0, buttons: 1 }));
+    await sleep(30);
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: vBox.left + vBox.width / 2 + 25, clientY: vBox.top + vBox.height / 2 + 25, button: 0, buttons: 1 }));
+    await sleep(30);
+
+    const pcv0El = document.querySelector('[data-handle="vertex-0"]');
+    const pcv0Preview = pcv0El?.getBoundingClientRect();
+
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: vBox.left + vBox.width / 2 + 25, clientY: vBox.top + vBox.height / 2 + 25, button: 0, buttons: 0 }));
+    await sleep(50);
+
+    const pcv0Committed = document.querySelector('[data-handle="vertex-0"]')?.getBoundingClientRect();
+    pClosedJump = Math.hypot((pcv0Committed?.left || 0) - (pcv0Preview?.left || 0), (pcv0Committed?.top || 0) - (pcv0Preview?.top || 0));
+  }
+  const pClosedRotPreserved = app.doc.objects[pClosedId]?.rotation === 75;
+  const closedPathVertexNoJump = pClosedJump < 1.0 && pClosedRotPreserved;
+
+  // -------------------------------------------------------------
+  // 34e: Rotated text in-place editing (Standalone text & Text-bearing shape)
+  // -------------------------------------------------------------
+  // Standalone text edit
+  app.workspace.selectedIds = [t1Id];
+  app.workspace.render();
+  await sleep(30);
+  app.textEditor.open(app.doc.objects[t1Id], app.workspace.camera);
+  const textEditorEl = document.querySelector('.sabura-inline-text-editor');
+  const standaloneTextEditorRotated = textEditorEl && textEditorEl.style.transform.includes('rotate(');
+  textEditorEl.value = 'Updated Standalone';
+  textEditorEl.dispatchEvent(new Event('input', { bubbles: true }));
+  app.textEditor.close(true);
+  const standaloneTextCommitted = app.doc.objects[t1Id]?.text === 'Updated Standalone';
+
+  // Text-bearing shape edit
+  const rShapeTextId = 'rot_shape_text_' + Date.now();
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: rShapeTextId, type: 'rectangle', x: 500, y: 500, width: 120, height: 60, rotation: 35, text: 'Shape Text', stroke: '#1e1e1e', fill: '#eeeeee' }
+  });
+  app.workspace.selectedIds = [rShapeTextId];
+  app.workspace.render();
+  await sleep(30);
+  app.textEditor.open(app.doc.objects[rShapeTextId], app.workspace.camera);
+  const shapeTextEditorEl = document.querySelector('.sabura-inline-text-editor');
+  const shapeTextEditorRotated = shapeTextEditorEl && shapeTextEditorEl.style.transform.includes('rotate(35deg)');
+  shapeTextEditorEl.value = 'Updated Shape Text';
+  shapeTextEditorEl.dispatchEvent(new Event('input', { bubbles: true }));
+  app.textEditor.close(true);
+  const textBearingShapeEditPreserved = app.doc.objects[rShapeTextId]?.text === 'Updated Shape Text' && app.doc.objects[rShapeTextId]?.rotation === 35;
+
+  // -------------------------------------------------------------
+  // 34f: Precision hit testing & locked overlay orientation
+  // -------------------------------------------------------------
+  const rect45Id = 'rot_rect45_' + Date.now();
+  app.dispatchCommand({
+    type: 'create_object',
+    object: { id: rect45Id, type: 'rectangle', x: 700, y: 500, width: 100, height: 100, rotation: 45, stroke: '#1e1e1e', fill: '#dddddd' }
+  });
+  const center45 = { x: 750, y: 550 };
+  const corner45 = { x: 700, y: 500 }; // Empty AABB corner
+  const hitCenter = app.workspace.findObjectAt(center45);
+  const hitCorner = app.workspace.findObjectAt(corner45);
+  const hitTestOk = hitCenter?.id === rect45Id && hitCorner?.id !== rect45Id;
+
+  // Check locked object selection overlay orientation
+  app.workspace.selectedIds = [eLockedId];
+  app.workspace.render();
+  await sleep(30);
+  const lockedSingleOverlay = document.querySelector('.selection-single-overlay');
+  const lockedOverlayRot = lockedSingleOverlay?.getAttribute('transform')?.includes('rotate(45');
+  const lockedNoHandles = !document.querySelector('[data-handle="rotate"]') && !document.querySelector('[data-handle="nw"]');
+  const lockedOverlayOk = Boolean(lockedOverlayRot && lockedNoHandles);
+
+  // -------------------------------------------------------------
+  // 34g: Cancellation with Escape and Reading Mode
+  // -------------------------------------------------------------
+  app.workspace.selectedIds = [r1Id];
+  app.workspace.render();
+  await sleep(30);
+  const r1RotBeforeCancel = app.doc.objects[r1Id].rotation;
+  const histBeforeCancel = app.undoStack.length;
+
+  await dragRotationHandle(50, 50, { cancelWithEscape: true });
+  const r1RotAfterEscape = app.doc.objects[r1Id].rotation;
+  const histAfterEscape = app.undoStack.length;
+  const escapeCancelOk = r1RotBeforeCancel === r1RotAfterEscape && histBeforeCancel === histAfterEscape;
+
+  await dragRotationHandle(50, 50, { cancelWithReadingMode: true });
+  const r1RotAfterReading = app.doc.objects[r1Id].rotation;
+  const histAfterReading = app.undoStack.length;
+  const readingCancelOk = r1RotBeforeCancel === r1RotAfterReading && histBeforeCancel === histAfterReading;
+
+  // -------------------------------------------------------------
+  // 34h: Real Save Copy / generateBoardFile download generation
+  // -------------------------------------------------------------
+  const genResult = window.sabura.generateBoardFile(app.doc);
+
+  return {
+    r1Rot90,
+    shiftRebaseOk,
+    shiftSnapped,
+    r1Undone,
+    r1Redone,
+    r1ResizedW,
+    r1ResizedRot,
+    ordinaryMultiMatchesGroup,
+    hasSharedRot,
+    d1Rotated,
+    r2Rotated,
+    eLockPreserved,
+    t1Rotated,
+    cFreeRotated,
+    cStraightAttached,
+    curvedConnectorValid,
+    elbowConnectorValid,
+    grpPreserved,
+    d1Undone,
+    r2Undone,
+    d1Redone,
+    pOpenOk,
+    pOpenJump,
+    closedPathVertexNoJump,
+    pClosedJump,
+    standaloneTextEditorRotated,
+    standaloneTextCommitted,
+    shapeTextEditorRotated,
+    textBearingShapeEditPreserved,
+    hitTestOk,
+    lockedOverlayOk,
+    escapeCancelOk,
+    readingCancelOk,
+    genOk: genResult.success,
+    genBytes: genResult.byteLength,
+    r1Id,
+    d1Id,
+    r2Id,
+    eLockedId,
+    t1Id,
+    rShapeTextId,
+    cAttachedId,
+    cCurvedId,
+    cElbowId,
+    cFreeId,
+    grp1Id,
+    pOpenId,
+    pClosedId
+  };
+})()`);
+
+console.log('Flow 34 Result:', flow34Result);
+
+if (!flow34Result.r1Rot90 || !flow34Result.shiftRebaseOk || !flow34Result.shiftSnapped || !flow34Result.r1Undone || !flow34Result.r1Redone) {
+  throw new Error('Flow 34: Single object rotation, continuous Shift rebase, or undo/redo failed in Chrome');
+}
+if (!flow34Result.r1ResizedW || !flow34Result.r1ResizedRot) {
+  throw new Error('Flow 34: Rotated single-object local resize failed in Chrome');
+}
+if (!flow34Result.ordinaryMultiMatchesGroup) {
+  throw new Error('Flow 34: Ordinary multi-selection rotation did not match persisted group rotation');
+}
+if (!flow34Result.hasSharedRot || !flow34Result.d1Rotated || !flow34Result.r2Rotated || !flow34Result.eLockPreserved || !flow34Result.grpPreserved) {
+  throw new Error('Flow 34: Persisted group shared rotation or locked member exclusion failed in Chrome');
+}
+if (!flow34Result.cStraightAttached || !flow34Result.curvedConnectorValid || !flow34Result.elbowConnectorValid || !flow34Result.cFreeRotated) {
+  throw new Error('Flow 34: Connector attachment, curved/elbow routing, or free endpoint rotation failed in Chrome');
+}
+if (!flow34Result.pOpenOk || !flow34Result.closedPathVertexNoJump) {
+  throw new Error(`Flow 34: Rotated open/closed path vertex commit jump detected (open=${flow34Result.pOpenJump}px, closed=${flow34Result.pClosedJump}px) in Chrome`);
+}
+if (!flow34Result.standaloneTextEditorRotated || !flow34Result.standaloneTextCommitted || !flow34Result.shapeTextEditorRotated || !flow34Result.textBearingShapeEditPreserved) {
+  throw new Error('Flow 34: Rotated standalone text or text-bearing shape in-place editing failed in Chrome');
+}
+if (!flow34Result.hitTestOk || !flow34Result.lockedOverlayOk) {
+  throw new Error('Flow 34: Precision hit testing or locked rotated overlay orientation failed in Chrome');
+}
+if (!flow34Result.escapeCancelOk || !flow34Result.readingCancelOk || !flow34Result.genOk) {
+  throw new Error('Flow 34: Gesture cancellation or board file generation failed in Chrome');
+}
+
+// Complete 34h verification on Node side by capturing and extracting the generated HTML file
+let flow34CapturedDataUrl = null;
+for (let i = 0; i < 30; i++) {
+  await new Promise(r => setTimeout(r, 100));
+  flow34CapturedDataUrl = await evalInChrome('window._lastSaburaBlob');
+  if (flow34CapturedDataUrl) break;
+}
+if (!flow34CapturedDataUrl) {
+  throw new Error('Flow 34: generateBoardFile Blob interceptor did not capture downloaded file');
+}
+
+const flow34B64 = flow34CapturedDataUrl.split(',')[1];
+const flow34DownloadedHtml = Buffer.from(flow34B64, 'base64').toString('utf8');
+const flow34Extracted = extractDocumentFromHtml(flow34DownloadedHtml);
+if (!flow34Extracted.valid || !flow34Extracted.document) {
+  throw new Error('Flow 34: Failed to extract valid document from generateBoardFile downloaded HTML');
+}
+
+const reopenedRotDoc = flow34Extracted.document;
+if (!reopenedRotDoc.groups[flow34Result.grp1Id]) {
+  throw new Error('Flow 34: Persisted group missing in reopened rotated document');
+}
+if (!reopenedRotDoc.objects[flow34Result.d1Id] || typeof reopenedRotDoc.objects[flow34Result.d1Id].rotation !== 'number') {
+  throw new Error('Flow 34: Rotated diamond missing or rotation missing in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.eLockedId] || reopenedRotDoc.objects[flow34Result.eLockedId].rotation !== 45) {
+  throw new Error('Flow 34: Locked rotated ellipse missing or rotated in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.rShapeTextId] || reopenedRotDoc.objects[flow34Result.rShapeTextId].text !== 'Updated Shape Text') {
+  throw new Error('Flow 34: Rotated text-bearing shape missing or text corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.cAttachedId] || !reopenedRotDoc.objects[flow34Result.cAttachedId].from?.anchor) {
+  throw new Error('Flow 34: Custom anchor straight connector missing or anchor corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.cCurvedId] || reopenedRotDoc.objects[flow34Result.cCurvedId].routing !== 'curved') {
+  throw new Error('Flow 34: Curved connector missing or routing corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.cElbowId] || reopenedRotDoc.objects[flow34Result.cElbowId].routing !== 'elbow') {
+  throw new Error('Flow 34: Elbow connector missing or routing corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.cFreeId] || !reopenedRotDoc.objects[flow34Result.cFreeId].to?.point) {
+  throw new Error('Flow 34: Free endpoint connector missing or endpoint corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.pOpenId] || reopenedRotDoc.objects[flow34Result.pOpenId].rotation !== 45) {
+  throw new Error('Flow 34: Rotated open path missing or rotation corrupted in reopened document');
+}
+if (!reopenedRotDoc.objects[flow34Result.pClosedId] || reopenedRotDoc.objects[flow34Result.pClosedId].rotation !== 75) {
+  throw new Error('Flow 34: Rotated closed path missing or rotation corrupted in reopened document');
+}
+
+console.log('  ✓ 34a. Single object rotation handle physical drag, 15° Shift snapping, continuous Shift press/release rebase & 1-step undo/redo');
+console.log('  ✓ 34b. Rotated single-object local-axis resize preserving rotation angle theta at non-default camera');
+console.log('  ✓ 34c. Persisted group & ordinary multi-selection shared rotation around visual union center with pre-rotated members, locked member exclusion, straight/curved/elbow connectors, custom anchors & free endpoints with 1-step undo/redo');
+console.log('  ✓ 34d. Rotated open and closed path vertex dragging with zero commit jump & rotation preservation');
+console.log('  ✓ 34e. Rotated standalone text & text-bearing shapes in-place editing aligned with orientation');
+console.log('  ✓ 34f. Precision inverse-rotation hit testing excluding empty AABB corners & locked rotated selection overlay orientation');
+console.log('  ✓ 34g. Gesture cancellation (Escape, mode switch) restoring baseline with 0 extra history entries');
+console.log('  ✓ 34h. Real Save Copy download capture, HTML extraction, and deep document verification of all rotated objects, groups, and connectors on Node.js side');
+console.log('✓ Flow 34: Rotation Foundation verified cleanly!');
+
 console.log('\n✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
@@ -4184,10 +5315,22 @@ console.log('PART 2: TESTING CRITICAL FLOWS IN REAL SAFARI');
 console.log('=============================================================');
 
 console.log('Launching Safari with automated test harness...');
-exec(`open -a Safari "http://127.0.0.1:${port}/sabura-safari.html"`);
+const safariUrl = `http://127.0.0.1:${port}/sabura-safari.html?run=${Date.now()}`;
+try {
+  execSync(`osascript -e 'tell application "Safari" to close (every window whose name contains "Sabura")'`, { stdio: 'ignore' });
+} catch (_) {}
+
+try {
+  execSync(`osascript -e 'tell application "Safari"
+    activate
+    open location "${safariUrl}"
+  end tell'`, { stdio: 'ignore' });
+} catch (_) {
+  exec(`open -a Safari "${safariUrl}"`);
+}
 
 // Wait for Safari callback report
-const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 120 seconds')), 120000));
+const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Safari test timed out after 240 seconds')), 240000));
 const safariData = await Promise.race([safariPromise, timeout]);
 
 console.log('\nSafari Test Results:');

@@ -246,8 +246,13 @@ export function renderObject(doc, obj, isSelected = false) {
   const opacity = obj.opacity !== undefined ? obj.opacity : 1.0;
   const strokeDash = obj.strokeStyle === 'dashed' ? '8,6' : (obj.strokeStyle === 'dotted' ? '3,4' : 'none');
 
+  const rot = (obj.type !== 'connector' && typeof obj.rotation === 'number' && Number.isFinite(obj.rotation)) ? obj.rotation : 0;
+  const cx = (typeof obj.x === 'number' && typeof obj.width === 'number') ? obj.x + obj.width / 2 : 0;
+  const cy = (typeof obj.y === 'number' && typeof obj.height === 'number') ? obj.y + obj.height / 2 : 0;
+  const rotAttr = rot !== 0 ? ` transform="rotate(${rot} ${cx} ${cy})"` : '';
+
   let markup = [];
-  markup.push(`<g id="elem-${obj.id}" data-id="${obj.id}" opacity="${opacity}">`);
+  markup.push(`<g id="elem-${obj.id}" data-id="${obj.id}" opacity="${opacity}"${rotAttr}>`);
 
   if (obj.type === 'connector') {
     const geom = resolveConnectorGeometry(doc, obj);
@@ -380,8 +385,7 @@ export function renderObject(doc, obj, isSelected = false) {
 
   // Lock indicator icon if locked
   if (obj.locked) {
-    const box = getBoundingBox(obj);
-    markup.push(`<g transform="translate(${box.right - 18}, ${box.y + 4})">
+    markup.push(`<g transform="translate(${obj.x + obj.width - 18}, ${obj.y + 4})">
       <rect x="0" y="4" width="12" height="9" rx="2" fill="#868e96" />
       <path d="M 2 4 V 2 A 4 4 0 0 1 10 2 V 4" stroke="#868e96" stroke-width="1.5" fill="none" />
     </g>`);
@@ -461,6 +465,67 @@ export function renderSelectionOverlay(doc, selectedIds) {
     return markup.join('\n');
   }
 
+  // Single spatial object: render oriented selection box aligned to local rotation
+  if (selectedObjects.length === 1 && selectedObjects[0].type !== 'connector') {
+    const obj = selectedObjects[0];
+    const rot = (typeof obj.rotation === 'number' && Number.isFinite(obj.rotation)) ? obj.rotation : 0;
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+    const pad = 4;
+    const bx = obj.x - pad;
+    const by = obj.y - pad;
+    const bw = obj.width + pad * 2;
+    const bh = obj.height + pad * 2;
+
+    const rotAttr = rot !== 0 ? ` transform="rotate(${rot} ${cx} ${cy})"` : '';
+    markup.push(`<g class="selection-single-overlay"${rotAttr}>`);
+
+    // Oriented selection outline
+    markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" class="selection-bounds-rect" pointer-events="none" />`);
+
+    if (!obj.locked) {
+      const handles = [
+        { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
+        { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },
+        { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
+        { id: 'e', x: bx + bw, y: by + bh / 2, cursor: 'ew-resize' },
+        { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
+        { id: 's', x: bx + bw / 2, y: by + bh, cursor: 'ns-resize' },
+        { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' },
+        { id: 'w', x: bx, y: by + bh / 2, cursor: 'ew-resize' }
+      ];
+
+      for (const h of handles) {
+        markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+      }
+
+      // Single object rotation handle + stem above handle 'n'
+      const stemTop = by - 24;
+      const midX = bx + bw / 2;
+      markup.push(`<line x1="${midX}" y1="${by}" x2="${midX}" y2="${stemTop}" stroke="${selStroke}" stroke-width="1.2" pointer-events="none" />`);
+      markup.push(`<g data-handle="rotate" style="cursor: grab;" title="Rotate (Hold Shift to snap to 15°)">
+        <circle cx="${midX}" cy="${stemTop}" r="14" fill="transparent" />
+        <circle cx="${midX}" cy="${stemTop}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" pointer-events="none" />
+      </g>`);
+
+      // If single path object, also render interactive vertex handles at each point
+      if (obj.type === 'path' && Array.isArray(obj.points)) {
+        obj.points.forEach((pt, idx) => {
+          const vx = obj.x + (Array.isArray(pt) ? pt[0] : pt.x);
+          const vy = obj.y + (Array.isArray(pt) ? pt[1] : pt.y);
+          markup.push(`<g data-handle="vertex-${idx}" style="cursor: move;" title="Drag vertex">
+            <circle cx="${vx}" cy="${vy}" r="14" fill="transparent" />
+            <circle cx="${vx}" cy="${vy}" r="5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2" pointer-events="none" />
+          </g>`);
+        });
+      }
+    }
+
+    markup.push('</g>');
+    return markup.join('\n');
+  }
+
+  // Multi-selection: world-aligned bounding box and shared handles
   const unionBox = getUnionBoundingBox(selectedObjects, doc);
   if (!unionBox) return '';
 
@@ -473,27 +538,23 @@ export function renderSelectionOverlay(doc, selectedIds) {
   // Bounding rect: Concepts precision hairline dash with subtle accent wash
   markup.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${selFill}" stroke="${selStroke}" stroke-width="1.2" stroke-dasharray="4,4" class="selection-bounds-rect" pointer-events="none" />`);
 
-  // If multiple objects are selected, render an unobtrusive count badge at the top
-  if (selectedObjects.length > 1) {
-    const countText = `${selectedObjects.length} objects`;
-    const badgeWidth = Math.max(60, countText.length * 7 + 16);
-    const badgeHeight = 20;
-    const badgeX = bx + bw - badgeWidth;
-    const badgeY = by - badgeHeight - 4;
-    markup.push(`
-      <g class="selection-count-badge" pointer-events="none">
-        <rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${badgeHeight}" rx="4" ry="4" fill="${selStroke}" opacity="0.9" />
-        <text x="${badgeX + badgeWidth / 2}" y="${badgeY + 14}" fill="#ffffff" font-size="11" font-weight="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">${countText}</text>
-      </g>
-    `);
-  }
+  // Count badge
+  const countText = `${selectedObjects.length} objects`;
+  const badgeWidth = Math.max(60, countText.length * 7 + 16);
+  const badgeHeight = 20;
+  const badgeX = bx + bw - badgeWidth;
+  const badgeY = by - badgeHeight - 4;
+  markup.push(`
+    <g class="selection-count-badge" pointer-events="none">
+      <rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${badgeHeight}" rx="4" ry="4" fill="${selStroke}" opacity="0.9" />
+      <text x="${badgeX + badgeWidth / 2}" y="${badgeY + 14}" fill="#ffffff" font-size="11" font-weight="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">${countText}</text>
+    </g>
+  `);
 
-  // Render 8 resize handles for single unlocked spatial object or multi-selection containing unlocked spatial objects
+  // Render 8 resize handles and 1 rotation handle for unlocked spatial objects
   const resizableObjects = selectedObjects.filter(o => o && o.type !== 'connector' && !o.locked);
   if (resizableObjects.length > 0) {
-    const transformBox = (selectedObjects.length === 1 && !selectedObjects[0].locked)
-      ? unionBox
-      : getUnionBoundingBox(resizableObjects, doc);
+    const transformBox = getUnionBoundingBox(resizableObjects, doc);
 
     if (transformBox) {
       const hbx = transformBox.x - pad;
@@ -515,19 +576,15 @@ export function renderSelectionOverlay(doc, selectedIds) {
       for (const h of handles) {
         markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
       }
-    }
 
-    // If single path object, also render interactive vertex handles at each point
-    if (selectedObjects.length === 1 && selectedObjects[0].type === 'path' && Array.isArray(selectedObjects[0].points) && !selectedObjects[0].locked) {
-      const pObj = selectedObjects[0];
-      pObj.points.forEach((pt, idx) => {
-        const vx = pObj.x + (Array.isArray(pt) ? pt[0] : pt.x);
-        const vy = pObj.y + (Array.isArray(pt) ? pt[1] : pt.y);
-        markup.push(`<g data-handle="vertex-${idx}" style="cursor: move;" title="Drag vertex">
-          <circle cx="${vx}" cy="${vy}" r="14" fill="transparent" />
-          <circle cx="${vx}" cy="${vy}" r="5" fill="${handleFill}" stroke="${selStroke}" stroke-width="2" pointer-events="none" />
-        </g>`);
-      });
+      // Shared rotation handle + stem above handle 'n' of transform box
+      const stemTop = hby - 24;
+      const midX = hbx + hbw / 2;
+      markup.push(`<line x1="${midX}" y1="${hby}" x2="${midX}" y2="${stemTop}" stroke="${selStroke}" stroke-width="1.2" pointer-events="none" />`);
+      markup.push(`<g data-handle="rotate" style="cursor: grab;" title="Rotate selection (Hold Shift to snap to 15°)">
+        <circle cx="${midX}" cy="${stemTop}" r="14" fill="transparent" />
+        <circle cx="${midX}" cy="${stemTop}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" pointer-events="none" />
+      </g>`);
     }
   }
 
