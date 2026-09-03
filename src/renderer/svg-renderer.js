@@ -239,7 +239,7 @@ export function renderSvgScene(doc, runtime) {
  */
 export function renderObject(doc, obj, isSelected = false) {
   const isSketch = (obj.roughness !== undefined ? obj.roughness : 1) > 0;
-  const strokeWidth = obj.strokeWidth || 2;
+  const strokeWidth = obj.strokeWidth !== undefined ? obj.strokeWidth : 2;
   const baseStroke = obj.stroke || '#1e1e1e';
   const stroke = resolveContrastColor(baseStroke, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
   const fill = obj.fill || 'none';
@@ -306,10 +306,12 @@ export function renderObject(doc, obj, isSelected = false) {
       }
     }
 
-    // Stroke path (sketchy or clean)
-    const strokePath = generateSketchPath(obj);
-    if (strokePath) {
-      markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+    // Stroke path (sketchy or clean) - only render if strokeWidth > 0
+    if (strokeWidth > 0) {
+      const strokePath = generateSketchPath(obj);
+      if (strokePath) {
+        markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+      }
     }
 
     // Arrowheads for open paths (lines)
@@ -331,10 +333,10 @@ export function renderObject(doc, obj, isSelected = false) {
       const prY = obj.y + (Array.isArray(pPrev) ? pPrev[1] : pPrev.y);
 
       if (obj.startArrow) {
-        markup.push(renderArrowhead(fX, fY, sX, sY, 14, stroke, strokeWidth, isSketch));
+        markup.push(renderArrowhead(fX, fY, sX, sY, 14, stroke, strokeWidth > 0 ? strokeWidth : 2, isSketch));
       }
       if (obj.endArrow) {
-        markup.push(renderArrowhead(lX, lY, prX, prY, 14, stroke, strokeWidth, isSketch));
+        markup.push(renderArrowhead(lX, lY, prX, prY, 14, stroke, strokeWidth > 0 ? strokeWidth : 2, isSketch));
       }
     }
 
@@ -390,7 +392,7 @@ export function renderObject(doc, obj, isSelected = false) {
 }
 
 /**
- * Renders selection bounding box, group boundaries, and 8 resize handles.
+ * Renders selection handles, bounding boxes, and precision alignment overlay for the selected objects.
  */
 export function renderSelectionOverlay(doc, selectedIds) {
   const selectedObjects = selectedIds.map(id => doc.objects[id]).filter(Boolean);
@@ -486,28 +488,37 @@ export function renderSelectionOverlay(doc, selectedIds) {
     `);
   }
 
-  // Only render 8 resize handles if single unlocked object
-  const isSingle = selectedObjects.length === 1;
-  const isLocked = selectedObjects.some(o => o.locked);
+  // Render 8 resize handles for single unlocked spatial object or multi-selection containing unlocked spatial objects
+  const resizableObjects = selectedObjects.filter(o => o && o.type !== 'connector' && !o.locked);
+  if (resizableObjects.length > 0) {
+    const transformBox = (selectedObjects.length === 1 && !selectedObjects[0].locked)
+      ? unionBox
+      : getUnionBoundingBox(resizableObjects, doc);
 
-  if (isSingle && !isLocked) {
-    const handles = [
-      { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
-      { id: 'n', x: bx + bw / 2, y: by, cursor: 'ns-resize' },
-      { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
-      { id: 'e', x: bx + bw, y: by + bh / 2, cursor: 'ew-resize' },
-      { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
-      { id: 's', x: bx + bw / 2, y: by + bh, cursor: 'ns-resize' },
-      { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' },
-      { id: 'w', x: bx, y: by + bh / 2, cursor: 'ew-resize' }
-    ];
+    if (transformBox) {
+      const hbx = transformBox.x - pad;
+      const hby = transformBox.y - pad;
+      const hbw = transformBox.width + pad * 2;
+      const hbh = transformBox.height + pad * 2;
 
-    for (const h of handles) {
-      markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+      const handles = [
+        { id: 'nw', x: hbx, y: hby, cursor: 'nwse-resize' },
+        { id: 'n', x: hbx + hbw / 2, y: hby, cursor: 'ns-resize' },
+        { id: 'ne', x: hbx + hbw, y: hby, cursor: 'nesw-resize' },
+        { id: 'e', x: hbx + hbw, y: hby + hbh / 2, cursor: 'ew-resize' },
+        { id: 'se', x: hbx + hbw, y: hby + hbh, cursor: 'nwse-resize' },
+        { id: 's', x: hbx + hbw / 2, y: hby + hbh, cursor: 'ns-resize' },
+        { id: 'sw', x: hbx, y: hby + hbh, cursor: 'nesw-resize' },
+        { id: 'w', x: hbx, y: hby + hbh / 2, cursor: 'ew-resize' }
+      ];
+
+      for (const h of handles) {
+        markup.push(`<circle cx="${h.x}" cy="${h.y}" r="4.5" fill="${handleFill}" stroke="${handleStroke}" stroke-width="1.8" data-handle="${h.id}" style="cursor: ${h.cursor};" />`);
+      }
     }
 
     // If single path object, also render interactive vertex handles at each point
-    if (selectedObjects[0].type === 'path' && Array.isArray(selectedObjects[0].points)) {
+    if (selectedObjects.length === 1 && selectedObjects[0].type === 'path' && Array.isArray(selectedObjects[0].points) && !selectedObjects[0].locked) {
       const pObj = selectedObjects[0];
       pObj.points.forEach((pt, idx) => {
         const vx = pObj.x + (Array.isArray(pt) ? pt[0] : pt.x);

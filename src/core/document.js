@@ -87,7 +87,9 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
   const id = overrides.id || generateId(type.slice(0, 4));
   const seed = overrides.seed !== undefined ? overrides.seed : generateSeed();
   const fontSizeToken = overrides.textStyle?.size || safeTheme.defaultFontSize;
-  const resolvedSize = FONT_SIZES[fontSizeToken] || 20;
+  const resolvedSize = overrides.textStyle?.resolvedSize !== undefined
+    ? overrides.textStyle.resolvedSize
+    : (FONT_SIZES[fontSizeToken] || 20);
 
   let defaultWidth = type === 'text' ? 80 : 160;
   let defaultHeight = type === 'text' ? 32 : 100;
@@ -148,9 +150,10 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     }
   }
 
-  // Preserve any additional fields for custom namespaces
+  // Preserve valid type-specific fields or custom namespaces from overrides
+  const allowed = getAllowedFieldsForType(type);
   for (const [key, value] of Object.entries(overrides)) {
-    if (!(key in baseObject)) {
+    if (key.startsWith('ext:') || (allowed.has(key) && !(key in baseObject))) {
       baseObject[key] = value;
     }
   }

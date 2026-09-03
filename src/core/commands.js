@@ -3,7 +3,18 @@
  */
 
 import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS } from './types.js';
-import { cloneDocument, generateId, generateSeed } from './document.js';
+import {
+  cloneDocument,
+  generateId,
+  generateSeed,
+  validateDocument,
+  CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS,
+  CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS,
+  CONNECTOR_ANCHOR_ALLOWED_FIELDS,
+  CONNECTOR_POINT_ALLOWED_FIELDS,
+  TEXT_STYLE_ALLOWED_FIELDS,
+  PATH_POINT_ALLOWED_FIELDS
+} from './document.js';
 import { alignObjects, distributeObjects, measureText, resolveConnectorGeometry } from './geometry.js';
 
 export const SUPPORTED_COMMAND_TYPES = new Set([
@@ -21,6 +32,13 @@ export const SUPPORTED_COMMAND_TYPES = new Set([
   'reorder_objects',
   'align_objects',
   'distribute_objects',
+  'restore_positions',
+  'restore_styles',
+  'restore_typography',
+  'restore_order',
+  'restore_groups',
+  'restore_ungroup',
+  'connect_objects',
   'reconnect_connector',
   'configure_connector',
   'configure_connector_endpoints',
@@ -33,12 +51,13 @@ export const SUPPORTED_COMMAND_TYPES = new Set([
 ]);
 
 /**
- * Validates an individual command structure.
- * Rejects unknown command types with a descriptive error.
+ * Validates an individual command structure against canonical constraints.
+ * Rejects unknown command types, invalid coordinates, invalid styles, and structural mismatches.
  * @param {any} cmd
+ * @param {Object} [doc] Optional document context for document-aware target validation
  * @returns {{ valid: boolean, errors: string[] }}
  */
-export function validateCommand(cmd) {
+export function validateCommand(cmd, doc = null) {
   const errors = [];
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) {
     return { valid: false, errors: ['Command must be an object'] };
@@ -52,6 +71,150 @@ export function validateCommand(cmd) {
     return { valid: false, errors };
   }
 
+  const isValidFinite = (n) => typeof n === 'number' && Number.isFinite(n);
+  const isValidPoint = (pt) => {
+    if (!pt || typeof pt !== 'object' || Array.isArray(pt)) return false;
+    return isValidFinite(pt.x) && isValidFinite(pt.y);
+  };
+
+  const validatePointsList = (points, name) => {
+    if (!Array.isArray(points) || points.length < 2) {
+      errors.push(`${name} must be an array of at least 2 points`);
+      return;
+    }
+    for (let i = 0; i < points.length; i++) {
+      const pt = points[i];
+      if (Array.isArray(pt)) {
+        if (pt.length < 2 || !isValidFinite(pt[0]) || !isValidFinite(pt[1])) {
+          errors.push(`${name}[${i}] must have valid finite numeric coordinates [x, y]`);
+        }
+      } else if (pt && typeof pt === 'object') {
+        for (const k of Object.keys(pt)) {
+          if (!PATH_POINT_ALLOWED_FIELDS.has(k) && !k.startsWith('ext:')) {
+            errors.push(`Unknown property "${k}" on ${name}[${i}]`);
+          }
+        }
+        if (!isValidFinite(pt.x) || !isValidFinite(pt.y)) {
+          errors.push(`${name}[${i}] must have finite numeric coordinates`);
+        }
+      } else {
+        errors.push(`${name}[${i}] must be a valid point object or coordinate pair`);
+      }
+    }
+  };
+
+  const validateBounds = (bounds, name) => {
+    if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)) {
+      errors.push(`${name} requires a bounds object`);
+      return;
+    }
+    if (!isValidFinite(bounds.x) || !isValidFinite(bounds.y)) {
+      errors.push(`${name} bounds must have finite numeric x and y`);
+    }
+    if (!isValidFinite(bounds.width) || bounds.width < 0 || !isValidFinite(bounds.height) || bounds.height < 0) {
+      errors.push(`${name} bounds must have non-negative finite numeric width and height`);
+    }
+  };
+
+  const validateTextStylePayload = (textStyle, name) => {
+    if (!textStyle || typeof textStyle !== 'object' || Array.isArray(textStyle)) {
+      errors.push(`${name} must be an object`);
+      return;
+    }
+    for (const key of Object.keys(textStyle)) {
+      if (!TEXT_STYLE_ALLOWED_FIELDS.has(key) && !key.startsWith('ext:')) {
+        errors.push(`Unknown property "${key}" on ${name}`);
+      }
+    }
+    if (textStyle.size !== undefined && !['s', 'm', 'l', 'xl'].includes(textStyle.size)) {
+      errors.push(`${name}.size must be one of: s, m, l, xl`);
+    }
+    if (textStyle.resolvedSize !== undefined) {
+      if (!isValidFinite(textStyle.resolvedSize) || textStyle.resolvedSize <= 0) {
+        errors.push(`${name}.resolvedSize must be a finite positive number`);
+      }
+    }
+    if (textStyle.fontFamily !== undefined && !['hand', 'sans', 'serif', 'mono'].includes(textStyle.fontFamily)) {
+      errors.push(`${name}.fontFamily must be one of: hand, sans, serif, mono`);
+    }
+    if (textStyle.bold !== undefined && typeof textStyle.bold !== 'boolean') {
+      errors.push(`${name}.bold must be a boolean`);
+    }
+    if (textStyle.align !== undefined && !['left', 'center', 'right'].includes(textStyle.align)) {
+      errors.push(`${name}.align must be one of: left, center, right`);
+    }
+    if (textStyle.color !== undefined && typeof textStyle.color !== 'string') {
+      errors.push(`${name}.color must be a string`);
+    }
+  };
+
+  const validateEndpoint = (endpoint, name) => {
+    if (!endpoint || typeof endpoint !== 'object' || Array.isArray(endpoint)) {
+      errors.push(`${name} must be a valid endpoint object`);
+      return;
+    }
+    const hasId = typeof endpoint.id === 'string' && endpoint.id.trim().length > 0;
+    const hasPoint = endpoint.point !== undefined;
+
+    if (hasId && hasPoint) {
+      errors.push(`${name} must not specify both "id" and "point"`);
+      return;
+    } else if (!hasId && !hasPoint) {
+      errors.push(`${name} must specify either "id" or "point"`);
+      return;
+    }
+
+    if (hasId) {
+      for (const k of Object.keys(endpoint)) {
+        if (!CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS.has(k) && !k.startsWith('ext:')) {
+          errors.push(`Unknown property "${k}" on ${name}`);
+        }
+      }
+      if (endpoint.anchor !== undefined) {
+        if (!endpoint.anchor || typeof endpoint.anchor !== 'object' || Array.isArray(endpoint.anchor)) {
+          errors.push(`${name}.anchor must be an object`);
+        } else {
+          for (const k of Object.keys(endpoint.anchor)) {
+            if (!CONNECTOR_ANCHOR_ALLOWED_FIELDS.has(k) && !k.startsWith('ext:')) {
+              errors.push(`Unknown property "${k}" on ${name}.anchor`);
+            }
+          }
+          if (!isValidFinite(endpoint.anchor.x) || !isValidFinite(endpoint.anchor.y) ||
+              endpoint.anchor.x < 0 || endpoint.anchor.x > 1 || endpoint.anchor.y < 0 || endpoint.anchor.y > 1) {
+            errors.push(`${name}.anchor coordinates must be finite numbers between 0 and 1`);
+          }
+        }
+      }
+      if (doc && doc.objects) {
+        const targetObj = doc.objects[endpoint.id];
+        if (!targetObj) {
+          errors.push(`${name} references non-existent object ID "${endpoint.id}"`);
+        } else if (targetObj.type === 'connector') {
+          errors.push(`${name} cannot attach to another connector "${endpoint.id}"`);
+        }
+      }
+    } else if (hasPoint) {
+      for (const k of Object.keys(endpoint)) {
+        if (!CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS.has(k) && !k.startsWith('ext:')) {
+          errors.push(`Unknown property "${k}" on ${name}`);
+        }
+      }
+      const pt = endpoint.point;
+      if (!pt || typeof pt !== 'object' || Array.isArray(pt)) {
+        errors.push(`${name}.point must be an object with { x, y }`);
+      } else {
+        for (const k of Object.keys(pt)) {
+          if (!CONNECTOR_POINT_ALLOWED_FIELDS.has(k) && !k.startsWith('ext:')) {
+            errors.push(`Unknown property "${k}" on ${name}.point`);
+          }
+        }
+        if (!isValidFinite(pt.x) || !isValidFinite(pt.y)) {
+          errors.push(`${name}.point must have finite numeric coordinates`);
+        }
+      }
+    }
+  };
+
   // Type-specific field validations
   if (cmd.type === 'create_object') {
     if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object)) {
@@ -63,36 +226,54 @@ export function validateCommand(cmd) {
     }
   } else if (cmd.type === 'move_objects') {
     if (!Array.isArray(cmd.ids)) errors.push('move_objects requires an array of ids');
-    if (typeof cmd.dx !== 'number' || typeof cmd.dy !== 'number') {
+    if (!isValidFinite(cmd.dx) || !isValidFinite(cmd.dy)) {
       errors.push('move_objects requires numeric dx and dy deltas');
     }
   } else if (cmd.type === 'resize_object') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('resize_object requires a string id');
-    if (!cmd.bounds || typeof cmd.bounds !== 'object') errors.push('resize_object requires a bounds object');
+    validateBounds(cmd.bounds, 'resize_object');
+    if (cmd.points !== undefined && cmd.points !== null) {
+      validatePointsList(cmd.points, 'resize_object points');
+      if (doc && doc.objects && doc.objects[cmd.id] && doc.objects[cmd.id].type !== 'path') {
+        errors.push(`Cannot apply path points to non-path object "${cmd.id}" of type "${doc.objects[cmd.id].type}"`);
+      }
+    }
+    if (cmd.textStyle !== undefined && cmd.textStyle !== null) {
+      validateTextStylePayload(cmd.textStyle, 'resize_object textStyle');
+    }
+    if (cmd.restoreTextStyle !== undefined && cmd.restoreTextStyle !== null) {
+      validateTextStylePayload(cmd.restoreTextStyle, 'resize_object restoreTextStyle');
+    }
   } else if (cmd.type === 'set_text') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_text requires a string id');
     if (typeof cmd.text !== 'string') errors.push('set_text requires string text');
   } else if (cmd.type === 'configure_connector') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector requires a string id');
+  } else if (cmd.type === 'configure_connector_endpoints') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector_endpoints requires a string id');
+    validateEndpoint(cmd.from, 'configure_connector_endpoints from');
+    validateEndpoint(cmd.to, 'configure_connector_endpoints to');
   } else if (cmd.type === 'reconnect_connector') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('reconnect_connector requires a string id');
     if (cmd.endpoint !== 'from' && cmd.endpoint !== 'to') errors.push('reconnect_connector endpoint must be "from" or "to"');
-    if (!cmd.target || typeof cmd.target !== 'object') errors.push('reconnect_connector requires a target object');
-    else if (!cmd.target.id && !cmd.target.point) errors.push('reconnect_connector target must specify an id or point');
-    if (cmd.target?.anchor && (typeof cmd.target.anchor.x !== 'number' || typeof cmd.target.anchor.y !== 'number')) {
-      errors.push('reconnect_connector target.anchor must have numeric x and y');
-    }
+    validateEndpoint(cmd.target, 'reconnect_connector target');
   } else if (cmd.type === 'set_board_theme') {
     if (!cmd.theme && !cmd.themeId) errors.push('set_board_theme requires theme or themeId');
   } else if (cmd.type === 'update_path_points') {
-    if (!cmd.id) errors.push('update_path_points requires an id');
-    if (!Array.isArray(cmd.points)) errors.push('update_path_points requires an array of points');
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('update_path_points requires a string id');
+    validatePointsList(cmd.points, 'update_path_points points');
+    if (cmd.bounds !== undefined && cmd.bounds !== null) {
+      validateBounds(cmd.bounds, 'update_path_points bounds');
+    }
+    if (doc && doc.objects && doc.objects[cmd.id] && doc.objects[cmd.id].type !== 'path') {
+      errors.push(`Cannot update path points on non-path object "${cmd.id}" of type "${doc.objects[cmd.id].type}"`);
+    }
   } else if (cmd.type === 'batch') {
     if (!Array.isArray(cmd.commands)) {
       errors.push('batch requires an array of commands');
     } else {
       for (let i = 0; i < cmd.commands.length; i++) {
-        const sub = validateCommand(cmd.commands[i]);
+        const sub = validateCommand(cmd.commands[i], doc);
         if (!sub.valid) {
           errors.push(`batch command [${i}]: ${sub.errors.join(', ')}`);
         }
@@ -132,6 +313,14 @@ function contrastRatio(hex1, hex2) {
  * @returns {{ doc: Object, inverseCmd: Object }}
  */
 export function applyCommand(doc, cmd) {
+  const val = validateCommand(cmd, doc);
+  if (!val.valid) {
+    if (!cmd || typeof cmd !== 'object' || !SUPPORTED_COMMAND_TYPES.has(cmd.type)) {
+      throw new Error(`Unsupported command type: "${cmd?.type}". ${val.errors.join(', ')}`);
+    }
+    throw new Error(`Command validation failed for ${cmd?.type || 'unknown'}: ${val.errors.join(', ')}`);
+  }
+
   const newDoc = cloneDocument(doc);
 
   switch (cmd.type) {
@@ -344,20 +533,42 @@ export function applyCommand(doc, cmd) {
 
     case 'resize_object': {
       const obj = newDoc.objects[cmd.id];
-      if (!obj || obj.locked) {
+      if (!obj) {
+        throw new Error(`Cannot resize non-existent object "${cmd.id}"`);
+      }
+      if (obj.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      if (cmd.points !== undefined && cmd.points !== null && obj.type !== 'path') {
+        throw new Error(`Cannot apply path points to non-path object "${cmd.id}" of type "${obj.type}"`);
       }
 
       const prevBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
       const prevTextStyle = obj.textStyle ? cloneDocument(obj.textStyle) : null;
+      const prevPoints = obj.type === 'path' && Array.isArray(obj.points) ? cloneDocument(obj.points) : null;
 
       obj.x = cmd.bounds.x !== undefined ? cmd.bounds.x : obj.x;
       obj.y = cmd.bounds.y !== undefined ? cmd.bounds.y : obj.y;
       obj.width = Math.max(MIN_OBJECT_SIZE, cmd.bounds.width !== undefined ? cmd.bounds.width : obj.width);
       obj.height = Math.max(MIN_OBJECT_SIZE, cmd.bounds.height !== undefined ? cmd.bounds.height : obj.height);
 
-      if (cmd.restoreTextStyle) {
-        obj.textStyle = cloneDocument(cmd.restoreTextStyle);
+      if (cmd.points && Array.isArray(cmd.points)) {
+        obj.points = cloneDocument(cmd.points);
+      } else if (obj.type === 'path' && Array.isArray(obj.points) && prevBounds.width > 0 && prevBounds.height > 0) {
+        const scaleX = obj.width / prevBounds.width;
+        const scaleY = obj.height / prevBounds.height;
+        obj.points = obj.points.map(pt => {
+          const px = Array.isArray(pt) ? pt[0] : pt.x;
+          const py = Array.isArray(pt) ? pt[1] : pt.y;
+          return {
+            x: Math.round(px * scaleX),
+            y: Math.round(py * scaleY)
+          };
+        });
+      }
+
+      if (cmd.textStyle || cmd.restoreTextStyle) {
+        obj.textStyle = cloneDocument(cmd.textStyle || cmd.restoreTextStyle);
       } else if (cmd.scaleText && obj.textStyle && prevBounds.width > 0 && prevBounds.height > 0) {
         const scaleX = obj.width / prevBounds.width;
         const scaleY = obj.height / prevBounds.height;
@@ -380,6 +591,9 @@ export function applyCommand(doc, cmd) {
         scaleText: false,
         restoreTextStyle: prevTextStyle
       };
+      if (prevPoints) {
+        inverseCmd.points = prevPoints;
+      }
 
       return { doc: newDoc, inverseCmd };
     }
@@ -500,7 +714,8 @@ export function applyCommand(doc, cmd) {
           curveStyle: obj.curveStyle,
           closed: obj.closed,
           startArrow: obj.startArrow,
-          endArrow: obj.endArrow
+          endArrow: obj.endArrow,
+          textStyle: obj.textStyle ? cloneDocument(obj.textStyle) : null
         };
 
         if (cmd.updates.fill !== undefined) obj.fill = cmd.updates.fill;
@@ -514,9 +729,14 @@ export function applyCommand(doc, cmd) {
         if (cmd.updates.startArrow !== undefined) obj.startArrow = cmd.updates.startArrow;
         if (cmd.updates.endArrow !== undefined) obj.endArrow = cmd.updates.endArrow;
 
-        // If stroke is changed and textStyle color matches previous stroke, update text color
-        if (cmd.updates.stroke !== undefined && obj.textStyle && obj.textStyle.color === prevStyles[id].stroke) {
-          obj.textStyle.color = cmd.updates.stroke;
+        // If stroke is changed, update text color reliably for standalone text and shapes matching prior stroke
+        if (cmd.updates.stroke !== undefined) {
+          if (obj.type === 'text') {
+            if (!obj.textStyle) obj.textStyle = {};
+            obj.textStyle.color = cmd.updates.stroke;
+          } else if (obj.textStyle && obj.textStyle.color === prevStyles[id].stroke) {
+            obj.textStyle.color = cmd.updates.stroke;
+          }
         }
       }
 
@@ -543,9 +763,15 @@ export function applyCommand(doc, cmd) {
           curveStyle: obj.curveStyle,
           closed: obj.closed,
           startArrow: obj.startArrow,
-          endArrow: obj.endArrow
+          endArrow: obj.endArrow,
+          textStyle: obj.textStyle ? cloneDocument(obj.textStyle) : null
         };
-        Object.assign(obj, style);
+        const { textStyle, ...rest } = style;
+        Object.assign(obj, rest);
+        if (textStyle !== undefined) {
+          if (textStyle) obj.textStyle = cloneDocument(textStyle);
+          else delete obj.textStyle;
+        }
       }
       return { doc: newDoc, inverseCmd: { type: 'restore_styles', styles: prevStyles } };
     }
@@ -771,8 +997,23 @@ export function applyCommand(doc, cmd) {
 
     case 'reconnect_connector': {
       const conn = newDoc.objects[cmd.id];
-      if (!conn || conn.type !== 'connector' || conn.locked) {
+      if (!conn) {
+        throw new Error(`Cannot reconnect non-existent connector "${cmd.id}"`);
+      }
+      if (conn.type !== 'connector') {
+        throw new Error(`Object "${cmd.id}" is not a connector`);
+      }
+      if (conn.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      if (cmd.target?.id) {
+        const target = newDoc.objects[cmd.target.id];
+        if (!target) {
+          throw new Error(`Target object "${cmd.target.id}" for connector "${cmd.id}" not found`);
+        }
+        if (target.type === 'connector') {
+          throw new Error(`Connector "${cmd.id}" cannot attach to another connector "${cmd.target.id}"`);
+        }
       }
       const endpoint = cmd.endpoint; // 'from' | 'to'
       const prevTarget = cloneDocument(conn[endpoint]);
@@ -789,7 +1030,13 @@ export function applyCommand(doc, cmd) {
 
     case 'configure_connector': {
       const conn = newDoc.objects[cmd.id];
-      if (!conn || conn.type !== 'connector' || conn.locked) {
+      if (!conn) {
+        throw new Error(`Cannot configure non-existent connector "${cmd.id}"`);
+      }
+      if (conn.type !== 'connector') {
+        throw new Error(`Object "${cmd.id}" is not a connector`);
+      }
+      if (conn.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
       const prevConfig = {
@@ -826,8 +1073,32 @@ export function applyCommand(doc, cmd) {
 
     case 'configure_connector_endpoints': {
       const conn = newDoc.objects[cmd.id];
-      if (!conn || conn.type !== 'connector') {
+      if (!conn) {
+        throw new Error(`Cannot configure endpoints on non-existent connector "${cmd.id}"`);
+      }
+      if (conn.type !== 'connector') {
+        throw new Error(`Object "${cmd.id}" is not a connector`);
+      }
+      if (conn.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      if (cmd.from?.id) {
+        const target = newDoc.objects[cmd.from.id];
+        if (!target) {
+          throw new Error(`Target object "${cmd.from.id}" for connector "${cmd.id}" from endpoint not found`);
+        }
+        if (target.type === 'connector') {
+          throw new Error(`Connector "${cmd.id}" cannot attach to another connector "${cmd.from.id}"`);
+        }
+      }
+      if (cmd.to?.id) {
+        const target = newDoc.objects[cmd.to.id];
+        if (!target) {
+          throw new Error(`Target object "${cmd.to.id}" for connector "${cmd.id}" to endpoint not found`);
+        }
+        if (target.type === 'connector') {
+          throw new Error(`Connector "${cmd.id}" cannot attach to another connector "${cmd.to.id}"`);
+        }
       }
       const prevFrom = cloneDocument(conn.from);
       const prevTo = cloneDocument(conn.to);
@@ -847,27 +1118,40 @@ export function applyCommand(doc, cmd) {
 
     case 'update_path_points': {
       const obj = newDoc.objects[cmd.id];
-      if (!obj || obj.type !== 'path' || obj.locked) {
+      if (!obj) {
+        throw new Error(`Cannot update path points on non-existent object "${cmd.id}"`);
+      }
+      if (obj.type !== 'path') {
+        throw new Error(`Cannot update path points on non-path object "${cmd.id}" of type "${obj.type}"`);
+      }
+      if (obj.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
+
       const prevPoints = cloneDocument(obj.points);
       const prevBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+
       obj.points = cloneDocument(cmd.points);
       if (cmd.bounds) {
-        obj.x = cmd.bounds.x;
-        obj.y = cmd.bounds.y;
-        obj.width = cmd.bounds.width;
-        obj.height = cmd.bounds.height;
+        obj.x = cmd.bounds.x !== undefined ? cmd.bounds.x : obj.x;
+        obj.y = cmd.bounds.y !== undefined ? cmd.bounds.y : obj.y;
+        obj.width = Math.max(MIN_OBJECT_SIZE, cmd.bounds.width !== undefined ? cmd.bounds.width : obj.width);
+        obj.height = Math.max(MIN_OBJECT_SIZE, cmd.bounds.height !== undefined ? cmd.bounds.height : obj.height);
       }
-      return {
-        doc: newDoc,
-        inverseCmd: {
-          type: 'update_path_points',
-          id: cmd.id,
-          points: prevPoints,
-          bounds: prevBounds
-        }
+
+      const inverseCmd = {
+        type: 'update_path_points',
+        id: cmd.id,
+        points: prevPoints,
+        bounds: prevBounds
       };
+      return { doc: newDoc, inverseCmd };
+    }
+
+    case 'set_title': {
+      const prevTitle = newDoc.title;
+      newDoc.title = typeof cmd.title === 'string' ? cmd.title : newDoc.title;
+      return { doc: newDoc, inverseCmd: { type: 'set_title', title: prevTitle } };
     }
 
     case 'set_board_theme': {
@@ -957,22 +1241,8 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'batch': {
-      const commands = cmd.commands || [];
-      const inverseList = [];
-      let currentDoc = newDoc;
-      for (const subCmd of commands) {
-        const result = applyCommand(currentDoc, subCmd);
-        currentDoc = result.doc;
-        if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
-          inverseList.push(result.inverseCmd);
-        }
-      }
-      inverseList.reverse();
-      const inverseCmd = {
-        type: 'batch',
-        commands: inverseList
-      };
-      return { doc: currentDoc, inverseCmd };
+      const batchResult = applyCommandBatch(newDoc, cmd.commands || []);
+      return { doc: batchResult.doc, inverseCmd: batchResult.inverseCmd };
     }
 
     case 'noop':
@@ -985,7 +1255,7 @@ export function applyCommand(doc, cmd) {
 
 /**
  * Applies a batch of commands sequentially and atomically.
- * Validates all commands first and rolls back completely on any error.
+ * Validates all commands and document transitions first and rolls back completely on any error.
  * @param {Object} doc
  * @param {Array<Object>} commands
  * @returns {{ doc: Object, inverseBatch: Object }}
@@ -995,28 +1265,33 @@ export function applyCommandBatch(doc, commands) {
     throw new Error('Commands must be an array');
   }
 
-  // Validate all commands upfront
+  // 1. Dry run simulation to validate document-dependent transitions
+  let simDoc = cloneDocument(doc);
   for (let i = 0; i < commands.length; i++) {
-    const val = validateCommand(commands[i]);
+    const subCmd = commands[i];
+    const val = validateCommand(subCmd, simDoc);
     if (!val.valid) {
-      throw new Error(`Validation failed for command [${i}] (${commands[i]?.type || 'unknown'}): ${val.errors.join(', ')}`);
+      throw new Error(`Validation failed for command [${i}] (${subCmd?.type || 'unknown'}): ${val.errors.join(', ')}`);
     }
+    const simRes = applyCommand(simDoc, subCmd);
+    simDoc = simRes.doc;
   }
 
+  const finalVal = validateDocument(simDoc);
+  if (!finalVal.valid) {
+    throw new Error(`Batch execution failed: resulting document is invalid: ${finalVal.errors.join(', ')}`);
+  }
+
+  // 2. Real application on clean clone
   const initialClone = cloneDocument(doc);
   const inverseList = [];
   let currentDoc = initialClone;
 
   for (let i = 0; i < commands.length; i++) {
-    try {
-      const result = applyCommand(currentDoc, commands[i]);
-      currentDoc = result.doc;
-      if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
-        inverseList.push(result.inverseCmd);
-      }
-    } catch (err) {
-      // Abort without mutation
-      throw new Error(`Batch execution failed at command [${i}] (${commands[i]?.type || 'unknown'}): ${err.message}`);
+    const result = applyCommand(currentDoc, commands[i]);
+    currentDoc = result.doc;
+    if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
+      inverseList.push(result.inverseCmd);
     }
   }
 

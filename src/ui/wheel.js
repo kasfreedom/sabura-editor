@@ -47,14 +47,35 @@ function isDarkColor(hex) {
   return luma < 140;
 }
 
-function getStrokeWidthItems(curWidth = 2) {
+function getStrokeWidthItems(curWidth = 2, obj = null) {
   const w = curWidth !== undefined && curWidth !== null ? curWidth : 2;
-  return [
+  const items = [];
+
+  // No outline (0px) is offered for closed shapes/paths only if another visible part remains (non-none fill or text)
+  let canHaveNoOutline = false;
+  if (obj) {
+    const isClosedShape = ['rectangle', 'ellipse', 'diamond', 'triangle'].includes(obj.type) || (obj.type === 'path' && Boolean(obj.closed));
+    if (isClosedShape) {
+      const hasFill = Boolean(obj.fill && obj.fill !== 'none');
+      const hasText = Boolean(obj.text && obj.text.trim().length > 0);
+      if (hasFill || hasText) {
+        canHaveNoOutline = true;
+      }
+    }
+  }
+
+  if (canHaveNoOutline) {
+    items.push({ id: 'width_0', label: 'No outline', value: 0, isActive: w === 0 });
+  }
+
+  items.push(
     { id: 'width_1', label: '1px', value: 1, isActive: w === 1 },
     { id: 'width_2', label: '2px', value: 2, isActive: w === 2 },
     { id: 'width_4', label: '4px', value: 4, isActive: w === 4 },
     { id: 'width_6', label: '6px', value: 6, isActive: w >= 6 }
-  ];
+  );
+
+  return items;
 }
 
 export class ToolWheel {
@@ -251,7 +272,7 @@ export class ToolWheel {
       { id: 'menu_shape', label: 'Shape', icon: '◇', subItems: shapeSub, thirdItems: shapeActions },
       dupItem,
       { id: 'menu_order', label: 'Arrange', icon: '≡', subItems: orderSub },
-      { id: 'menu_style', label: 'Style', icon: '✎', subItems: styleSub, thirdItems: getStrokeWidthItems(curStrokeWidth) },
+      { id: 'menu_style', label: 'Style', icon: '✎', subItems: styleSub, thirdItems: getStrokeWidthItems(curStrokeWidth, shape) },
       { id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub },
       delItem
     ];
@@ -429,8 +450,87 @@ export class ToolWheel {
       toggleItem,
       dupItem,
       { id: 'menu_order', label: 'Arrange', icon: '≡', subItems: orderSub },
-      { id: 'menu_style', label: 'Style', icon: '✎', subItems: styleSub, thirdItems: getStrokeWidthItems(curStrokeWidth) },
+      { id: 'menu_style', label: 'Style', icon: '✎', subItems: styleSub, thirdItems: getStrokeWidthItems(curStrokeWidth, pObj) },
       { id: 'menu_ink', label: 'Ink', icon: '●', subItems: inkSub },
+      delItem
+    ];
+  }
+
+  getTextItems(textObj, isLocked) {
+    const curFontSize = textObj?.textStyle?.size || 'm';
+    const curFontFamily = textObj?.textStyle?.fontFamily || 'hand';
+    const curBold = Boolean(textObj?.textStyle?.bold);
+    const curOpacity = textObj?.opacity !== undefined ? textObj.opacity : 1.0;
+    const curTextColor = textObj?.textStyle?.color || textObj?.stroke || '#1e1e1e';
+
+    // Slot 0 (12:00): Opacity (directly reachable for text, no Fill menu)
+    const opacityItems = [
+      { id: 'opacity_100', label: '100%', value: 1.0, isActive: curOpacity >= 0.9 },
+      { id: 'opacity_75', label: '75%', value: 0.75, isActive: curOpacity >= 0.65 && curOpacity < 0.9 },
+      { id: 'opacity_50', label: '50%', value: 0.5, isActive: curOpacity >= 0.4 && curOpacity < 0.65 },
+      { id: 'opacity_25', label: '25%', value: 0.25, isActive: curOpacity < 0.4 }
+    ];
+
+    // Slot 1 (1:30): Text / Type (Ring 2: Fonts & Formatting, Ring 3: Sizes)
+    const fontSub = [
+      { id: 'font_hand', label: 'Hand', fontFamily: 'hand', isActive: curFontFamily === 'hand' },
+      { id: 'font_sans', label: 'Sans', fontFamily: 'sans', isActive: curFontFamily === 'sans' },
+      { id: 'font_serif', label: 'Serif', fontFamily: 'serif', isActive: curFontFamily === 'serif' },
+      { id: 'font_mono', label: 'Mono', fontFamily: 'mono', isActive: curFontFamily === 'mono' },
+      { id: 'type_bold', label: curBold ? 'Bold ✓' : 'Bold', toggleBold: true, isActive: curBold },
+      { id: 'type_align', label: 'Align', cycleAlign: true }
+    ];
+    const sizeItems = [
+      { id: 'type_s', label: 'S', size: 's', isActive: curFontSize === 's' },
+      { id: 'type_m', label: 'M', size: 'm', isActive: curFontSize === 'm' },
+      { id: 'type_l', label: 'L', size: 'l', isActive: curFontSize === 'l' },
+      { id: 'type_xl', label: 'XL', size: 'xl', isActive: curFontSize === 'xl' }
+    ];
+
+    // Slot 2 (3:00): Shape Conversion & Quick Connect (NO Equal Sides for text)
+    const shapeSub = [
+      { id: 'to_rectangle', label: 'Rect', icon: '▭' },
+      { id: 'to_ellipse', label: 'Ellipse', icon: '◯' },
+      { id: 'to_diamond', label: 'Diamond', icon: '◇' },
+      { id: 'to_triangle', label: 'Triangle', icon: '△' }
+    ];
+    const shapeActions = [
+      { id: 'action_connect', label: 'Connect', icon: '➔' }
+    ];
+    if (textObj?.groupId) {
+      shapeActions.push({ id: 'action_select_group', label: 'Select Group', icon: '⧉' });
+      shapeActions.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+    }
+
+    // Slot 3 (4:30): Duplicate
+    const dupItem = { id: 'action_duplicate', label: 'Duplicate', icon: '❐' };
+
+    // Slot 4 (6:00): Arrange (Order & Lock)
+    const orderSub = [
+      { id: 'order_front', label: 'Front', icon: '⇈' },
+      { id: 'order_forward', label: 'Forward', icon: '↑' },
+      { id: 'order_backward', label: 'Backward', icon: '↓' },
+      { id: 'order_back', label: 'Back', icon: '⇊' },
+      { id: isLocked ? 'action_unlock' : 'action_lock', label: isLocked ? 'Unlock' : 'Lock', icon: isLocked ? '🔓' : '🔒' }
+    ];
+
+    // Slot 5 (7:30): Style - explicitly disabled for standalone text
+    const styleItem = { id: 'menu_style', label: 'Style', icon: '✎', disabled: true };
+
+    // Slot 6 (9:00): Color / Ink
+    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: curTextColor === col }));
+
+    // Slot 7 (10:30): Delete
+    const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };
+
+    return [
+      { id: 'menu_opacity', label: 'Opacity', icon: '◐', subItems: opacityItems },
+      { id: 'menu_type', label: 'Type', icon: 'A', subItems: fontSub, thirdItems: sizeItems },
+      { id: 'menu_shape', label: 'Shape', icon: '◇', subItems: shapeSub, thirdItems: shapeActions },
+      dupItem,
+      { id: 'menu_order', label: 'Arrange', icon: '≡', subItems: orderSub },
+      styleItem,
+      { id: 'menu_ink', label: 'Color', icon: '●', subItems: inkSub },
       delItem
     ];
   }
@@ -531,6 +631,10 @@ export class ToolWheel {
 
     if (this.selectedObject?.type === 'connector') {
       return this.getConnectorItems(this.selectedObject, isLocked);
+    }
+
+    if (this.selectedObject?.type === 'text') {
+      return this.getTextItems(this.selectedObject, isLocked);
     }
 
     return this.getShapeItems(this.selectedObject, isLocked);

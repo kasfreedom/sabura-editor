@@ -47,8 +47,9 @@ test('multi-selection overlay: renders shared bounding box and count badge', () 
   assert.ok(overlay.includes('selection-count-badge'), 'Must include selection count badge');
   assert.ok(overlay.includes('2 objects'), 'Badge must display "2 objects"');
   assert.ok(overlay.includes('stroke-dasharray="4,4"'), 'Must include dashed selection boundary');
-  // Must NOT include resize handles on multi-selection
-  assert.ok(!overlay.includes('data-handle="nw"'), 'Multi-selection must not display resize handles');
+  // Shared resize handles on multi-selection containing unlocked spatial objects
+  assert.ok(overlay.includes('data-handle="nw"'), 'Multi-selection must display shared resize handles');
+  assert.ok(overlay.includes('data-handle="se"'), 'Multi-selection must display shared resize handles');
 });
 
 test('moving multi-selection: moves objects and updates connected connectors without double-translating', () => {

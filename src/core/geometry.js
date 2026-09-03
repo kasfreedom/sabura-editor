@@ -662,7 +662,7 @@ export function calculateResize(handle, orig, dx, dy, options = {}) {
   const keepAspect = Boolean(options.keepAspect);
   const fromCenter = Boolean(options.fromCenter);
 
-  const origAspectRatio = orig.width / orig.height;
+  const origAspectRatio = orig.height > 0 ? orig.width / orig.height : 1;
 
   // Effective deltas if fromCenter: double the movement
   const effDx = fromCenter ? dx * 2 : dx;
@@ -699,8 +699,8 @@ export function calculateResize(handle, orig, dx, dy, options = {}) {
       if (!fromCenter) newY = orig.y + (orig.height - newHeight) / 2;
     } else {
       // Corner handle: scale according to dominant displacement
-      const scaleX = newWidth / orig.width;
-      const scaleY = newHeight / orig.height;
+      const scaleX = orig.width > 0 ? newWidth / orig.width : 1;
+      const scaleY = orig.height > 0 ? newHeight / orig.height : 1;
       const scale = Math.max(scaleX, scaleY);
 
       newWidth = orig.width * scale;
@@ -721,7 +721,7 @@ export function calculateResize(handle, orig, dx, dy, options = {}) {
       newX = orig.x + orig.width - minSize;
     }
     newWidth = minSize;
-    if (keepAspect) {
+    if (keepAspect && origAspectRatio > 0) {
       newHeight = minSize / origAspectRatio;
     }
   }
@@ -750,6 +750,97 @@ export function calculateResize(handle, orig, dx, dy, options = {}) {
     width: Math.round(newWidth),
     height: Math.round(newHeight)
   };
+}
+
+/**
+ * Calculates transformed coordinates for a set of objects given an original and new bounding box.
+ * Transforms positions, dimensions, path vertices, and free connector endpoints consistently.
+ *
+ * @param {Array<Object>} objects - Objects or snapshots to transform
+ * @param {{ x: number, y: number, width: number, height: number }} origBox - Initial union box of spatial objects
+ * @param {{ x: number, y: number, width: number, height: number }} newBox - New union box
+ * @returns {Array<Object>} Updated object definitions with transformed geometry
+ */
+export function transformObjects(objects, origBox, newBox) {
+  if (!Array.isArray(objects) || objects.length === 0 || !origBox || !newBox) return [];
+
+  const scaleX = origBox.width > 0 ? newBox.width / origBox.width : 1;
+  const scaleY = origBox.height > 0 ? newBox.height / origBox.height : 1;
+  const textScale = (scaleX + scaleY) / 2;
+
+  return objects.map(obj => {
+    if (!obj || obj.locked) return obj;
+
+    if (obj.type === 'connector') {
+      const transformedConn = { ...obj };
+      if (obj.from?.point && !obj.from.id) {
+        transformedConn.from = {
+          ...obj.from,
+          point: {
+            x: Math.round(newBox.x + (obj.from.point.x - origBox.x) * scaleX),
+            y: Math.round(newBox.y + (obj.from.point.y - origBox.y) * scaleY)
+          }
+        };
+      }
+      if (obj.to?.point && !obj.to.id) {
+        transformedConn.to = {
+          ...obj.to,
+          point: {
+            x: Math.round(newBox.x + (obj.to.point.x - origBox.x) * scaleX),
+            y: Math.round(newBox.y + (obj.to.point.y - origBox.y) * scaleY)
+          }
+        };
+      }
+      return transformedConn;
+    }
+
+    const newX = Math.round(newBox.x + (obj.x - origBox.x) * scaleX);
+    const newY = Math.round(newBox.y + (obj.y - origBox.y) * scaleY);
+    let newWidth = Math.max(MIN_OBJECT_SIZE, Math.round(obj.width * scaleX));
+    let newHeight = Math.max(MIN_OBJECT_SIZE, Math.round(obj.height * scaleY));
+
+    let newTextStyle = obj.textStyle;
+    if (obj.textStyle) {
+      const baseSize = obj.textStyle.resolvedSize || 20;
+      const newResolvedSize = Math.max(10, Math.min(120, Math.round(baseSize * textScale)));
+      newTextStyle = {
+        ...obj.textStyle,
+        resolvedSize: newResolvedSize
+      };
+
+      if (obj.type === 'text') {
+        const familyToken = obj.textStyle?.fontFamily || 'hand';
+        const m = measureText(obj.text, newResolvedSize, familyToken);
+        newWidth = m.width;
+        newHeight = m.height;
+      }
+    }
+
+    const transformed = {
+      ...obj,
+      x: newX,
+      y: newY,
+      width: newWidth,
+      height: newHeight
+    };
+
+    if (newTextStyle) {
+      transformed.textStyle = newTextStyle;
+    }
+
+    if (obj.type === 'path' && Array.isArray(obj.points)) {
+      transformed.points = obj.points.map(pt => {
+        const px = Array.isArray(pt) ? pt[0] : pt.x;
+        const py = Array.isArray(pt) ? pt[1] : pt.y;
+        return {
+          x: Math.round(px * scaleX),
+          y: Math.round(py * scaleY)
+        };
+      });
+    }
+
+    return transformed;
+  });
 }
 
 /**

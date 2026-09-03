@@ -5,7 +5,8 @@
 
 import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
 import { createDefaultObject, cloneDocument } from '../core/document.js';
-import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, distanceToPath, getClosestBoundaryPoint, getShapeSnapPoints } from '../core/geometry.js';
+import { MIN_OBJECT_SIZE } from '../core/types.js';
+import { calculateResize, calculateSnapping, getBoundingBox, getUnionBoundingBox, distanceToConnector, distanceToPath, getClosestBoundaryPoint, getShapeSnapPoints, measureText, transformObjects } from '../core/geometry.js';
 
 export class Workspace {
   constructor(svgContainer, callbacks) {
@@ -41,7 +42,8 @@ export class Workspace {
     this.dragStart = { x: 0, y: 0 };
     this.pointerStartScreen = { x: 0, y: 0 };
     this.activeHandle = null;
-    this.resizeOriginalBounds = null;
+    this.resizeData = null;
+    this.latestResizeResult = null;
     this.snapGuides = [];
     this.marquee = null;
     this.draftObject = null;
@@ -243,18 +245,25 @@ export class Workspace {
       }
     }
 
-    if (this.isResizing && this.resizeOriginalBounds && this.selectedIds.length > 0) {
-      const obj = doc.objects[this.selectedIds[0]];
-      if (obj) {
-        obj.x = this.resizeOriginalBounds.x;
-        obj.y = this.resizeOriginalBounds.y;
-        obj.width = this.resizeOriginalBounds.width;
-        obj.height = this.resizeOriginalBounds.height;
-        if (obj.textStyle) {
-          if (this.resizeOriginalBounds.hasResolvedSize) {
-            obj.textStyle.resolvedSize = this.resizeOriginalBounds.resolvedSize;
+    if (this.isResizing && this.resizeData) {
+      for (const snap of this.resizeData.snapshotObjects) {
+        const liveObj = doc.objects[snap.id];
+        if (!liveObj) continue;
+        if (snap.type === 'connector') {
+          if (snap.from) liveObj.from = cloneDocument(snap.from);
+          if (snap.to) liveObj.to = cloneDocument(snap.to);
+        } else {
+          liveObj.x = snap.x;
+          liveObj.y = snap.y;
+          liveObj.width = snap.width;
+          liveObj.height = snap.height;
+          if (snap.type === 'path' && snap.points) {
+            liveObj.points = cloneDocument(snap.points);
+          }
+          if (snap.textStyle) {
+            liveObj.textStyle = cloneDocument(snap.textStyle);
           } else {
-            delete obj.textStyle.resolvedSize;
+            delete liveObj.textStyle;
           }
         }
       }
@@ -304,8 +313,8 @@ export class Workspace {
     this.curvingConnectorData = null;
     this.isMarquee = false;
     this.activeHandle = null;
-    this.resizeOriginalBounds = null;
-    this.latestResizeBounds = null;
+    this.resizeData = null;
+    this.latestResizeResult = null;
     this.reconnectOriginalTarget = null;
     this.latestReconnectTarget = null;
     this.dragInitialPositions = null;
@@ -538,16 +547,32 @@ export class Workspace {
         this.isResizing = true;
         this.activeHandle = handleId;
         const doc = this.callbacks.getDocument();
-        const obj = doc.objects[this.selectedIds[0]];
-        this.resizeOriginalBounds = {
-          x: obj.x,
-          y: obj.y,
-          width: obj.width,
-          height: obj.height,
-          resolvedSize: obj.textStyle?.resolvedSize,
-          hasResolvedSize: Boolean(obj.textStyle && 'resolvedSize' in obj.textStyle)
+        const spatialObjects = this.selectedIds.map(id => doc.objects[id]).filter(o => o && o.type !== 'connector' && !o.locked);
+        if (spatialObjects.length === 0) {
+          this.isResizing = false;
+          this.activeHandle = null;
+          return;
+        }
+
+        const origBox = (this.selectedIds.length === 1 && !doc.objects[this.selectedIds[0]].locked)
+          ? getBoundingBox(doc.objects[this.selectedIds[0]])
+          : getUnionBoundingBox(spatialObjects, doc);
+
+        if (!origBox || origBox.width < 0 || origBox.height < 0) {
+          this.isResizing = false;
+          this.activeHandle = null;
+          return;
+        }
+
+        const selectedConnectors = this.selectedIds.map(id => doc.objects[id]).filter(o => o && o.type === 'connector' && !o.locked);
+        const snapshotObjects = [...spatialObjects, ...selectedConnectors].map(o => cloneDocument(o));
+
+        this.resizeData = {
+          handle: handleId,
+          origBox: { ...origBox },
+          snapshotObjects
         };
-        this.latestResizeBounds = null;
+        this.latestResizeResult = null;
         this.dragStart = { ...worldPt };
       }
       return;
@@ -695,18 +720,20 @@ export class Workspace {
       const doc = this.callbacks.getDocument();
       const type = this.activeTool;
 
-      this.draftObject = createDefaultObject(type, {
-        x: worldPt.x,
-        y: worldPt.y,
-        width: 1,
-        height: 1,
-        routing: type === 'connector' ? (this.connectorRouting || 'straight') : undefined
-      }, doc.theme);
-
       if (type === 'connector') {
         const startHit = this.findObjectAt(worldPt);
-        this.draftObject.from = startHit ? { id: startHit.id } : { point: { ...worldPt } };
-        this.draftObject.to = { point: { ...worldPt } };
+        this.draftObject = createDefaultObject('connector', {
+          routing: this.connectorRouting || 'straight',
+          from: startHit ? { id: startHit.id } : { point: { x: worldPt.x, y: worldPt.y } },
+          to: { point: { x: worldPt.x, y: worldPt.y } }
+        }, doc.theme);
+      } else {
+        this.draftObject = createDefaultObject(type, {
+          x: worldPt.x,
+          y: worldPt.y,
+          width: 1,
+          height: 1
+        }, doc.theme);
       }
     }
   }
@@ -849,31 +876,42 @@ export class Workspace {
       return;
     }
 
-    if (this.isResizing && this.selectedIds.length === 1 && this.resizeOriginalBounds) {
+    if (this.isResizing && this.resizeData) {
       const dx = worldPt.x - this.dragStart.x;
       const dy = worldPt.y - this.dragStart.y;
       const keepAspect = e.shiftKey;
       const fromCenter = e.altKey;
 
-      const newBounds = calculateResize(this.activeHandle, this.resizeOriginalBounds, dx, dy, {
+      const newBox = calculateResize(this.activeHandle, this.resizeData.origBox, dx, dy, {
         keepAspect,
         fromCenter
       });
 
+      const transformed = transformObjects(this.resizeData.snapshotObjects, this.resizeData.origBox, newBox);
       const doc = this.callbacks.getDocument();
-      const obj = doc.objects[this.selectedIds[0]];
-      if (obj) {
-        obj.x = newBounds.x;
-        obj.y = newBounds.y;
-        obj.width = newBounds.width;
-        obj.height = newBounds.height;
-        if (obj.textStyle && this.resizeOriginalBounds.width > 0 && this.resizeOriginalBounds.height > 0) {
-          const scale = (newBounds.width / this.resizeOriginalBounds.width + newBounds.height / this.resizeOriginalBounds.height) / 2;
-          obj.textStyle.resolvedSize = Math.max(10, Math.min(120, Math.round((this.resizeOriginalBounds.resolvedSize || 20) * scale)));
+
+      for (const tObj of transformed) {
+        const liveObj = doc.objects[tObj.id];
+        if (!liveObj) continue;
+        if (tObj.type === 'connector') {
+          if (tObj.from) liveObj.from = cloneDocument(tObj.from);
+          if (tObj.to) liveObj.to = cloneDocument(tObj.to);
+        } else {
+          liveObj.x = tObj.x;
+          liveObj.y = tObj.y;
+          liveObj.width = tObj.width;
+          liveObj.height = tObj.height;
+          if (tObj.type === 'path' && tObj.points) {
+            liveObj.points = cloneDocument(tObj.points);
+          }
+          if (tObj.textStyle) {
+            liveObj.textStyle = cloneDocument(tObj.textStyle);
+          }
         }
-        this.latestResizeBounds = newBounds;
-        this.render();
       }
+
+      this.latestResizeResult = { newBox, transformed };
+      this.render();
       return;
     }
 
@@ -1017,8 +1055,6 @@ export class Workspace {
       if (this.draftObject.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
         this.draftObject.to = hit && hit.id !== this.draftObject.from?.id ? { id: hit.id } : { point: { ...worldPt } };
-        this.draftObject.width = worldPt.x - this.draftObject.x;
-        this.draftObject.height = worldPt.y - this.draftObject.y;
         this.render();
       } else {
         // Shapes: Rect, Ellipse, Diamond, Triangle
@@ -1234,35 +1270,73 @@ export class Workspace {
       this.isResizing = false;
       const doc = this.callbacks.getDocument();
 
-      if (this.resizeOriginalBounds && this.selectedIds.length > 0) {
-        const obj = doc.objects[this.selectedIds[0]];
-        if (obj) {
-          obj.x = this.resizeOriginalBounds.x;
-          obj.y = this.resizeOriginalBounds.y;
-          obj.width = this.resizeOriginalBounds.width;
-          obj.height = this.resizeOriginalBounds.height;
-          if (obj.textStyle) {
-            if (this.resizeOriginalBounds.hasResolvedSize) {
-              obj.textStyle.resolvedSize = this.resizeOriginalBounds.resolvedSize;
+      // Restore document objects to initial snapshot baseline before dispatching command
+      if (this.resizeData) {
+        for (const snap of this.resizeData.snapshotObjects) {
+          const liveObj = doc.objects[snap.id];
+          if (!liveObj) continue;
+          if (snap.type === 'connector') {
+            if (snap.from) liveObj.from = cloneDocument(snap.from);
+            if (snap.to) liveObj.to = cloneDocument(snap.to);
+          } else {
+            liveObj.x = snap.x;
+            liveObj.y = snap.y;
+            liveObj.width = snap.width;
+            liveObj.height = snap.height;
+            if (snap.type === 'path' && snap.points) {
+              liveObj.points = cloneDocument(snap.points);
+            }
+            if (snap.textStyle) {
+              liveObj.textStyle = cloneDocument(snap.textStyle);
             } else {
-              delete obj.textStyle.resolvedSize;
+              delete liveObj.textStyle;
             }
           }
         }
       }
 
-      if (this.latestResizeBounds && this.selectedIds.length > 0) {
-        this.callbacks.onCommand({
-          type: 'resize_object',
-          id: this.selectedIds[0],
-          bounds: this.latestResizeBounds,
-          scaleText: true
-        });
+      if (this.latestResizeResult && this.resizeData) {
+        const { transformed } = this.latestResizeResult;
+        const cmds = [];
+
+        for (const tObj of transformed) {
+          if (tObj.type === 'connector') {
+            const origSnap = this.resizeData.snapshotObjects.find(s => s.id === tObj.id);
+            const fromChanged = JSON.stringify(tObj.from) !== JSON.stringify(origSnap?.from);
+            const toChanged = JSON.stringify(tObj.to) !== JSON.stringify(origSnap?.to);
+            if (fromChanged || toChanged) {
+              cmds.push({
+                type: 'configure_connector_endpoints',
+                id: tObj.id,
+                from: cloneDocument(tObj.from),
+                to: cloneDocument(tObj.to)
+              });
+            }
+          } else {
+            const cmdObj = {
+              type: 'resize_object',
+              id: tObj.id,
+              bounds: { x: tObj.x, y: tObj.y, width: tObj.width, height: tObj.height },
+              textStyle: tObj.textStyle ? cloneDocument(tObj.textStyle) : undefined,
+              scaleText: false
+            };
+            if (tObj.type === 'path' && tObj.points) {
+              cmdObj.points = cloneDocument(tObj.points);
+            }
+            cmds.push(cmdObj);
+          }
+        }
+
+        if (cmds.length === 1) {
+          this.callbacks.onCommand(cmds[0]);
+        } else if (cmds.length > 1) {
+          this.callbacks.onCommandBatch(cmds);
+        }
       }
 
       this.activeHandle = null;
-      this.resizeOriginalBounds = null;
-      this.latestResizeBounds = null;
+      this.resizeData = null;
+      this.latestResizeResult = null;
       this.render();
     }
 
@@ -1302,14 +1376,21 @@ export class Workspace {
 
       if (obj.type === 'connector') {
         const hit = this.findObjectAt(worldPt);
-        if (hit && (!obj.from.id || hit.id !== obj.from.id)) {
+        if (hit && (!obj.from?.id || hit.id !== obj.from.id)) {
           obj.to = { id: hit.id };
         } else {
-          const dist = Math.hypot((obj.to?.point?.x || worldPt.x) - obj.x, (obj.to?.point?.y || worldPt.y) - obj.y);
+          const startPt = obj.from?.point || this.dragStart;
+          const endPt = obj.to?.point || worldPt;
+          const dist = Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y);
           if (dist < 15) {
-            obj.to = { point: { x: obj.x + 140, y: obj.y + 70 } };
+            obj.to = { point: { x: startPt.x + 140, y: startPt.y + 70 } };
           }
         }
+        delete obj.x;
+        delete obj.y;
+        delete obj.width;
+        delete obj.height;
+
         this.callbacks.onCommand({
           type: 'create_object',
           object: obj
