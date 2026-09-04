@@ -163,7 +163,8 @@ export class ToolWheel {
           { id: 'shape_rectangle', label: 'Rectangle', icon: '▭' },
           { id: 'shape_ellipse', label: 'Ellipse', icon: '◯' },
           { id: 'shape_diamond', label: 'Diamond', icon: '◇' },
-          { id: 'shape_triangle', label: 'Triangle', icon: '△' }
+          { id: 'shape_triangle', label: 'Triangle', icon: '△' },
+          { id: 'tool_line', label: 'Line / Poly', icon: '⏢' }
         ]
       }, // Slot 0: 12:00
       { id: 'tool_text', label: 'Text', icon: 'T' }, // Slot 1: 1:30
@@ -177,7 +178,7 @@ export class ToolWheel {
           { id: 'conn_curved', label: 'Curved', icon: '~' }
         ]
       }, // Slot 2: 3:00
-      { id: 'tool_line', label: 'Line / Poly', icon: '⏢' }, // Slot 3: 4:30
+      { id: 'image_import', label: 'Image', icon: '▧' }, // Slot 3: 4:30
       { id: 'tool_hand', label: 'Hand/Pan', icon: '✋' }, // Slot 4: 6:00
       { id: 'action_undo', label: 'Undo', icon: '↶' }, // Slot 5: 7:30
       { id: 'action_redo', label: 'Redo', icon: '↷' }, // Slot 6: 9:00
@@ -535,6 +536,84 @@ export class ToolWheel {
     ];
   }
 
+  getImageItems(imageObj, isLocked) {
+    const fitSub = [
+      { id: 'image_fit_contain', label: 'Contain', icon: '□', isActive: (imageObj?.fit || 'contain') === 'contain' },
+      { id: 'image_fit_cover', label: 'Cover', icon: '▣', isActive: imageObj?.fit === 'cover' }
+    ];
+    const opacity = imageObj?.opacity !== undefined ? imageObj.opacity : 1.0;
+    const opacityItems = [
+      { id: 'opacity_100', label: '100%', value: 1.0, isActive: opacity >= 0.9 },
+      { id: 'opacity_75', label: '75%', value: 0.75, isActive: opacity >= 0.65 && opacity < 0.9 },
+      { id: 'opacity_50', label: '50%', value: 0.5, isActive: opacity >= 0.4 && opacity < 0.65 },
+      { id: 'opacity_25', label: '25%', value: 0.25, isActive: opacity < 0.4 }
+    ];
+    const orderSub = [
+      { id: 'order_front', label: 'Front', icon: '⇈' },
+      { id: 'order_forward', label: 'Forward', icon: '↑' },
+      { id: 'order_backward', label: 'Backward', icon: '↓' },
+      { id: 'order_back', label: 'Back', icon: '⇊' }
+    ];
+    const shapeActions = [];
+    if (imageObj?.groupId) {
+      shapeActions.push({ id: 'action_select_group', label: 'Select Group', icon: '⧉' });
+      shapeActions.push({ id: 'action_ungroup', label: 'Ungroup', icon: '⧉' });
+    }
+    const groupItem = shapeActions.length > 0
+      ? { id: 'menu_image_group', label: 'Group', icon: '⧉', subItems: shapeActions, disabled: isLocked }
+      : { id: 'action_group', label: 'Group', icon: '⧉', disabled: true };
+    return [
+      { id: 'menu_image_fit', label: 'Fit', icon: '▣', subItems: fitSub, disabled: isLocked },
+      { id: 'menu_opacity', label: 'Opacity', icon: '◐', subItems: opacityItems, disabled: isLocked },
+      groupItem,
+      { id: 'action_duplicate', label: 'Duplicate', icon: '❐', disabled: isLocked },
+      { id: 'menu_order', label: 'Arrange', icon: '≡', subItems: orderSub, disabled: isLocked },
+      { id: isLocked ? 'action_unlock' : 'action_lock', label: isLocked ? 'Unlock' : 'Lock', icon: isLocked ? '🔓' : '🔒' },
+      { id: 'image_context_placeholder', label: 'More', icon: '·', disabled: true },
+      { id: 'action_delete', label: 'Delete', icon: '🗑', disabled: isLocked }
+    ];
+  }
+
+  getImageMultiItems(spatialCount, isGrouped, anyUnlocked) {
+    const unlockedImages = (this.selectedObjects || []).filter(object => object?.type === 'image' && !object.locked);
+    const fitSub = [
+      { id: 'image_fit_contain', label: 'Contain', icon: '□' },
+      { id: 'image_fit_cover', label: 'Cover', icon: '▣' }
+    ];
+    const opacitySub = [
+      { id: 'opacity_100', label: '100%', value: 1 },
+      { id: 'opacity_75', label: '75%', value: 0.75 },
+      { id: 'opacity_50', label: '50%', value: 0.5 },
+      { id: 'opacity_25', label: '25%', value: 0.25 }
+    ];
+    const alignSub = [
+      { id: 'align_left', label: 'Left', icon: '⇤' },
+      { id: 'align_center', label: 'Center H', icon: '⫿' },
+      { id: 'align_right', label: 'Right', icon: '⇥' },
+      { id: 'align_top', label: 'Top', icon: '⤒' },
+      { id: 'align_middle', label: 'Middle V', icon: '⁼' },
+      { id: 'align_bottom', label: 'Bottom', icon: '⤓' },
+      { id: 'dist_h', label: 'Distribute H', icon: '↔' },
+      { id: 'dist_v', label: 'Distribute V', icon: '↕' }
+    ];
+    const orderSub = [
+      { id: 'order_front', label: 'Front', icon: '⇈' },
+      { id: 'order_forward', label: 'Forward', icon: '↑' },
+      { id: 'order_backward', label: 'Backward', icon: '↓' },
+      { id: 'order_back', label: 'Back', icon: '⇊' }
+    ];
+    return [
+      { id: 'menu_image_fit', label: 'Fit', icon: '▣', subItems: fitSub, disabled: !anyUnlocked },
+      { id: 'menu_opacity', label: 'Opacity', icon: '◐', subItems: opacitySub, disabled: !anyUnlocked },
+      { id: isGrouped ? 'action_ungroup' : 'action_group', label: isGrouped ? 'Ungroup' : 'Group', icon: '⧉', disabled: isGrouped ? !anyUnlocked : unlockedImages.length < 2 },
+      { id: 'action_duplicate', label: 'Duplicate', icon: '❐', disabled: !anyUnlocked },
+      { id: 'menu_order', label: 'Arrange', icon: '≡', subItems: orderSub, disabled: !anyUnlocked },
+      { id: anyUnlocked ? 'action_lock' : 'action_unlock', label: anyUnlocked ? 'Lock' : 'Unlock', icon: anyUnlocked ? '🔒' : '🔓' },
+      { id: 'menu_align', label: 'Align', icon: '⫿', subItems: alignSub, disabled: !anyUnlocked || spatialCount < 2 },
+      { id: 'action_delete', label: 'Delete', icon: '🗑', disabled: !anyUnlocked }
+    ];
+  }
+
   getMultiItems(spatialCount, isGrouped, anyUnlocked) {
     // Slot 0 (12:00): Align
     const alignItem = {
@@ -622,6 +701,8 @@ export class ToolWheel {
       const spatialObjects = this.selectedObjects.filter(o => o && o.type !== 'connector' && !o.locked);
       const isGrouped = Boolean(this.selectedObject?.groupId) || this.selectedObjects.some(o => o?.groupId);
       const anyUnlocked = this.selectedObjects.length > 0 ? this.selectedObjects.some(o => !o.locked) : true;
+      const allImages = this.selectedObjects.length > 0 && this.selectedObjects.every(o => o?.type === 'image');
+      if (allImages) return this.getImageMultiItems(spatialObjects.length, isGrouped, anyUnlocked);
       return this.getMultiItems(spatialObjects.length, isGrouped, anyUnlocked);
     }
 
@@ -635,6 +716,10 @@ export class ToolWheel {
 
     if (this.selectedObject?.type === 'text') {
       return this.getTextItems(this.selectedObject, isLocked);
+    }
+
+    if (this.selectedObject?.type === 'image') {
+      return this.getImageItems(this.selectedObject, isLocked);
     }
 
     return this.getShapeItems(this.selectedObject, isLocked);

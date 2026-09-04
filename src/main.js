@@ -14,13 +14,14 @@ import {
   cloneDocument,
   generateId,
   generateSeed,
+  validateRasterDataUrl,
   REVISION_EXTENSION_KEY,
   computeContentDigest,
   getShortRevisionId,
   transitionRevision
 } from './core/document.js';
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
-import { THEME_PRESETS, FONT_SIZES } from './core/types.js';
+import { THEME_PRESETS, FONT_SIZES, RASTER_MIME_TYPES, MAX_IMAGE_SOURCE_BYTES, MAX_IMAGE_AXIS, MAX_IMAGE_PIXELS } from './core/types.js';
 import { resolveConnectorGeometry } from './core/geometry.js';
 import { packageHtmlWithDocument, triggerFileDownload, extractDocumentFromHtml, sanitizeFilenameTitle } from './storage/file-packer.js';
 import { Workspace } from './ui/workspace.js';
@@ -46,7 +47,11 @@ export class SaburaApp {
     this.subscribers = new Set();
     this.inPresentation = false;
     this.clipboard = null;
+    this.clipboardAssets = {};
     this.pasteCount = 0;
+    this.imageImportToken = 0;
+    this.pendingImageReader = null;
+    this.pendingImageDecode = null;
     this.originalHtml = '';
     this.isCorrupted = false;
     this.loadErrors = [];
@@ -142,6 +147,7 @@ export class SaburaApp {
 
   initDOM() {
     const app = document.getElementById('app');
+    this.appElement = app;
     app.innerHTML = `
       <div id="canvas-container"></div>
       <canvas id="laser-canvas"></canvas>
@@ -149,11 +155,13 @@ export class SaburaApp {
         <span>Wheel</span>
         <span class="fab-key">Q</span>
       </button>
+      <input id="image-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
     `;
 
     this.canvasContainer = document.getElementById('canvas-container');
     this.laserCanvas = document.getElementById('laser-canvas');
     this.wheelFab = document.getElementById('btn-wheel-fab');
+    this.imageFileInput = document.getElementById('image-file-input');
   }
 
   initServices() {
@@ -167,12 +175,13 @@ export class SaburaApp {
       onCommandBatch: (cmds) => this.dispatchCommandBatch(cmds),
       onOpenWheel: (x, y, context, selectedObj) => {
         if (this.mode === 'reading') return;
+        this.imageImportPoint = this.workspace.screenToWorld(x, y);
         const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
         this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onDoubleClickedObject: (obj) => {
         if (this.mode === 'reading') return;
-        if (!obj.locked && obj.type !== 'connector') {
+        if (!obj.locked && obj.type !== 'connector' && obj.type !== 'image') {
           this.textEditor.open(obj, this.workspace.camera);
         }
       },
@@ -207,6 +216,15 @@ export class SaburaApp {
     this.wheel = new ToolWheel(document.getElementById('app'), (actionId, payload) => {
       this.handleWheelAction(actionId, payload);
     });
+
+    this.imageFileInput?.addEventListener('change', () => {
+      const file = this.imageFileInput.files?.[0] || null;
+      this.imageFileInput.value = '';
+      if (file) this.importImageFile(file, this.imageImportPoint);
+    });
+    this.appElement.addEventListener('dragover', (event) => this.handleImageDragOver(event));
+    this.appElement.addEventListener('dragleave', (event) => this.handleImageDragLeave(event));
+    this.appElement.addEventListener('drop', (event) => this.handleImageDrop(event));
 
     // Top Bar
     this.topbar = new TopBar(document.getElementById('app'), {
@@ -260,9 +278,14 @@ export class SaburaApp {
           }
         }
         const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+        this.imageImportPoint = this.workspace.screenToWorld(x, y);
         this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
       },
       onSelectTool: (tool) => this.workspace.setTool(tool),
+      onImportImage: (x, y) => {
+        this.imageImportPoint = this.workspace.screenToWorld(x, y);
+        this.imageFileInput?.click();
+      },
       onSpaceHold: (held) => {
         this.workspace.spaceHeld = held;
         this.workspace.updateCursor();
@@ -270,7 +293,7 @@ export class SaburaApp {
       onEditText: () => {
         if (this.workspace.selectedIds.length === 1) {
           const obj = this.doc.objects[this.workspace.selectedIds[0]];
-          if (obj && !obj.locked && obj.type !== 'connector') {
+          if (obj && !obj.locked && obj.type !== 'connector' && obj.type !== 'image') {
             this.textEditor.open(obj, this.workspace.camera);
           }
         }
@@ -436,6 +459,7 @@ export class SaburaApp {
       const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
       const context = this.workspace.selectedIds.length > 0 ? 'object' : 'canvas';
       const firstObj = selectedObjects[0] || null;
+      this.imageImportPoint = this.workspace.screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
       this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, context, firstObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
     });
 
@@ -482,6 +506,8 @@ export class SaburaApp {
     const targetMode = mode === 'editing' ? 'editing' : 'reading';
     if (this.mode === targetMode) return;
 
+    this.cancelPendingImageImport();
+
     if (targetMode === 'reading') {
       if (this.textEditor) {
         this.textEditor.close(true);
@@ -517,38 +543,47 @@ export class SaburaApp {
     }
   }
 
-  dispatchCommand(cmd) {
-    const { doc: newDoc, inverseCmd } = applyCommand(this.doc, cmd);
-    this.doc = newDoc;
-    if (inverseCmd && inverseCmd.type !== 'noop') {
-      this.undoStack.push(inverseCmd);
-      this.redoStack = []; // Clear redo on new action
+  documentStateChanged(previousDoc, nextDoc) {
+    return canonicalJson(previousDoc) !== canonicalJson(nextDoc);
+  }
+
+  commitCommandResult(previousDoc, result) {
+    if (!this.documentStateChanged(previousDoc, result.doc)) return false;
+
+    this.doc = result.doc;
+    if (result.inverseCmd && result.inverseCmd.type !== 'noop') {
+      this.undoStack.push(result.inverseCmd);
     }
+    this.redoStack = [];
     this.status = 'Changed';
     this.updateUI();
     this.notifySubscribers();
+    return true;
+  }
+
+  dispatchCommand(cmd) {
+    const previousDoc = this.doc;
+    const result = applyCommand(previousDoc, cmd);
+    return this.commitCommandResult(previousDoc, result);
   }
 
   dispatchCommandBatch(cmds) {
-    const { doc: newDoc, inverseCmd } = applyCommandBatch(this.doc, cmds);
-    this.doc = newDoc;
-    if (inverseCmd && inverseCmd.type !== 'noop') {
-      this.undoStack.push(inverseCmd);
-      this.redoStack = [];
-    }
-    this.status = 'Changed';
-    this.updateUI();
-    this.notifySubscribers();
+    const previousDoc = this.doc;
+    const result = applyCommandBatch(previousDoc, cmds);
+    return this.commitCommandResult(previousDoc, result);
   }
 
   undo() {
     if (this.undoStack.length === 0) return false;
     const inv = this.undoStack.pop();
-    const { doc: newDoc, inverseCmd: redoCmd } = applyCommand(this.doc, inv);
-    this.doc = newDoc;
-    if (redoCmd && redoCmd.type !== 'noop') {
-      this.redoStack.push(redoCmd);
+    const previousDoc = this.doc;
+    const { doc: newDoc, inverseCmd: redoCmd } = applyCommand(previousDoc, inv);
+    if (!this.documentStateChanged(previousDoc, newDoc)) {
+      this.updateDocumentStatus();
+      return false;
     }
+    this.doc = newDoc;
+    if (redoCmd && redoCmd.type !== 'noop') this.redoStack.push(redoCmd);
     this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
@@ -558,15 +593,149 @@ export class SaburaApp {
   redo() {
     if (this.redoStack.length === 0) return false;
     const redoCmd = this.redoStack.pop();
-    const { doc: newDoc, inverseCmd: undoCmd } = applyCommand(this.doc, redoCmd);
-    this.doc = newDoc;
-    if (undoCmd && undoCmd.type !== 'noop') {
-      this.undoStack.push(undoCmd);
+    const previousDoc = this.doc;
+    const { doc: newDoc, inverseCmd: undoCmd } = applyCommand(previousDoc, redoCmd);
+    if (!this.documentStateChanged(previousDoc, newDoc)) {
+      this.updateDocumentStatus();
+      return false;
     }
+    this.doc = newDoc;
+    if (undoCmd && undoCmd.type !== 'noop') this.undoStack.push(undoCmd);
     this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
     return true;
+  }
+
+  reportImageImportError(message) {
+    const safe = String(message || 'Unable to import image').replace(/[\r\n]+/g, ' ').slice(0, 180);
+    if (typeof alert === 'function') {
+      try { alert(`Image import failed: ${safe}`); } catch (_) {}
+    }
+  }
+
+  isFileDrag(dataTransfer) {
+    return Array.from(dataTransfer?.items || []).some(item => item.kind === 'file') ||
+      Boolean(dataTransfer?.files?.length);
+  }
+
+  setImageDropActive(active) {
+    this.canvasContainer?.classList?.toggle?.('image-drop-active', Boolean(active));
+  }
+
+  handleImageDragOver(event) {
+    if (!this.isFileDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    const fileItems = Array.from(event.dataTransfer?.items || []).filter(item => item.kind === 'file');
+    const compatible = this.mode === 'editing' && !this.inPresentation && fileItems.length === 1 &&
+      RASTER_MIME_TYPES.includes(fileItems[0].type);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = compatible ? 'copy' : 'none';
+    this.setImageDropActive(compatible);
+  }
+
+  handleImageDragLeave(event) {
+    if (!event.relatedTarget || !this.appElement?.contains(event.relatedTarget)) {
+      this.setImageDropActive(false);
+    }
+  }
+
+  handleImageDrop(event) {
+    if (!this.isFileDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.setImageDropActive(false);
+    if (this.mode !== 'editing' || this.inPresentation) return;
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (files.length !== 1) {
+      if (files.length > 1) this.reportImageImportError('Drop one image at a time.');
+      return;
+    }
+    this.importImageFile(files[0], this.workspace.screenToWorld(event.clientX, event.clientY));
+  }
+
+  cancelPendingImageImport() {
+    this.setImageDropActive(false);
+    this.imageImportToken++;
+    try { this.pendingImageReader?.abort(); } catch (_) {}
+    this.pendingImageReader = null;
+    this.pendingImageDecode = null;
+  }
+
+  isImageImportActive(token) {
+    return token === this.imageImportToken && this.mode === 'editing' && !this.isSaving;
+  }
+
+  importImageFile(file, invocationPoint = null) {
+    if (this.mode !== 'editing' || !file) return;
+    const token = ++this.imageImportToken;
+    if (!RASTER_MIME_TYPES.includes(file.type)) {
+      this.reportImageImportError('Choose a PNG, JPEG, or WebP image.');
+      return;
+    }
+    if (typeof file.size === 'number' && file.size > MAX_IMAGE_SOURCE_BYTES) {
+      this.reportImageImportError('The image is larger than 10 MiB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    this.pendingImageReader = reader;
+    reader.onerror = () => {
+      if (this.isImageImportActive(token)) this.reportImageImportError('The image could not be read.');
+    };
+    reader.onload = () => {
+      if (!this.isImageImportActive(token)) return;
+      const data = typeof reader.result === 'string' ? reader.result : '';
+      const parsed = validateRasterDataUrl(data, file.type);
+      if (!parsed.valid) {
+        this.reportImageImportError(parsed.errors[0] || 'The image data is invalid.');
+        return;
+      }
+      const image = new Image();
+      this.pendingImageDecode = image;
+      image.onerror = () => {
+        if (this.isImageImportActive(token)) this.reportImageImportError('The image data could not be decoded.');
+      };
+      image.onload = () => {
+        if (!this.isImageImportActive(token)) return;
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        if (parsed.encodedWidth !== undefined && (parsed.encodedWidth !== width || parsed.encodedHeight !== height)) {
+          this.reportImageImportError('The encoded image dimensions do not match the decoded image.');
+          return;
+        }
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > MAX_IMAGE_AXIS || height > MAX_IMAGE_AXIS || width * height > MAX_IMAGE_PIXELS) {
+          this.reportImageImportError(`Image dimensions exceed the ${MAX_IMAGE_AXIS}px axis or ${MAX_IMAGE_PIXELS} pixel limit.`);
+          return;
+        }
+        const scale = Math.min(1, 480 / width, 360 / height);
+        const displayWidth = width * scale;
+        const displayHeight = height * scale;
+        const point = invocationPoint || this.workspace.screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+        const assetId = generateId('asset');
+        const objectId = generateId('image');
+        const asset = { id: assetId, type: 'raster', data, mimeType: file.type, width, height };
+        const object = createDefaultObject('image', {
+          id: objectId,
+          assetId,
+          x: point.x - displayWidth / 2,
+          y: point.y - displayHeight / 2,
+          width: displayWidth,
+          height: displayHeight,
+          fit: 'contain'
+        }, this.doc.theme);
+        try {
+          if (!this.isImageImportActive(token)) return;
+          this.dispatchCommand({ type: 'create_image', asset, object });
+          this.workspace.selectedIds = [objectId];
+          this.workspace.setTool('select');
+          this.workspace.render();
+        } catch (err) {
+          this.reportImageImportError('The image could not be added to this document.');
+        }
+      };
+      image.src = data;
+    };
+    reader.readAsDataURL(file);
   }
 
   handleWheelAction(actionId, payload) {
@@ -577,6 +746,9 @@ export class SaburaApp {
     else if (actionId === 'tool_hand') this.workspace.setTool('hand');
     else if (actionId === 'tool_line') this.workspace.setTool('line');
     else if (actionId === 'tool_text') this.workspace.setTool('text');
+    else if (actionId === 'image_import') {
+      if (this.mode === 'editing') this.imageFileInput?.click();
+    }
     else if (actionId.startsWith('shape_')) {
       const type = actionId.replace('shape_', '');
       this.workspace.setTool(type);
@@ -602,6 +774,11 @@ export class SaburaApp {
       if (selectedIds.length > 0) {
         this.dispatchCommand({ type: 'duplicate_objects', ids: selectedIds });
       }
+    } else if (actionId === 'image_fit_contain' || actionId === 'image_fit_cover') {
+      const fit = actionId.endsWith('cover') ? 'cover' : 'contain';
+      const imageIds = selectedIds.filter(id => this.doc.objects[id]?.type === 'image' && !this.doc.objects[id]?.locked);
+      if (imageIds.length === 1) this.dispatchCommand({ type: 'set_image_fit', id: imageIds[0], fit });
+      else if (imageIds.length > 1) this.dispatchCommandBatch(imageIds.map(id => ({ type: 'set_image_fit', id, fit })));
     } else if (actionId === 'action_lock' || actionId === 'action_unlock') {
       const lock = actionId === 'action_lock';
       this.dispatchCommand({ type: 'lock_objects', ids: selectedIds, locked: lock });
@@ -648,7 +825,12 @@ export class SaburaApp {
       this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { stroke: col } });
     } else if (actionId.startsWith('opacity_')) {
       const val = payload.value;
-      this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { opacity: val } });
+      const imageIds = selectedIds.filter(id => this.doc.objects[id]?.type === 'image' && !this.doc.objects[id]?.locked);
+      if (imageIds.length > 0 && imageIds.length === selectedIds.length) {
+        this.dispatchCommandBatch(imageIds.map(id => ({ type: 'set_image_opacity', id, opacity: val })));
+      } else {
+        this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { opacity: val } });
+      }
     } else if (actionId.startsWith('width_')) {
       const val = payload.value;
       this.dispatchCommand({ type: 'set_style', ids: selectedIds, updates: { strokeWidth: val } });
@@ -842,6 +1024,12 @@ export class SaburaApp {
       .filter(o => o && !o.locked);
     if (selected.length === 0) return;
     this.clipboard = cloneDocument(selected);
+    this.clipboardAssets = {};
+    for (const object of selected) {
+      if (object.type === 'image' && object.assetId && this.doc.assets?.[object.assetId]) {
+        this.clipboardAssets[object.assetId] = cloneDocument(this.doc.assets[object.assetId]);
+      }
+    }
     this.pasteCount = 0;
   }
 
@@ -865,6 +1053,12 @@ export class SaburaApp {
     const groupMap = {};
     const newObjects = [];
     const cmds = [];
+
+    // Restore copied sole-reference assets before creating their image objects.
+    // Existing shared assets are reused without copying or re-encoding bytes.
+    for (const [assetId, asset] of Object.entries(this.clipboardAssets || {})) {
+      if (!this.doc.assets?.[assetId]) cmds.push({ type: 'create_asset', asset });
+    }
 
     // 1. Pass 1: Clone objects, generate new IDs, map groups
     for (const source of this.clipboard) {
@@ -973,6 +1167,7 @@ export class SaburaApp {
   }
 
   enterPresentation() {
+    this.cancelPendingImageImport();
     this.prePresentationCamera = { ...this.workspace.camera };
     this.prePresentationMode = this.mode;
     if (this.textEditor) {
@@ -1057,6 +1252,7 @@ export class SaburaApp {
     if (this.isSaving) {
       return { success: false, error: 'Save in progress' };
     }
+    this.cancelPendingImageImport();
     this.isSaving = true;
 
     try {
@@ -1244,15 +1440,8 @@ export class SaburaApp {
         // 2. Apply batch atomically on a test copy first
         try {
           const testDoc = cloneDocument(this.doc);
-          const { doc: finalDoc, inverseCmd } = applyCommandBatch(testDoc, commands);
-          this.doc = finalDoc;
-          if (inverseCmd && inverseCmd.type !== 'noop') {
-            this.undoStack.push(inverseCmd);
-            this.redoStack = [];
-          }
-          this.status = 'Changed';
-          this.updateUI();
-          this.notifySubscribers();
+          const result = applyCommandBatch(testDoc, commands);
+          this.commitCommandResult(this.doc, result);
           return { success: true, document: cloneDocument(this.doc) };
         } catch (err) {
           return { success: false, errors: [err.message] };

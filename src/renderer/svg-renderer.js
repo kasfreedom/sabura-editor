@@ -50,6 +50,16 @@ function escapeXml(str) {
     .replace(/'/g, '&apos;');
 }
 
+function safeSvgId(value) {
+  // Encode every code point, rather than replacing characters, so distinct
+  // valid object IDs (for example "cover a" and "cover_a") cannot share a
+  // clipPath ID in the global SVG namespace.
+  const encoded = Array.from(String(value || ''))
+    .map(char => char.codePointAt(0).toString(16))
+    .join('_');
+  return encoded || 'empty';
+}
+
 /**
  * Renders an SVG arrowhead marker with natural Excalidraw stroke character.
  */
@@ -270,6 +280,23 @@ export function renderObject(doc, obj, isSelected = false) {
       const tip = geom.points[0];
       const next = geom.points[1];
       markup.push(renderArrowhead(tip.x, tip.y, next.x, next.y, 14, stroke, strokeWidth, isSketch));
+    }
+  } else if (obj.type === 'image') {
+    const asset = doc.assets?.[obj.assetId];
+    const safeRaster = asset && asset.type === 'raster' &&
+      (asset.mimeType === 'image/png' || asset.mimeType === 'image/jpeg' || asset.mimeType === 'image/webp') &&
+      typeof asset.data === 'string' && asset.data.startsWith(`data:${asset.mimeType};base64,`) &&
+      typeof asset.width === 'number' && Number.isFinite(asset.width) && asset.width > 0 &&
+      typeof asset.height === 'number' && Number.isFinite(asset.height) && asset.height > 0;
+    if (safeRaster) {
+      const href = escapeXml(asset.data);
+      if (obj.fit === 'cover') {
+        const clipId = `clip-image-${safeSvgId(obj.id)}`;
+        markup.push(`<defs><clipPath id="${clipId}"><rect x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" /></clipPath></defs>`);
+        markup.push(`<image href="${href}" x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`);
+      } else {
+        markup.push(`<image href="${href}" x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" preserveAspectRatio="xMidYMid meet" />`);
+      }
     }
   } else if (obj.type === 'text') {
     // Standalone text

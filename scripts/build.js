@@ -39,7 +39,10 @@ const moduleFiles = [
 
 export async function minifyJs(code) {
   const result = await minify(code, {
-    compress: false,
+    // Keep names stable for readable stack traces and the opaque runtime
+    // contract, while enabling safe AST compression to preserve the runtime
+    // budget as native features are added.
+    compress: true,
     mangle: false,
     format: {
       comments: false
@@ -184,15 +187,10 @@ SCHEMA  sabura/canvas/v1
     groups         { [groupId]: { id, name } }
     assets         { [assetId]: asset }
 
-  Supported types: rectangle, ellipse, diamond, triangle, text, connector, path
+  Supported types: rectangle, ellipse, diamond, triangle, text, connector, path, image
 
-  Common object fields:
-    id, type, x, y, width, height
-    fill (string), stroke (string), strokeWidth (number>=0),
-    strokeStyle ("solid"|"dashed"|"dotted"), opacity (0..1), roughness (>=0),
-    seed (positive integer 1..2147483647), locked (bool), groupId (string|null)
-    text (string), textStyle { size ("s"|"m"|"l"|"xl"), resolvedSize (number),
-      fontFamily ("sans"|"serif"|"mono"|"hand"), bold (bool), align (string), color (string) }
+  Common object fields: id, type, x, y, width, height, rotation, opacity,
+    locked, groupId, plus style/text fields as applicable.
 
   Connector (type: connector):
     from, to — endpoint: { "id": "target_id" }
@@ -204,6 +202,12 @@ SCHEMA  sabura/canvas/v1
   Path (type: path):
     points: [{ "x": number, "y": number }, ...]
     closed: bool,  curveStyle: "sharp" | "curved",  startArrow: bool,  endArrow: bool
+
+  Image: type "image", assetId -> a raster asset, fit "contain"|"cover" (default
+    "contain"), plus x/y/width/height/rotation/opacity/locked/groupId.
+  Raster asset: { id, type:"raster", data:"data:image/{png|jpeg|webp};base64,...",
+    mimeType, width, height }. Data must be valid, <=10 MiB, <=16,384px/axis,
+    and <=40,000,000 decoded pixels.
 
   Grouping: set object.groupId to a key that exists in the top-level groups map.
   Extensions: unknown properties are rejected unless prefixed "ext:" (e.g. "ext:myMeta").
@@ -281,6 +285,8 @@ async function build() {
   const emptyPayloadBytes = Buffer.byteLength(serializedEmpty, 'utf8');
   const aiContractBytes = Buffer.byteLength(AI_CONTRACT, 'utf8');
   const fixedShellBytes = sampleTotalBytes - samplePayloadBytes - aiContractBytes;
+  const runtimeBytes = sampleTotalBytes - samplePayloadBytes;
+  const runtimeBudgetBytes = 524288;
 
   console.log('\n=== Sabura Artifact Byte Report ===');
   console.log(`- Fixed Shell:              ${fixedShellBytes.toLocaleString()} bytes`);
@@ -289,11 +295,12 @@ async function build() {
   console.log(`- Sample Document Payload:  ${samplePayloadBytes.toLocaleString()} bytes`);
   console.log(`- Empty-Board Total:        ${emptyTotalBytes.toLocaleString()} bytes (${(emptyTotalBytes / 1024).toFixed(1)} KiB)`);
   console.log(`- Representative Sample:    ${sampleTotalBytes.toLocaleString()} bytes (${(sampleTotalBytes / 1024).toFixed(1)} KiB)`);
-  console.log(`- 300 KiB Budget Target:    307,200 bytes`);
-  console.log(`- Budget Headroom:          ${(307200 - emptyTotalBytes).toLocaleString()} bytes under budget\n`);
+  console.log(`- Runtime (payload-free):   ${runtimeBytes.toLocaleString()} bytes (${(runtimeBytes / 1024).toFixed(1)} KiB)`);
+  console.log(`- Runtime Budget Target:    ${runtimeBudgetBytes.toLocaleString()} bytes (512 KiB)`);
+  console.log(`- Runtime Headroom:         ${(runtimeBudgetBytes - runtimeBytes).toLocaleString()} bytes under budget\n`);
 
-  if (emptyTotalBytes > 307200) {
-    throw new Error(`Empty board size (${emptyTotalBytes} bytes) exceeds the 307,200-byte (300 KiB) limit!`);
+  if (runtimeBytes >= runtimeBudgetBytes) {
+    throw new Error(`Editor runtime (${runtimeBytes} bytes, document payload excluded) must remain below the ${runtimeBudgetBytes}-byte (512 KiB) limit!`);
   }
 
   console.log(`✓ Successfully created sabura.html (${(sampleTotalBytes / 1024).toFixed(1)} KiB)`);

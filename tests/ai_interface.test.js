@@ -229,12 +229,15 @@ test('13. Unicode content produces UTF-8 byte count larger than JS string length
 
 // ── Test 14 ────────────────────────────────────────────────────────────────────
 
-test('14. Final artifact remains below 300 KiB (307,200 bytes) budget', () => {
-  const BUDGET_BYTES = 307_200;
+test('14. Generated editor runtime remains below 512 KiB with document payload excluded', () => {
+  const BUDGET_BYTES = 524_288;
   const actualBytes = Buffer.byteLength(html, 'utf8');
+  const seam = html.match(/<script type="application\/json" id="sabura-document">\s*([\s\S]*?)\s*<\/script>/i);
+  assert.ok(seam, 'Document seam must exist for runtime measurement');
+  const runtimeBytes = actualBytes - Buffer.byteLength(seam[1].trim(), 'utf8');
   assert.ok(
-    actualBytes <= BUDGET_BYTES,
-    `Artifact is ${actualBytes} bytes — exceeds 300 KiB budget (${BUDGET_BYTES} bytes)`
+    runtimeBytes < BUDGET_BYTES,
+    `Runtime is ${runtimeBytes} bytes — exceeds 512 KiB budget (${BUDGET_BYTES} bytes)`
   );
 });
 

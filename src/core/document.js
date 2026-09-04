@@ -8,6 +8,12 @@ import {
   FONT_SIZES,
   MIN_OBJECT_SIZE,
   OBJECT_TYPES,
+  SUPPORTED_OBJECT_TYPES,
+  IMAGE_OBJECT_TYPE,
+  RASTER_MIME_TYPES,
+  MAX_IMAGE_SOURCE_BYTES,
+  MAX_IMAGE_AXIS,
+  MAX_IMAGE_PIXELS,
   CONNECTOR_ROUTINGS,
   STROKE_STYLES
 } from './types.js';
@@ -93,6 +99,10 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
 
   let defaultWidth = type === 'text' ? 80 : 160;
   let defaultHeight = type === 'text' ? 32 : 100;
+  if (type === IMAGE_OBJECT_TYPE) {
+    defaultWidth = 160;
+    defaultHeight = 100;
+  }
   if (type === 'text' && overrides.text) {
     const familyToken = overrides.textStyle?.fontFamily || safeTheme.defaultFontFamily;
     const m = measureText(overrides.text, resolvedSize, familyToken);
@@ -100,8 +110,9 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
     defaultHeight = m.height;
   }
 
-  const width = Math.max(MIN_OBJECT_SIZE, overrides.width !== undefined ? overrides.width : defaultWidth);
-  const height = Math.max(MIN_OBJECT_SIZE, overrides.height !== undefined ? overrides.height : defaultHeight);
+  const minSize = type === IMAGE_OBJECT_TYPE ? 1 : MIN_OBJECT_SIZE;
+  const width = Math.max(minSize, overrides.width !== undefined ? overrides.width : defaultWidth);
+  const height = Math.max(minSize, overrides.height !== undefined ? overrides.height : defaultHeight);
 
   const baseObject = {
     id,
@@ -126,6 +137,20 @@ export function createDefaultObject(type, overrides = {}, theme = THEME_PRESETS.
       color: overrides.textStyle?.color || overrides.stroke || safeTheme.defaultStroke
     }
   };
+
+  if (type === IMAGE_OBJECT_TYPE) {
+    // Image objects contain only a stable reference to the canonical asset;
+    // encoded bytes never live on the object itself.
+    baseObject.assetId = overrides.assetId;
+    baseObject.fit = overrides.fit || 'contain';
+    delete baseObject.text;
+    delete baseObject.textStyle;
+    delete baseObject.fill;
+    delete baseObject.stroke;
+    delete baseObject.strokeWidth;
+    delete baseObject.strokeStyle;
+    delete baseObject.roughness;
+  }
 
   if (type === 'connector') {
     baseObject.from = overrides.from || { point: { x: overrides.x !== undefined ? overrides.x : 0, y: overrides.y !== undefined ? overrides.y : 0 } };
@@ -259,6 +284,9 @@ export const PATH_ALLOWED_FIELDS = new Set([
   'startArrow',
   'endArrow'
 ]);
+export const IMAGE_ALLOWED_FIELDS = new Set([
+  ...OBJECT_COMMON_FIELDS, 'x', 'y', 'width', 'height', 'assetId', 'fit'
+]);
 
 export const CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS = new Set(['id', 'anchor']);
 export const CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS = new Set(['point']);
@@ -276,6 +304,177 @@ export const DEFAULT_THEME_VALUES = Object.freeze({
   defaultFontFamily: 'hand',
   gridColor: 'rgba(0, 0, 0, 0.08)'
 });
+
+export function isAllowedRasterMimeType(mimeType) {
+  return RASTER_MIME_TYPES.includes(mimeType);
+}
+
+function inspectRasterStructure(bytes, mimeType) {
+  const text = (offset, length) => String.fromCharCode(...bytes.slice(offset, offset + length));
+  const readU32BE = offset => ((bytes[offset] << 24) >>> 0) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3];
+  const readU32LE = offset => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+
+  if (mimeType === 'image/png') {
+    if (bytes.length < 33 || ![0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => bytes[index] === value)) {
+      return { valid: false, error: 'PNG payload is truncated or malformed' };
+    }
+    let offset = 8;
+    let width;
+    let height;
+    let hasIdat = false;
+    let hasIend = false;
+    while (offset + 12 <= bytes.length) {
+      const length = readU32BE(offset);
+      const type = text(offset + 4, 4);
+      const end = offset + 12 + length;
+      if (end > bytes.length) return { valid: false, error: 'PNG payload is truncated or malformed' };
+      if (offset === 8 && (type !== 'IHDR' || length !== 13)) return { valid: false, error: 'PNG payload is missing a valid header' };
+      if (type === 'IHDR') {
+        width = readU32BE(offset + 8);
+        height = readU32BE(offset + 12);
+        if (width <= 0 || height <= 0) return { valid: false, error: 'PNG payload has invalid dimensions' };
+      }
+      if (type === 'IDAT' && length > 0) hasIdat = true;
+      if (type === 'IEND') {
+        if (length !== 0) return { valid: false, error: 'PNG payload has malformed end marker' };
+        hasIend = true;
+        break;
+      }
+      offset = end;
+    }
+    if (!hasIend || !hasIdat || !width || !height) return { valid: false, error: 'PNG payload is truncated or missing image data' };
+    return { valid: true, width, height };
+  }
+
+  if (mimeType === 'image/jpeg') {
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      return { valid: false, error: 'JPEG payload is truncated or malformed' };
+    }
+    let offset = 2;
+    let width;
+    let height;
+    let sawSos = false;
+    while (offset + 1 < bytes.length) {
+      if (bytes[offset] !== 0xff) return { valid: false, error: 'JPEG payload has malformed marker data' };
+      while (bytes[offset] === 0xff) offset++;
+      if (offset >= bytes.length) break;
+      const marker = bytes[offset++];
+      if (marker === 0xd9) break;
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+      if (offset + 2 > bytes.length) return { valid: false, error: 'JPEG payload is truncated or malformed' };
+      const length = (bytes[offset] << 8) | bytes[offset + 1];
+      if (length < 2 || offset + length > bytes.length) return { valid: false, error: 'JPEG payload is truncated or malformed' };
+      const isSof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
+      if (isSof && length >= 7) {
+        height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+        width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      }
+      offset += length;
+      if (marker === 0xda) {
+        sawSos = true;
+        break;
+      }
+    }
+    let hasEoi = false;
+    for (let i = offset; i + 1 < bytes.length; i++) {
+      if (bytes[i] === 0xff && bytes[i + 1] === 0xd9) {
+        hasEoi = true;
+        break;
+      }
+    }
+    if (!sawSos || !hasEoi || !width || !height) return { valid: false, error: 'JPEG payload is truncated or missing image data' };
+    return { valid: true, width, height };
+  }
+
+  if (bytes.length < 20 || text(0, 4) !== 'RIFF' || text(8, 4) !== 'WEBP') {
+    return { valid: false, error: 'WebP payload is truncated or malformed' };
+  }
+  const riffEnd = 8 + readU32LE(4);
+  if (riffEnd > bytes.length) return { valid: false, error: 'WebP payload is truncated or malformed' };
+  let offset = 12;
+  let width;
+  let height;
+  let hasImageChunk = false;
+  while (offset + 8 <= riffEnd) {
+    const type = text(offset, 4);
+    const length = readU32LE(offset + 4);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (dataEnd > riffEnd || dataEnd > bytes.length) return { valid: false, error: 'WebP payload is truncated or malformed' };
+    if (type === 'VP8X' && length >= 10) {
+      width = 1 + bytes[dataStart + 4] + (bytes[dataStart + 5] << 8) + (bytes[dataStart + 6] << 16);
+      height = 1 + bytes[dataStart + 7] + (bytes[dataStart + 8] << 8) + (bytes[dataStart + 9] << 16);
+    } else if (type === 'VP8 ' && length >= 13 && bytes[dataStart + 6] === 0x9d && bytes[dataStart + 7] === 0x01 && bytes[dataStart + 8] === 0x2a) {
+      width = bytes[dataStart + 9] | (bytes[dataStart + 10] << 8);
+      height = bytes[dataStart + 11] | (bytes[dataStart + 12] << 8);
+    } else if (type === 'VP8L' && length >= 5 && bytes[dataStart] === 0x2f) {
+      width = 1 + ((bytes[dataStart + 1] | (bytes[dataStart + 2] << 8)) & 0x3fff);
+      height = 1 + (((bytes[dataStart + 2] >> 6) | (bytes[dataStart + 3] << 2) | (bytes[dataStart + 4] << 10)) & 0x3fff);
+    }
+    if (type === 'VP8 ' || type === 'VP8L' || type === 'VP8X') hasImageChunk = true;
+    offset = dataEnd + (length % 2);
+  }
+  if (!hasImageChunk || !width || !height || offset !== riffEnd) return { valid: false, error: 'WebP payload is truncated or missing image data' };
+  return { valid: true, width, height };
+}
+
+/**
+ * Validates a canonical base64 raster data URL without ever including its
+ * payload in an error. The returned byte count is the decoded source size.
+ */
+export function validateRasterDataUrl(data, mimeType) {
+  const errors = [];
+  if (typeof data !== 'string') {
+    return { valid: false, errors: ['Raster asset data must be a base64 data URL'], byteLength: 0 };
+  }
+  if (!isAllowedRasterMimeType(mimeType)) {
+    errors.push(`Raster asset MIME type must be one of: ${RASTER_MIME_TYPES.join(', ')}`);
+  }
+  const match = data.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!match) {
+    errors.push('Raster asset data must use an allowlisted image MIME type and valid base64 data');
+    return { valid: false, errors, byteLength: 0 };
+  }
+  const dataMime = match[1];
+  const payload = match[2];
+  if (dataMime !== mimeType) errors.push('Raster asset MIME type does not match its data URL');
+  // Reject oversized payloads before the full base64 grammar check. Besides
+  // avoiding needless decoding, this keeps validation stack-safe for hostile
+  // multi-megabyte strings.
+  const estimatedByteLength = Math.floor(payload.length * 3 / 4) - (payload.endsWith('==') ? 2 : (payload.endsWith('=') ? 1 : 0));
+  if (estimatedByteLength > MAX_IMAGE_SOURCE_BYTES) {
+    errors.push(`Raster asset source bytes must not exceed ${MAX_IMAGE_SOURCE_BYTES} bytes`);
+    return { valid: false, errors, byteLength: estimatedByteLength };
+  }
+  if (payload.length === 0 || payload.length % 4 === 1 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(payload)) {
+    errors.push('Raster asset data contains malformed base64');
+    return { valid: false, errors, byteLength: 0 };
+  }
+  const byteLength = estimatedByteLength;
+  if (byteLength <= 0 || byteLength > MAX_IMAGE_SOURCE_BYTES) {
+    errors.push(`Raster asset source bytes must not exceed ${MAX_IMAGE_SOURCE_BYTES} bytes`);
+  }
+  // Check the lightweight file signature as well as the URL prefix. This
+  // prevents a text/blob payload from being smuggled in under an image MIME.
+  try {
+    const bytes = typeof atob === 'function'
+      ? Uint8Array.from(atob(payload), ch => ch.charCodeAt(0))
+      : Uint8Array.from(Buffer.from(payload, 'base64'));
+    const starts = (values, offset = 0) => values.every((value, index) => bytes[offset + index] === value);
+    const signatureValid = mimeType === 'image/png'
+      ? starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      : mimeType === 'image/jpeg'
+        ? starts([0xff, 0xd8, 0xff])
+        : starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8);
+    if (!signatureValid) errors.push('Raster asset data does not match its declared image type');
+    const structure = inspectRasterStructure(bytes, mimeType);
+    if (!structure.valid) errors.push(structure.error);
+    return { valid: errors.length === 0, errors, byteLength, encodedWidth: structure.width, encodedHeight: structure.height };
+  } catch (_) {
+    errors.push('Raster asset data contains malformed base64');
+  }
+  return { valid: errors.length === 0, errors, byteLength, encodedWidth: undefined, encodedHeight: undefined };
+}
 
 export function normalizeTheme(theme) {
   if (!theme || typeof theme !== 'object') {
@@ -314,6 +513,7 @@ export function getAllowedFieldsForType(type) {
   if (type === 'text') return TEXT_ALLOWED_FIELDS;
   if (type === 'connector') return CONNECTOR_ALLOWED_FIELDS;
   if (type === 'path') return PATH_ALLOWED_FIELDS;
+  if (type === IMAGE_OBJECT_TYPE) return IMAGE_ALLOWED_FIELDS;
   return OBJECT_COMMON_FIELDS;
 }
 
@@ -497,6 +697,27 @@ export function validateDocument(doc, options = {}) {
         errors.push(`Asset id mismatch: key "${assetId}" does not match asset.id "${asset.id}"`);
       }
       checkUnknownProperties(asset, ASSET_ALLOWED_FIELDS, `asset "${assetId}"`, errors);
+      if (asset.type !== 'raster') {
+        errors.push(`Asset "${assetId}" type must be "raster"`);
+      } else {
+        const rasterVal = validateRasterDataUrl(asset.data, asset.mimeType);
+        errors.push(...rasterVal.errors.map(error => `Asset "${assetId}": ${error}`));
+        if (rasterVal.encodedWidth !== undefined && typeof asset.width === 'number' && rasterVal.encodedWidth !== asset.width) {
+          errors.push(`Asset "${assetId}" width does not match encoded raster dimensions`);
+        }
+        if (rasterVal.encodedHeight !== undefined && typeof asset.height === 'number' && rasterVal.encodedHeight !== asset.height) {
+          errors.push(`Asset "${assetId}" height does not match encoded raster dimensions`);
+        }
+        if (typeof asset.width !== 'number' || !Number.isFinite(asset.width) || asset.width <= 0 || asset.width > MAX_IMAGE_AXIS) {
+          errors.push(`Asset "${assetId}" width must be a finite positive number no greater than ${MAX_IMAGE_AXIS}`);
+        }
+        if (typeof asset.height !== 'number' || !Number.isFinite(asset.height) || asset.height <= 0 || asset.height > MAX_IMAGE_AXIS) {
+          errors.push(`Asset "${assetId}" height must be a finite positive number no greater than ${MAX_IMAGE_AXIS}`);
+        }
+        if (typeof asset.width === 'number' && typeof asset.height === 'number' && Number.isFinite(asset.width) && Number.isFinite(asset.height) && asset.width > 0 && asset.height > 0 && asset.width * asset.height > MAX_IMAGE_PIXELS) {
+          errors.push(`Asset "${assetId}" decoded pixel area must not exceed ${MAX_IMAGE_PIXELS}`);
+        }
+      }
     }
   }
 
@@ -512,8 +733,8 @@ export function validateDocument(doc, options = {}) {
       if (obj.id !== objId) {
         errors.push(`Object id mismatch: key "${objId}" does not match object.id "${obj.id}"`);
       }
-      if (typeof obj.type !== 'string' || !OBJECT_TYPES.includes(obj.type)) {
-        errors.push(`Unsupported object type "${obj.type}" on object "${objId}". Expected one of: ${OBJECT_TYPES.join(', ')}`);
+      if (typeof obj.type !== 'string' || !SUPPORTED_OBJECT_TYPES.includes(obj.type)) {
+        errors.push(`Unsupported object type "${obj.type}" on object "${objId}". Expected one of: ${SUPPORTED_OBJECT_TYPES.join(', ')}`);
         continue;
       }
 
@@ -663,6 +884,19 @@ export function validateDocument(doc, options = {}) {
           errors.push(`Path "${objId}" endArrow must be a boolean`);
         }
       }
+
+      if (obj.type === IMAGE_OBJECT_TYPE) {
+        if (typeof obj.assetId !== 'string' || !obj.assetId.trim()) {
+          errors.push(`Image "${objId}" must reference a non-empty assetId`);
+        } else if (!doc.assets || !doc.assets[obj.assetId]) {
+          errors.push(`Image "${objId}" references non-existent assetId: "${obj.assetId}"`);
+        } else if (doc.assets[obj.assetId].type !== 'raster') {
+          errors.push(`Image "${objId}" assetId "${obj.assetId}" must reference a raster asset`);
+        }
+        if (obj.fit !== undefined && obj.fit !== 'contain' && obj.fit !== 'cover') {
+          errors.push(`Image "${objId}" fit must be "contain" or "cover"`);
+        }
+      }
     }
   }
 
@@ -715,6 +949,18 @@ export function normalizeDocument(doc) {
 
   for (const [id, obj] of Object.entries(doc.objects)) {
     if (!obj || typeof obj !== 'object') continue;
+    if (obj.type === IMAGE_OBJECT_TYPE) {
+      // Images have no shape/text styling fields. Normalize only the common
+      // spatial/object fields so reopening a valid image document cannot add
+      // fields that the image schema deliberately rejects.
+      if (obj.opacity === undefined) obj.opacity = theme.defaultOpacity;
+      if (obj.seed === undefined) obj.seed = deterministicSeedFromId(obj.id);
+      if (obj.locked === undefined) obj.locked = false;
+      if (obj.groupId === undefined) obj.groupId = null;
+      if (obj.rotation === undefined) obj.rotation = 0;
+      if (obj.fit === undefined) obj.fit = 'contain';
+      continue;
+    }
     if (obj.stroke === undefined) obj.stroke = theme.defaultStroke;
     if (obj.strokeWidth === undefined) obj.strokeWidth = theme.defaultStrokeWidth;
     if (obj.strokeStyle === undefined) obj.strokeStyle = 'solid';

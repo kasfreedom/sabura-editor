@@ -122,7 +122,17 @@ export const OPACITY_PRESETS = [1.0, 0.75, 0.5, 0.25];
 export const STROKE_WIDTHS = [1, 2, 4, 6];
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'];
 export const SHAPE_TYPES = ['rectangle', 'ellipse', 'diamond', 'triangle'];
+// Image is validated/rendered as a first-class type, but is kept out of this
+// legacy list so callers that enumerate the original v1 creation palette do
+// not accidentally create an unbound image object. Use isSupportedObjectType
+// for schema checks instead.
 export const OBJECT_TYPES = ['rectangle', 'ellipse', 'diamond', 'triangle', 'text', 'connector', 'path'];
+export const IMAGE_OBJECT_TYPE = 'image';
+export const SUPPORTED_OBJECT_TYPES = [...OBJECT_TYPES, IMAGE_OBJECT_TYPE];
+export const RASTER_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'image/webp']);
+export const MAX_IMAGE_SOURCE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMAGE_AXIS = 16384;
+export const MAX_IMAGE_PIXELS = 40_000_000;
 export const CONNECTOR_ROUTINGS = ['straight', 'elbow', 'curved'];
 export const RESIZE_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 export const MIN_OBJECT_SIZE = 16;

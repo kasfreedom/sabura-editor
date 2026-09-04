@@ -82,6 +82,7 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
   const events = [];
   const coordinator = new ShortcutsCoordinator({
     onSelectTool: (tool) => events.push(['tool', tool]),
+    onImportImage: (x, y) => events.push(['image', x, y]),
     onTriggerWheel: () => events.push(['wheel']),
     onZoomIn: () => events.push(['zoom_in']),
     onZoomOut: () => events.push(['zoom_out']),
@@ -102,6 +103,8 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
   coordinator.onKeyDown({ key: 'v', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'h', preventDefault: () => {} });
   coordinator.onKeyDown({ key: 'q', preventDefault: () => {} });
+  coordinator.onPointerMove({ clientX: 321, clientY: 234 });
+  coordinator.onKeyDown({ key: 'i', preventDefault: () => {} });
 
   // View
   coordinator.onKeyDown({ key: '+', preventDefault: () => {} });
@@ -121,6 +124,7 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
     ['tool', 'select'],
     ['tool', 'hand'],
     ['wheel'],
+    ['image', 321, 234],
     ['zoom_in'],
     ['zoom_out'],
     ['reset_zoom'],
@@ -128,6 +132,39 @@ test('ShortcutsCoordinator triggers tools and view commands when idle', () => {
     ['help'],
     ['escape']
   ]);
+});
+
+test('image shortcut is exact lowercase unmodified i and respects mode and typing isolation', () => {
+  const calls = [];
+  let reading = false;
+  const coordinator = new ShortcutsCoordinator({
+    onImportImage: (x, y) => calls.push({ x, y }),
+    isReadingMode: () => reading,
+    isTextEditing: () => false
+  });
+  const key = (value, modifiers = {}) => coordinator.onKeyDown({
+    key: value, preventDefault() {}, ...modifiers
+  });
+
+  key('i');
+  assert.deepEqual(calls, [{ x: 500, y: 400 }], 'initial shortcut uses viewport center');
+  coordinator.onPointerMove({ clientX: 123, clientY: 456 });
+  key('i');
+  key('I', { shiftKey: true });
+  key('i', { shiftKey: true });
+  key('i', { ctrlKey: true });
+  key('i', { metaKey: true });
+  key('i', { altKey: true });
+  reading = true;
+  key('i');
+  assert.deepEqual(calls, [{ x: 500, y: 400 }, { x: 123, y: 456 }]);
+
+  const typing = new ShortcutsCoordinator({
+    onImportImage: () => calls.push({ typing: true }),
+    isTextEditing: () => true
+  });
+  typing.onKeyDown({ key: 'i', preventDefault() {} });
+  assert.equal(calls.some(call => call.typing), false);
 });
 
 test('ShortcutsCoordinator isolates typing when text editor or inputs are active', () => {
@@ -188,6 +225,7 @@ test('HelpModal opens, renders scannable sections, and toggles cleanly', () => {
   assert.ok(modal.modalEl.innerHTML.includes('Editing & Modifiers'));
   assert.ok(modal.modalEl.innerHTML.includes('Connectors'));
   assert.ok(modal.modalEl.innerHTML.includes('View & Controls'));
+  assert.ok(modal.modalEl.innerHTML.includes('Insert Image'));
 
   modal.close();
   assert.equal(modal.isOpen, false);

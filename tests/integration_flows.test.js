@@ -3,6 +3,90 @@ import assert from 'node:assert/strict';
 import { createDefaultDocument, createDefaultObject, cloneDocument, canonicalJson } from '../src/core/document.js';
 import { applyCommand, applyCommandBatch, validateCommand } from '../src/core/commands.js';
 import { extractDocumentFromHtml, packageHtmlWithDocument } from '../src/storage/file-packer.js';
+import { SaburaApp } from '../src/main.js';
+
+test('canonical history boundary suppresses idempotent command, batch, public API, undo, and redo entries', () => {
+  const makeApp = () => {
+    const app = Object.create(SaburaApp.prototype);
+    app.doc = createDefaultDocument({ title: 'Stable title' });
+    app.isCorrupted = false;
+    app.undoStack = [];
+    app.redoStack = [];
+    app.status = 'Clean';
+    app.uiUpdates = 0;
+    app.notifications = 0;
+    app.updateUI = () => { app.uiUpdates += 1; };
+    app.notifySubscribers = () => { app.notifications += 1; };
+    return app;
+  };
+
+  const app = makeApp();
+  const originalDoc = app.doc;
+  const existingRedo = { type: 'set_title', title: 'Future title' };
+  app.redoStack = [existingRedo];
+  app.mode = 'presentation';
+  app.workspace = { selectedIds: ['transient-selection'], camera: { x: 90, y: 40, zoom: 2 } };
+  const samePersistentDocument = cloneDocument(app.doc);
+  assert.equal(app.documentStateChanged(app.doc, samePersistentDocument), false);
+  samePersistentDocument['ext:test:persistent'] = { value: 1 };
+  assert.equal(app.documentStateChanged(app.doc, samePersistentDocument), true);
+
+  assert.equal(app.dispatchCommand({ type: 'set_title', title: 'Stable title' }), false);
+  assert.strictEqual(app.doc, originalDoc);
+  assert.equal(app.undoStack.length, 0);
+  assert.deepEqual(app.redoStack, [existingRedo]);
+  assert.equal(app.status, 'Clean');
+  assert.equal(app.uiUpdates, 0);
+  assert.equal(app.notifications, 0);
+
+  assert.equal(app.dispatchCommandBatch([{ type: 'set_title', title: 'Stable title' }]), false);
+  assert.strictEqual(app.doc, originalDoc);
+  assert.equal(app.undoStack.length, 0);
+  assert.deepEqual(app.redoStack, [existingRedo]);
+
+  const previousWindow = globalThis.window;
+  globalThis.window = {};
+  try {
+    app.exposeApi();
+    const publicResult = globalThis.window.sabura.applyCommands([
+      { type: 'set_title', title: 'Stable title' }
+    ]);
+    assert.equal(publicResult.success, true);
+    assert.strictEqual(app.doc, originalDoc);
+    assert.equal(app.undoStack.length, 0);
+    assert.deepEqual(app.redoStack, [existingRedo]);
+    assert.equal(app.status, 'Clean');
+    assert.equal(app.uiUpdates, 0);
+    assert.equal(app.notifications, 0);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+
+  assert.equal(app.dispatchCommand({ type: 'set_title', title: 'Changed title' }), true);
+  assert.equal(app.doc.title, 'Changed title');
+  assert.equal(app.undoStack.length, 1);
+  assert.equal(app.redoStack.length, 0);
+  assert.equal(app.status, 'Changed');
+  assert.equal(app.uiUpdates, 1);
+  assert.equal(app.notifications, 1);
+
+  const staleUndo = makeApp();
+  staleUndo.undoStack = [{ type: 'set_title', title: 'Stable title' }];
+  assert.equal(staleUndo.undo(), false);
+  assert.equal(staleUndo.undoStack.length, 0);
+  assert.equal(staleUndo.redoStack.length, 0);
+  assert.equal(staleUndo.uiUpdates, 0);
+  assert.equal(staleUndo.notifications, 0);
+
+  const staleRedo = makeApp();
+  staleRedo.redoStack = [{ type: 'set_title', title: 'Stable title' }];
+  assert.equal(staleRedo.redo(), false);
+  assert.equal(staleRedo.undoStack.length, 0);
+  assert.equal(staleRedo.redoStack.length, 0);
+  assert.equal(staleRedo.uiUpdates, 0);
+  assert.equal(staleRedo.notifications, 0);
+});
 
 test('Public AI API command validation and atomic batch execution', () => {
   let doc = createDefaultDocument();

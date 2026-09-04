@@ -138,6 +138,50 @@ A Sabura v1 document is a strict, deterministic, semantic JSON object containing
 | `assets` | `object` | **Yes** | Map of asset records `{ [assetId]: { id, type, ... } }`. |
 | `ext:*` | `any` | No | Any namespaced custom extension data. |
 
+Raster images use a canonical top-level asset and a small object reference. The
+asset bytes are stored once and are never copied into image objects:
+
+```json
+{
+  "id": "asset_photo",
+  "type": "raster",
+  "data": "data:image/png;base64,...",
+  "mimeType": "image/png",
+  "width": 1200,
+  "height": 800
+}
+```
+
+Only `image/png`, `image/jpeg`, and `image/webp` are accepted. The data URL MIME
+must match `mimeType`, use valid base64, and stay within 10 MiB, 16,384 pixels on
+either axis, and 40,000,000 decoded pixels. An image object references the asset
+with `assetId` and uses `fit: "contain"` or `"cover"` (default `"contain"`),
+alongside the normal spatial fields (`x`, `y`, `width`, `height`, `rotation`,
+`opacity`, `locked`, and `groupId`). Deleting the final image reference removes
+the asset; duplicate image objects reuse the same asset record.
+
+Canonical validation performs deterministic structural checks for the required
+PNG, JPEG, and WebP headers/chunks and verifies encoded dimensions against asset
+metadata. Native import additionally requires successful browser image decoding
+before the asset/object command is committed.
+
+```json
+{
+  "id": "image_photo",
+  "type": "image",
+  "assetId": "asset_photo",
+  "fit": "contain",
+  "x": 100,
+  "y": 120,
+  "width": 480,
+  "height": 320,
+  "rotation": 0,
+  "opacity": 1,
+  "locked": false,
+  "groupId": null
+}
+```
+
 ---
 
 ## 2. Supported Object Types and Examples

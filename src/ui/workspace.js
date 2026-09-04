@@ -21,7 +21,8 @@ import {
   rotatePoint,
   unrotatePoint,
   normalizeAngle,
-  isPointInsideObject
+  isPointInsideObject,
+  resolveConnectorGeometry
 } from '../core/geometry.js';
 
 export class Workspace {
@@ -1786,6 +1787,9 @@ export class Workspace {
   render() {
     const doc = this.callbacks.getDocument();
     const isReading = this.mode === 'reading';
+    const draftGeometry = this.draftObject?.type === 'connector'
+      ? resolveConnectorGeometry(doc, this.draftObject)
+      : null;
     const runtime = {
       camera: this.camera,
       selectedIds: isReading ? [] : this.selectedIds,
@@ -1794,8 +1798,8 @@ export class Workspace {
       showGrid: this.showGrid !== false,
       reconnectSnapIndicator: (this.isReconnecting && !isReading) ? this.reconnectSnapIndicator : null,
       connectorDraft: (this.draftObject?.type === 'connector' && !isReading) ? {
-        start: this.draftObject.from?.point || { x: this.draftObject.x, y: this.draftObject.y },
-        end: this.draftObject.to?.point || { x: this.draftObject.x + this.draftObject.width, y: this.draftObject.y + this.draftObject.height }
+        start: draftGeometry?.start || this.draftObject.from?.point || this.dragStart,
+        end: draftGeometry?.end || this.draftObject.to?.point || this.dragStart
       } : null
     };
 

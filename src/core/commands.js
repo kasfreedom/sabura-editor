@@ -2,7 +2,7 @@
  * Sabura Command Engine: Atomic Reducer, Validation, and Inverse Generation.
  */
 
-import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS } from './types.js';
+import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS, IMAGE_OBJECT_TYPE } from './types.js';
 import {
   cloneDocument,
   generateId,
@@ -19,10 +19,15 @@ import { alignObjects, distributeObjects, measureText, resolveConnectorGeometry 
 
 export const SUPPORTED_COMMAND_TYPES = new Set([
   'create_object',
+  'create_asset',
+  'create_image',
+  'delete_asset',
   'delete_objects',
   'move_objects',
   'resize_object',
   'set_style',
+  'set_image_fit',
+  'set_image_opacity',
   'set_typography',
   'set_text',
   'change_shape',
@@ -221,6 +226,30 @@ export function validateCommand(cmd, doc = null) {
     if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object)) {
       errors.push('create_object requires a valid object payload');
     }
+  } else if (cmd.type === 'create_asset') {
+    if (!cmd.asset || typeof cmd.asset !== 'object' || Array.isArray(cmd.asset)) {
+      errors.push('create_asset requires a valid asset payload');
+    }
+  } else if (cmd.type === 'create_image') {
+    if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object) || cmd.object.type !== IMAGE_OBJECT_TYPE) {
+      errors.push('create_image requires an image object payload');
+    }
+    if (!cmd.asset || typeof cmd.asset !== 'object' || Array.isArray(cmd.asset) || cmd.asset.type !== 'raster') {
+      errors.push('create_image requires a raster asset payload');
+    }
+    if (cmd.object?.assetId !== undefined && cmd.asset?.id !== undefined && cmd.object.assetId !== cmd.asset.id) {
+      errors.push('create_image object.assetId must match asset.id');
+    }
+    if (doc && cmd.asset?.id && doc.assets?.[cmd.asset.id]) errors.push(`create_image asset ID already exists: "${cmd.asset.id}"`);
+    if (doc && cmd.object?.id && doc.objects?.[cmd.object.id]) errors.push(`create_image object ID already exists: "${cmd.object.id}"`);
+  } else if (cmd.type === 'set_image_fit') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_image_fit requires a string id');
+    if (cmd.fit !== 'contain' && cmd.fit !== 'cover') errors.push('set_image_fit fit must be "contain" or "cover"');
+    if (doc?.objects?.[cmd.id] && doc.objects[cmd.id].type !== IMAGE_OBJECT_TYPE) errors.push(`set_image_fit target "${cmd.id}" is not an image`);
+  } else if (cmd.type === 'set_image_opacity') {
+    if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_image_opacity requires a string id');
+    if (typeof cmd.opacity !== 'number' || !Number.isFinite(cmd.opacity) || cmd.opacity < 0 || cmd.opacity > 1) errors.push('set_image_opacity opacity must be between 0 and 1');
+    if (doc?.objects?.[cmd.id] && doc.objects[cmd.id].type !== IMAGE_OBJECT_TYPE) errors.push(`set_image_opacity target "${cmd.id}" is not an image`);
   } else if (cmd.type === 'delete_objects') {
     if (!Array.isArray(cmd.ids)) {
       errors.push('delete_objects requires an array of ids');
@@ -391,6 +420,36 @@ export function applyCommand(doc, cmd) {
   const newDoc = cloneDocument(doc);
 
   switch (cmd.type) {
+    case 'create_asset': {
+      const asset = cloneDocument(cmd.asset);
+      if (!asset.id) asset.id = generateId('asset');
+      if (newDoc.assets[asset.id]) throw new Error(`Asset ID already exists: "${asset.id}"`);
+      newDoc.assets[asset.id] = asset;
+      return { doc: newDoc, inverseCmd: { type: 'delete_asset', id: asset.id } };
+    }
+
+    case 'create_image': {
+      const asset = cloneDocument(cmd.asset);
+      const obj = cloneDocument(cmd.object);
+      if (!asset.id) asset.id = generateId('asset');
+      if (!obj.id) obj.id = generateId('image');
+      if (obj.assetId !== asset.id) {
+        throw new Error('create_image object.assetId must match asset.id');
+      }
+      if (newDoc.assets[asset.id]) throw new Error(`Asset ID already exists: "${asset.id}"`);
+      if (newDoc.objects[obj.id]) throw new Error(`Object ID already exists: "${obj.id}"`);
+      newDoc.assets[asset.id] = asset;
+      newDoc.objects[obj.id] = obj;
+      const atIndex = typeof cmd.atIndex === 'number' ? Math.max(0, Math.min(newDoc.order.length, cmd.atIndex)) : newDoc.order.length;
+      newDoc.order.splice(atIndex, 0, obj.id);
+      const finalVal = validateDocument(newDoc);
+      if (!finalVal.valid) throw new Error(`create_image produced an invalid document: ${finalVal.errors.join(', ')}`);
+      return {
+        doc: newDoc,
+        inverseCmd: { type: 'delete_objects', ids: [obj.id] }
+      };
+    }
+
     case 'create_object': {
       const obj = cloneDocument(cmd.object);
       if (!obj.id) obj.id = generateId(obj.type || 'obj');
@@ -407,13 +466,28 @@ export function applyCommand(doc, cmd) {
       return { doc: newDoc, inverseCmd };
     }
 
+    case 'delete_asset': {
+      const asset = newDoc.assets[cmd.id];
+      if (!asset) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      if (Object.values(newDoc.objects).some(obj => obj?.assetId === cmd.id)) {
+        throw new Error(`Cannot delete referenced asset "${cmd.id}"`);
+      }
+      delete newDoc.assets[cmd.id];
+      return { doc: newDoc, inverseCmd: { type: 'create_asset', asset } };
+    }
+
     case 'delete_objects': {
-      const idsToDelete = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
+      const idsToDelete = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]) && !newDoc.objects[id].locked);
       if (idsToDelete.length === 0) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
 
       const savedObjects = [];
+      const deletedImageAssetIds = new Set(idsToDelete
+        .map(id => newDoc.objects[id])
+        .filter(obj => obj?.type === IMAGE_OBJECT_TYPE && obj.assetId)
+        .map(obj => obj.assetId));
+      const savedAssets = [];
       for (const id of idsToDelete) {
         const index = newDoc.order.indexOf(id);
         savedObjects.push({
@@ -424,6 +498,17 @@ export function applyCommand(doc, cmd) {
       }
 
       newDoc.order = newDoc.order.filter(id => !idsToDelete.includes(id));
+
+      // Assets are owned by the document, not by an individual command. Remove
+      // only those whose final live image reference was deleted, and retain
+      // shared assets for the remaining objects.
+      for (const assetId of deletedImageAssetIds) {
+        const stillReferenced = Object.values(newDoc.objects).some(obj => obj?.type === IMAGE_OBJECT_TYPE && obj.assetId === assetId);
+        if (!stillReferenced && newDoc.assets[assetId]) {
+          savedAssets.push({ id: assetId, asset: cloneDocument(newDoc.assets[assetId]) });
+          delete newDoc.assets[assetId];
+        }
+      }
 
       if (Array.isArray(cmd.removeGroups)) {
         for (const gId of cmd.removeGroups) {
@@ -456,6 +541,10 @@ export function applyCommand(doc, cmd) {
       const inverseCmd = {
         type: 'batch',
         commands: [
+          ...savedAssets.map(item => ({
+            type: 'create_asset',
+            asset: item.asset
+          })),
           ...savedObjects.map(item => ({
             type: 'create_object',
             object: item.object,
@@ -474,7 +563,8 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'duplicate_objects': {
-      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
+      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]) && !newDoc.objects[id].locked);
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const offset = cmd.offset || { x: 24, y: 24 };
       const duplicatedIds = [];
       const newObjects = [];
@@ -570,6 +660,7 @@ export function applyCommand(doc, cmd) {
       const dx = Number(cmd.dx) || 0;
       const dy = Number(cmd.dy) || 0;
       const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
 
       for (const id of ids) {
         const obj = newDoc.objects[id];
@@ -715,7 +806,7 @@ export function applyCommand(doc, cmd) {
       const prev = {};
       for (const [id, pos] of Object.entries(cmd.positions || {})) {
         const obj = newDoc.objects[id];
-        if (!obj) continue;
+        if (!obj || obj.locked) continue;
         prev[id] = {
           x: obj.x,
           y: obj.y,
@@ -729,12 +820,14 @@ export function applyCommand(doc, cmd) {
           if (pos.toPoint && obj.to) obj.to.point = { ...pos.toPoint };
         }
       }
-      return { doc: newDoc, inverseCmd: { type: 'restore_positions', positions: prev } };
+      return { doc: newDoc, inverseCmd: Object.keys(prev).length > 0
+        ? { type: 'restore_positions', positions: prev }
+        : { type: 'noop' } };
     }
 
     case 'set_text': {
       const obj = newDoc.objects[cmd.id];
-      if (!obj || obj.locked) {
+      if (!obj || obj.locked || obj.type === IMAGE_OBJECT_TYPE) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
       const prevText = obj.text || '';
@@ -766,7 +859,8 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'set_style': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked && newDoc.objects[id].type !== IMAGE_OBJECT_TYPE);
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const prevStyles = {};
 
       for (const id of ids) {
@@ -814,12 +908,41 @@ export function applyCommand(doc, cmd) {
       return { doc: newDoc, inverseCmd };
     }
 
+    case 'set_image_fit': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.type !== IMAGE_OBJECT_TYPE || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const previousFit = obj.fit || 'contain';
+      obj.fit = cmd.fit;
+      return {
+        doc: newDoc,
+        inverseCmd: { type: 'set_image_fit', id: cmd.id, fit: previousFit }
+      };
+    }
+
+    case 'set_image_opacity': {
+      const obj = newDoc.objects[cmd.id];
+      if (!obj || obj.type !== IMAGE_OBJECT_TYPE || obj.locked) {
+        return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      }
+      const previousOpacity = obj.opacity !== undefined ? obj.opacity : 1;
+      obj.opacity = cmd.opacity;
+      return {
+        doc: newDoc,
+        inverseCmd: { type: 'set_image_opacity', id: cmd.id, opacity: previousOpacity }
+      };
+    }
+
     case 'restore_styles': {
       const styles = cmd.styles || {};
       const prevStyles = {};
       for (const [id, style] of Object.entries(styles)) {
         const obj = newDoc.objects[id];
-        if (!obj) continue;
+        // Image presentation is intentionally not a shape style surface. In
+        // particular, never let an inverse restore add fill/stroke/text fields
+        // to an image or mutate one while it is locked.
+        if (!obj || obj.locked || obj.type === IMAGE_OBJECT_TYPE) continue;
         prevStyles[id] = {
           fill: obj.fill,
           stroke: obj.stroke,
@@ -840,11 +963,13 @@ export function applyCommand(doc, cmd) {
           else delete obj.textStyle;
         }
       }
-      return { doc: newDoc, inverseCmd: { type: 'restore_styles', styles: prevStyles } };
+      return { doc: newDoc, inverseCmd: Object.keys(prevStyles).length > 0
+        ? { type: 'restore_styles', styles: prevStyles }
+        : { type: 'noop' } };
     }
 
     case 'set_typography': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked && newDoc.objects[id].type !== IMAGE_OBJECT_TYPE);
       const prevTypography = {};
 
       for (const id of ids) {
@@ -863,6 +988,7 @@ export function applyCommand(doc, cmd) {
         if (cmd.updates.color !== undefined) obj.textStyle.color = cmd.updates.color;
       }
 
+      if (Object.keys(prevTypography).length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const inverseCmd = {
         type: 'restore_typography',
         typography: prevTypography
@@ -874,16 +1000,18 @@ export function applyCommand(doc, cmd) {
       const prev = {};
       for (const [id, style] of Object.entries(cmd.typography || {})) {
         const obj = newDoc.objects[id];
-        if (!obj) continue;
+        if (!obj || obj.locked || obj.type === IMAGE_OBJECT_TYPE) continue;
         prev[id] = cloneDocument(obj.textStyle);
         obj.textStyle = cloneDocument(style);
       }
-      return { doc: newDoc, inverseCmd: { type: 'restore_typography', typography: prev } };
+      return { doc: newDoc, inverseCmd: Object.keys(prev).length > 0
+        ? { type: 'restore_typography', typography: prev }
+        : { type: 'noop' } };
     }
 
     case 'change_shape': {
       const obj = newDoc.objects[cmd.id];
-      if (!obj || obj.locked) {
+      if (!obj || obj.locked || obj.type === IMAGE_OBJECT_TYPE) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
       const prevType = obj.type;
@@ -898,8 +1026,9 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'lock_objects': {
-      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]));
       const locked = Boolean(cmd.locked);
+      const ids = (cmd.ids || []).filter(id => Boolean(newDoc.objects[id]) && newDoc.objects[id].locked !== locked);
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       for (const id of ids) {
         newDoc.objects[id].locked = locked;
       }
@@ -912,7 +1041,7 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'reorder_objects': {
-      const ids = (cmd.ids || []).filter(id => newDoc.objects[id]);
+      const ids = (cmd.ids || []).filter(id => newDoc.objects[id] && !newDoc.objects[id].locked);
       if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
 
       const prevOrder = [...newDoc.order];
@@ -944,6 +1073,7 @@ export function applyCommand(doc, cmd) {
         }
       }
 
+      if (ids.length === 0) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const inverseCmd = {
         type: 'restore_order',
         order: prevOrder
@@ -952,8 +1082,14 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'restore_order': {
+      const requestedOrder = [...cmd.order];
+      const movesLockedImage = Object.values(newDoc.objects).some(object =>
+        object?.type === IMAGE_OBJECT_TYPE && object.locked &&
+        newDoc.order.indexOf(object.id) !== requestedOrder.indexOf(object.id)
+      );
+      if (movesLockedImage) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const prevOrder = [...newDoc.order];
-      newDoc.order = [...cmd.order];
+      newDoc.order = requestedOrder;
       return { doc: newDoc, inverseCmd: { type: 'restore_order', order: prevOrder } };
     }
 
@@ -980,6 +1116,10 @@ export function applyCommand(doc, cmd) {
 
     case 'ungroup_objects': {
       const groupIds = cmd.groupIds || [];
+      const lockedImageMember = Object.values(newDoc.objects).some(object =>
+        object?.type === IMAGE_OBJECT_TYPE && object.locked && groupIds.includes(object.groupId)
+      );
+      if (lockedImageMember) return { doc: newDoc, inverseCmd: { type: 'noop' } };
       const restoredGroups = {};
       const restoredMembers = {};
 
@@ -1006,7 +1146,18 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'restore_groups': {
-      for (const [id, gId] of Object.entries(cmd.groupIds || {})) {
+      const groupIds = cmd.groupIds || {};
+      const lockedImageGroupIds = new Set(Object.values(newDoc.objects)
+        .filter(object => object?.type === IMAGE_OBJECT_TYPE && object.locked && object.groupId)
+        .map(object => object.groupId));
+      const affectsLockedImage = Object.entries(groupIds).some(([id, gId]) => {
+        const object = newDoc.objects[id];
+        if (!object || object.groupId === gId) return false;
+        return (object.type === IMAGE_OBJECT_TYPE && object.locked) ||
+          lockedImageGroupIds.has(object.groupId) || lockedImageGroupIds.has(gId);
+      }) || (cmd.removeGroup && lockedImageGroupIds.has(cmd.removeGroup));
+      if (affectsLockedImage) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      for (const [id, gId] of Object.entries(groupIds)) {
         if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
       }
       if (cmd.removeGroup) {
@@ -1016,10 +1167,23 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'restore_ungroup': {
-      for (const [gId, gData] of Object.entries(cmd.groups || {})) {
+      const groups = cmd.groups || {};
+      const members = cmd.members || {};
+      const lockedImageGroupIds = new Set(Object.values(newDoc.objects)
+        .filter(object => object?.type === IMAGE_OBJECT_TYPE && object.locked && object.groupId)
+        .map(object => object.groupId));
+      const affectsLockedImage = Object.keys(groups).some(groupId => lockedImageGroupIds.has(groupId)) ||
+        Object.entries(members).some(([id, groupId]) => {
+          const object = newDoc.objects[id];
+          if (!object || object.groupId === groupId) return false;
+          return (object.type === IMAGE_OBJECT_TYPE && object.locked) ||
+            lockedImageGroupIds.has(object.groupId) || lockedImageGroupIds.has(groupId);
+        });
+      if (affectsLockedImage) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      for (const [gId, gData] of Object.entries(groups)) {
         newDoc.groups[gId] = gData;
       }
-      for (const [id, gId] of Object.entries(cmd.members || {})) {
+      for (const [id, gId] of Object.entries(members)) {
         if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
       }
       return { doc: newDoc, inverseCmd: { type: 'noop' } };
@@ -1411,9 +1575,8 @@ export function applyCommandBatch(doc, commands) {
   }
 
   inverseList.reverse();
-  const inverseCmd = {
-    type: 'batch',
-    commands: inverseList
-  };
+  const inverseCmd = inverseList.length > 0
+    ? { type: 'batch', commands: inverseList }
+    : { type: 'noop' };
   return { doc: currentDoc, inverseCmd };
 }

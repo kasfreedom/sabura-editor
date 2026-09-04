@@ -149,6 +149,12 @@ export class ShortcutsCoordinator {
       return;
     }
 
+    if (e.key === 'i' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      this.handlers.onImportImage?.(this.lastPointerPos.x, this.lastPointerPos.y);
+      return;
+    }
+
     // --- View Shortcuts ---
     if ((e.key === '+' || e.key === '=') && !mod && !e.altKey) {
       e.preventDefault();

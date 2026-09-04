@@ -50,11 +50,14 @@ test('ToolWheel maintains fixed 8-slot octant layout across all contexts', () =>
   assert.equal(canvasItems[0].id, 'shapes');
   assert.equal(canvasItems[1].id, 'tool_text');
   assert.equal(canvasItems[2].id, 'connector');
-  assert.equal(canvasItems[3].id, 'tool_line');
+  assert.equal(canvasItems[3].id, 'image_import');
   assert.equal(canvasItems[4].id, 'tool_hand');
   assert.equal(canvasItems[5].id, 'action_undo');
   assert.equal(canvasItems[6].id, 'action_redo');
   assert.equal(canvasItems[7].id, 'tool_select');
+  assert.deepEqual(canvasItems[0].subItems.map(item => item.id), [
+    'shape_rectangle', 'shape_ellipse', 'shape_diamond', 'shape_triangle', 'tool_line'
+  ]);
 
   // 2. Single Shape Context (Rectangle, Ellipse, Diamond, Triangle, Text)
   wheel.context = 'object';

@@ -62,6 +62,7 @@ export class HelpModal {
                 <li><span class="help-desc">Text</span> <kbd class="kbd-badge">T</kbd></li>
                 <li><span class="help-desc">Connector</span> <kbd class="kbd-badge">C</kbd></li>
                 <li><span class="help-desc">Line / Poly</span> <kbd class="kbd-badge">L</kbd> / <kbd class="kbd-badge">P</kbd></li>
+                <li><span class="help-desc">Insert Image</span> <kbd class="kbd-badge">i</kbd></li>
                 <li><span class="help-desc">Contextual Wheel</span> <kbd class="kbd-badge">Q</kbd></li>
               </ul>
             </section>
