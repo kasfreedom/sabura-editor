@@ -415,28 +415,18 @@ html, body {
   pointer-events: none;
 }
 
-.wheel-wedge-sketch.disabled {
-  opacity: 0.32;
-  stroke: #adb5bd;
-}
-
 .wheel-label-group.disabled {
   opacity: 0.32;
   pointer-events: none;
 }
 
-.wheel-wedge-sketch {
+.wheel-divider-sketch {
   fill: none;
-  stroke: var(--ui-wheel-stroke, #1e1e1e);
-  stroke-width: 1.5px;
+  stroke: var(--ui-border, rgba(0, 0, 0, 0.22));
+  stroke-width: 1.15px;
+  stroke-dasharray: 2.4 4.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: stroke 0.12s ease, stroke-width 0.12s ease;
-}
-
-.wheel-wedge-sketch.active {
-  stroke: var(--ui-accent, #1971c2);
-  stroke-width: 2.2px;
 }
 
 .wheel-sub-wedge {
@@ -476,11 +466,11 @@ html, body {
 }
 
 .wheel-sub-text {
-  font-size: 11px;
+  font-size: 10px;
   fill: var(--ui-wheel-text, #1e1e1e);
   font-weight: 700;
   font-family: var(--font-hand);
-  letter-spacing: 0;
+  letter-spacing: -0.3px;
 }
 
 .wheel-third-wedge {
@@ -881,5 +871,629 @@ body.in-presentation {
   }
   .mode-reading .reading-fullscreen-label {
     display: none;
+  }
+}
+
+/* Sabura graphite + watercolor visual system. These render-only primitives are
+   deliberately shared by the topbar, utility rails, and circular ToolWheel. */
+:root {
+  --sabura-vs-graphite: #343b3f;
+  --sabura-vs-graphite-soft: rgba(52, 59, 63, 0.36);
+  --sabura-vs-rail: rgba(255, 254, 250, 0.94);
+  --sabura-vs-wash-blue: linear-gradient(104deg, rgba(116, 192, 252, 0.12), rgba(77, 171, 247, 0.31) 48%, rgba(165, 216, 255, 0.16));
+  --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(255, 236, 153, 0.16), rgba(255, 212, 59, 0.28) 52%, rgba(255, 243, 191, 0.18));
+  --sabura-vs-wash-green: linear-gradient(104deg, rgba(178, 242, 187, 0.14), rgba(81, 207, 102, 0.26) 52%, rgba(211, 249, 216, 0.18));
+  --sabura-vs-wash-red: linear-gradient(104deg, rgba(255, 201, 201, 0.12), rgba(255, 107, 107, 0.25) 52%, rgba(255, 227, 227, 0.18));
+}
+
+[data-ui-theme="dark"] {
+  --sabura-vs-graphite: #c0caf5;
+  --sabura-vs-graphite-soft: rgba(192, 202, 245, 0.34);
+  --sabura-vs-rail: rgba(30, 32, 46, 0.95);
+  --sabura-vs-wash-blue: linear-gradient(104deg, rgba(122, 162, 247, 0.13), rgba(122, 162, 247, 0.3) 50%, rgba(137, 180, 250, 0.12));
+  --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(224, 175, 104, 0.12), rgba(224, 175, 104, 0.25), rgba(229, 192, 123, 0.12));
+  --sabura-vs-wash-green: linear-gradient(104deg, rgba(115, 218, 202, 0.12), rgba(115, 218, 202, 0.25), rgba(158, 206, 106, 0.12));
+  --sabura-vs-wash-red: linear-gradient(104deg, rgba(247, 118, 142, 0.12), rgba(247, 118, 142, 0.24), rgba(255, 158, 100, 0.1));
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ui-theme="system"] {
+    --sabura-vs-graphite: #c0caf5;
+    --sabura-vs-graphite-soft: rgba(192, 202, 245, 0.34);
+    --sabura-vs-rail: rgba(30, 32, 46, 0.95);
+    --sabura-vs-wash-blue: linear-gradient(104deg, rgba(122, 162, 247, 0.13), rgba(122, 162, 247, 0.3) 50%, rgba(137, 180, 250, 0.12));
+    --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(224, 175, 104, 0.12), rgba(224, 175, 104, 0.25), rgba(229, 192, 123, 0.12));
+    --sabura-vs-wash-green: linear-gradient(104deg, rgba(115, 218, 202, 0.12), rgba(115, 218, 202, 0.25), rgba(158, 206, 106, 0.12));
+    --sabura-vs-wash-red: linear-gradient(104deg, rgba(247, 118, 142, 0.12), rgba(247, 118, 142, 0.24), rgba(255, 158, 100, 0.1));
+  }
+}
+
+.sabura-vs-icon {
+  width: 19px;
+  height: 19px;
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: visible;
+  color: currentColor;
+}
+
+.sabura-vs-app-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  overflow: visible;
+}
+
+.sabura-topbar,
+.wheel-trigger-fab,
+.zoom-help-toolbar {
+  background: var(--sabura-vs-rail);
+  border: 1.6px solid var(--sabura-vs-graphite);
+  border-radius: 1px;
+  box-shadow: 3px 3px 0 var(--sabura-vs-graphite-soft);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.sabura-topbar::after,
+.wheel-trigger-fab::after,
+.zoom-help-toolbar::after {
+  content: "";
+  position: absolute;
+  inset: 2px -3px -3px 2px;
+  border: 1px solid var(--sabura-vs-graphite-soft);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.sabura-topbar {
+  height: 56px;
+  padding: 0 10px;
+}
+
+.topbar-left,
+.topbar-center,
+.topbar-right,
+.topbar-primary-actions,
+.topbar-secondary-actions,
+.grid-controls-group {
+  gap: 0;
+}
+
+.topbar-primary-actions {
+  display: flex;
+  align-items: center;
+}
+
+.topbar-center {
+  border-left: 1px dashed var(--sabura-vs-graphite-soft);
+  border-right: 1px dashed var(--sabura-vs-graphite-soft);
+  margin: 0 8px;
+}
+
+.brand-title,
+.status-badge,
+.mode-badge,
+.control-label,
+.topbar-btn {
+  min-height: 36px;
+}
+
+.brand-title {
+  gap: 8px;
+  padding-right: 10px;
+}
+
+.brand-name {
+  color: #1971c2;
+  font-size: 24px;
+}
+
+.status-badge,
+.mode-badge,
+.topbar-select,
+.topbar-btn {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-badge,
+.mode-badge {
+  border: 0;
+  border-left: 1px dashed var(--sabura-vs-graphite-soft);
+  background: transparent;
+}
+
+.control-label {
+  padding: 0 8px;
+  border-right: 1px dashed var(--sabura-vs-graphite-soft);
+}
+
+.control-label > .sabura-vs-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.topbar-select {
+  border: 0;
+  border-bottom: 1px solid var(--sabura-vs-graphite-soft);
+  background: transparent;
+  padding: 3px 18px 3px 5px;
+}
+
+.topbar-select:hover {
+  background: var(--sabura-vs-wash-yellow);
+  border-color: var(--sabura-vs-graphite);
+}
+
+.topbar-btn {
+  position: relative;
+  padding: 5px 10px;
+  border: 0;
+  border-right: 1px dashed var(--sabura-vs-graphite-soft);
+  background: transparent;
+  color: var(--ui-text);
+}
+
+.topbar-btn:first-child {
+  border-left: 1px dashed var(--sabura-vs-graphite-soft);
+}
+
+.topbar-btn:hover {
+  background: var(--sabura-vs-wash-yellow);
+  transform: none;
+  box-shadow: none;
+}
+
+.topbar-btn:active {
+  transform: translate(1px, 1px);
+}
+
+.topbar-btn.active,
+.topbar-btn.primary {
+  background: var(--sabura-vs-wash-blue);
+  color: var(--ui-accent);
+  border-color: var(--sabura-vs-graphite-soft);
+  border-width: 0 1px 0 0;
+}
+
+.topbar-btn.primary:hover {
+  background: var(--sabura-vs-wash-blue);
+}
+
+.topbar-btn.save-btn {
+  background: var(--sabura-vs-wash-green);
+  color: #2b8a3e;
+  border: 1px solid #2f9e44;
+}
+
+.topbar-btn.save-btn:hover {
+  background: var(--sabura-vs-wash-green);
+}
+
+.topbar-btn.icon-only {
+  min-width: 38px;
+  justify-content: center;
+  padding: 5px 8px;
+}
+
+.topbar-divider {
+  height: 34px;
+  width: 0;
+  background: transparent;
+  border-left: 1px dashed var(--sabura-vs-graphite-soft);
+}
+
+.wheel-trigger-fab {
+  padding: 8px 10px;
+  gap: 7px;
+}
+
+.wheel-trigger-fab:hover {
+  background: var(--sabura-vs-wash-yellow);
+}
+
+.wheel-trigger-fab .fab-key {
+  border-radius: 0;
+  background: transparent;
+}
+
+.zoom-help-toolbar {
+  gap: 0;
+  padding: 0;
+}
+
+.zoom-btn {
+  height: 36px;
+  min-width: 38px;
+  border: 0;
+  border-right: 1px dashed var(--sabura-vs-graphite-soft);
+  border-radius: 0;
+}
+
+.zoom-btn:last-child { border-right: 0; }
+.zoom-btn:hover { background: var(--sabura-vs-wash-yellow); }
+.zoom-btn.zoom-help { width: 38px; height: 36px; border-radius: 0; border: 0; }
+
+.sabura-wheel {
+  filter: drop-shadow(4px 6px 0 rgba(52, 59, 63, 0.18)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.12));
+}
+
+.wheel-bezel-rim {
+  stroke: var(--sabura-vs-graphite);
+  stroke-width: 1.35px;
+  stroke-dasharray: none;
+  opacity: 0.52;
+}
+
+.wheel-hub,
+.wheel-wedge,
+.wheel-sub-wedge,
+.wheel-third-wedge {
+  fill: var(--sabura-vs-rail);
+}
+
+.wheel-divider-sketch {
+  stroke: var(--sabura-vs-graphite-soft);
+  stroke-width: 1.1px;
+  stroke-dasharray: 2.4 4.8;
+  opacity: 0.82;
+}
+
+.wheel-wedge:hover,
+.wheel-wedge.active,
+.wheel-sub-wedge:not(.color-choice):hover,
+.wheel-sub-wedge:not(.color-choice).active-choice,
+.wheel-third-wedge:hover,
+.wheel-third-wedge.active-choice {
+  fill: url(#sabura-vs-wheel-wash) !important;
+  filter: none;
+}
+
+.wheel-wedge.danger:hover { fill: url(#sabura-vs-wheel-danger-wash) !important; }
+.wheel-sub-wedge.color-choice:hover,
+.wheel-sub-wedge.color-choice.active-choice {
+  filter: none;
+  stroke: var(--ui-wheel-stroke) !important;
+  stroke-width: 2px !important;
+}
+
+.sabura-vs-wheel-icon {
+  color: var(--ui-wheel-text);
+  overflow: visible;
+}
+
+.wheel-text,
+.wheel-sub-text {
+  font-weight: 700;
+}
+
+#app[data-sabura-vs-board-theme="high-contrast"] .topbar-btn.active,
+#app[data-sabura-vs-board-theme="high-contrast"] .topbar-btn.primary,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-wedge:hover,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-wedge.active,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-sub-wedge:not(.color-choice):hover,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-sub-wedge:not(.color-choice).active-choice,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-third-wedge:hover,
+#app[data-sabura-vs-board-theme="high-contrast"] .wheel-third-wedge.active-choice {
+  background: var(--ui-active);
+  fill: var(--ui-active) !important;
+  filter: none;
+}
+
+/* Keep the complete Editing rail usable on small laptops before the existing
+   640px compact-mode boundary takes over. Nothing is reordered or hidden. */
+/* Responsive toolbar hierarchy. Compact layouts remove redundant words before
+   controls and never make chrome microscopic just to keep one physical row. */
+@media (max-width: 1400px) {
+  .sabura-topbar .doc-title {
+    display: none;
+  }
+}
+
+@media (min-width: 1051px) and (max-width: 1400px) {
+  .sabura-topbar {
+    left: 8px;
+    right: 8px;
+    padding: 0 5px;
+  }
+
+  .sabura-topbar .topbar-left,
+  .sabura-topbar .topbar-center,
+  .sabura-topbar .topbar-right {
+    flex: 0 0 auto;
+  }
+
+  .sabura-topbar .brand-title {
+    gap: 4px;
+    padding-right: 4px;
+  }
+
+  .sabura-topbar .sabura-vs-app-mark {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .sabura-topbar .brand-name {
+    font-size: 16px;
+  }
+
+  .sabura-topbar .status-badge,
+  .sabura-topbar .mode-badge {
+    gap: 4px;
+    padding: 0 5px;
+    font-size: 12.5px;
+  }
+
+  .sabura-topbar .control-label {
+    gap: 2px;
+    padding: 0 3px;
+    font-size: 12.5px;
+  }
+
+  .sabura-topbar .control-label > .sabura-vs-icon,
+  .sabura-topbar .sabura-vs-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sabura-topbar .topbar-select {
+    width: 82px;
+    padding: 2px 14px 2px 2px;
+    font-size: 12.5px;
+  }
+
+  .sabura-topbar #select-ui-theme {
+    width: 58px;
+  }
+
+  .sabura-topbar .topbar-btn {
+    min-height: 36px;
+    gap: 3px;
+    padding: 4px 6px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .sabura-topbar .topbar-btn.icon-only {
+    min-width: 34px;
+    padding: 4px 6px;
+  }
+
+  .sabura-topbar .topbar-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 1050px) {
+  .sabura-topbar {
+    left: 8px;
+    right: 8px;
+    padding: 0 6px;
+    gap: 0;
+  }
+
+  .sabura-topbar .brand-name,
+  .sabura-topbar .doc-title,
+  .sabura-topbar .mode-badge,
+  .sabura-topbar .status-text,
+  .sabura-topbar .topbar-btn-label,
+  .sabura-topbar .control-prefix {
+    display: none;
+  }
+
+  .sabura-topbar .topbar-left,
+  .sabura-topbar .brand-title {
+    min-width: 0;
+  }
+
+  .sabura-topbar .brand-title {
+    flex: 1 1 auto;
+    gap: 4px;
+    padding-right: 4px;
+  }
+
+  .sabura-topbar .sabura-vs-app-mark {
+    display: block;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+  }
+
+  .sabura-topbar .status-badge {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .sabura-topbar .status-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .sabura-topbar .topbar-btn {
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px;
+    justify-content: center;
+    font-size: 13px;
+  }
+
+  .sabura-topbar .topbar-btn.icon-only {
+    width: 36px;
+    min-width: 36px;
+    padding: 6px;
+  }
+
+  .sabura-topbar .sabura-vs-icon,
+  .sabura-topbar .control-label > .sabura-vs-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .sabura-topbar .topbar-center {
+    flex: 0 0 auto;
+    min-width: 0;
+    margin: 0 2px;
+  }
+
+  .sabura-topbar .control-label {
+    gap: 2px;
+    padding: 0 3px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .sabura-topbar .topbar-select {
+    width: 68px;
+    padding: 3px 14px 3px 2px;
+    font-size: 12.5px;
+  }
+
+  .sabura-topbar #select-ui-theme {
+    width: 56px;
+  }
+
+  .sabura-topbar .topbar-divider {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1050px) {
+  .sabura-topbar.mode-editing {
+    justify-content: space-between;
+  }
+
+  .mode-editing .topbar-left {
+    flex: 1 1 auto;
+  }
+
+  .mode-editing .topbar-right {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .sabura-topbar {
+    left: 6px;
+    right: 6px;
+    padding: 0 4px;
+  }
+
+  .sabura-topbar.mode-reading {
+    height: 56px;
+  }
+
+  .mode-reading .topbar-left {
+    flex: 1 1 auto;
+  }
+
+  .mode-reading .topbar-right {
+    flex: 0 0 auto;
+  }
+
+  .sabura-topbar.mode-editing {
+    height: 96px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 44px 44px;
+    grid-template-areas:
+      "primary actions"
+      "center secondary";
+    align-content: center;
+    justify-content: stretch;
+  }
+
+  .mode-editing .topbar-left {
+    grid-area: primary;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .mode-editing .topbar-right {
+    display: contents;
+  }
+
+  .mode-editing .topbar-primary-actions {
+    grid-area: actions;
+    justify-self: end;
+  }
+
+  .mode-editing .topbar-center {
+    grid-area: center;
+    display: flex;
+    min-width: 0;
+    margin: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 1px dashed var(--sabura-vs-graphite-soft);
+    justify-content: flex-start;
+  }
+
+  .mode-editing .topbar-secondary-actions {
+    grid-area: secondary;
+    display: flex;
+    align-self: stretch;
+    border-top: 1px dashed var(--sabura-vs-graphite-soft);
+  }
+
+  .mode-editing #btn-fullscreen {
+    display: inline-flex;
+  }
+
+  .mode-editing #btn-undo,
+  .mode-editing #btn-redo {
+    display: inline-flex;
+  }
+
+}
+
+@media (max-width: 400px) {
+  .sabura-topbar {
+    left: 4px;
+    right: 4px;
+    padding: 0 3px;
+  }
+
+  .sabura-topbar .sabura-vs-app-mark {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .sabura-topbar .status-badge {
+    width: 30px;
+    min-width: 30px;
+  }
+
+  .sabura-topbar .topbar-btn,
+  .sabura-topbar .topbar-btn.icon-only {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 5px;
+  }
+
+  .sabura-topbar .sabura-vs-icon,
+  .sabura-topbar .control-label > .sabura-vs-icon {
+    width: 17px;
+    height: 17px;
+  }
+
+  .sabura-topbar .control-label {
+    padding: 0 2px;
+  }
+
+  .sabura-topbar .topbar-select {
+    width: 62px;
+    padding-right: 12px;
+    font-size: 12px;
+  }
+
+  .sabura-topbar #select-ui-theme {
+    width: 50px;
   }
 }

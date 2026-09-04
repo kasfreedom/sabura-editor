@@ -17,6 +17,12 @@ test('sabura.html build integrity and self-contained verification', () => {
   assert.ok(content.startsWith('<!DOCTYPE html>'));
   assert.ok(content.includes('<script type="application/json" id="sabura-document">'));
   assert.ok(content.includes('SaburaApp'));
+  assert.ok(content.includes('id="sabura-vs-sprite"'), 'visual-system sprite must be embedded exactly once');
+  assert.equal((content.match(/id="sabura-vs-sprite"/g) || []).length, 1);
+  assert.ok(content.includes('id="sabura-vs-icon-edit"'));
+  assert.ok(content.includes('id="sabura-vs-app-icon"'));
+  assert.doesNotMatch(content, /id="icon-(?:edit|view|wheel)"/, 'generic package icon IDs must be namespaced');
+  assert.doesNotMatch(content, /class="(?:line|ghost)"/, 'generic package SVG classes must be namespaced');
 
   // Ensure zero external network URLs or CDNs
   const matches = content.match(/https?:\/\/[^"'\s]+/g) || [];

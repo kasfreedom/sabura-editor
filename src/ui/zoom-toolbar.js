@@ -1,3 +1,5 @@
+import { renderSaburaIcon } from './wheel-icon-map.js';
+
 /**
  * Sabura Compact Zoom and Help Toolbar.
  *
@@ -32,11 +34,11 @@ export class ZoomToolbar {
   render() {
     const pct = `${Math.round(this.zoom * 100)}%`;
     this.toolbarEl.innerHTML = `
-      <button class="zoom-btn" id="btn-zoom-out" title="Zoom Out (-)" aria-label="Zoom Out">−</button>
+      <button class="zoom-btn" id="btn-zoom-out" title="Zoom Out (-)" aria-label="Zoom Out">${renderSaburaIcon('zoom-out')}</button>
       <button class="zoom-btn zoom-percent" id="btn-zoom-reset" title="Reset Zoom to 100% (0)" aria-label="Reset Zoom to 100%">${pct}</button>
-      <button class="zoom-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">+</button>
-      <button class="zoom-btn zoom-fit" id="btn-zoom-fit" title="Fit All Content (1)" aria-label="Fit to Content">Fit</button>
-      <button class="zoom-btn zoom-help" id="btn-help-toggle" title="Help & Shortcuts (?)" aria-label="Help and Shortcuts">?</button>
+      <button class="zoom-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">${renderSaburaIcon('zoom-in')}</button>
+      <button class="zoom-btn zoom-fit" id="btn-zoom-fit" title="Fit All Content (1)" aria-label="Fit to Content">${renderSaburaIcon('fit')}</button>
+      <button class="zoom-btn zoom-help" id="btn-help-toggle" title="Help & Shortcuts (?)" aria-label="Help and Shortcuts">${renderSaburaIcon('help')}</button>
     `;
 
     this.toolbarEl.querySelector('#btn-zoom-out').addEventListener('click', (e) => {

@@ -8,6 +8,7 @@ import { extractDocumentFromHtml } from '../src/storage/file-packer.js';
 
 const rootDir = path.resolve('.');
 const port = 8092;
+const chromeOnly = process.argv.includes('--chrome-only');
 
 // 1. Build sabura.html before running tests
 console.log('--- Step 0: Building latest sabura.html ---');
@@ -2432,15 +2433,15 @@ if (!c5.dupGone || !c5.origStillThere) {
 
 // Flow 6: Grid Controls in Chrome
 const c6 = await evalInChrome(`(() => {
-  const t1 = document.querySelector('#btn-grid-visible').innerText.trim();
+  const t1 = document.querySelector('#btn-grid-visible').getAttribute('aria-label');
   document.querySelector('#btn-grid-visible').click();
-  const t2 = document.querySelector('#btn-grid-visible').innerText.trim();
+  const t2 = document.querySelector('#btn-grid-visible').getAttribute('aria-label');
   document.querySelector('#btn-grid-visible').click();
-  const t3 = document.querySelector('#btn-grid-visible').innerText.trim();
+  const t3 = document.querySelector('#btn-grid-visible').getAttribute('aria-label');
 
-  const s1 = document.querySelector('#btn-grid-snap').innerText.trim();
+  const s1 = document.querySelector('#btn-grid-snap').getAttribute('aria-label');
   document.querySelector('#btn-grid-snap').click();
-  const s2 = document.querySelector('#btn-grid-snap').innerText.trim();
+  const s2 = document.querySelector('#btn-grid-snap').getAttribute('aria-label');
   document.querySelector('#btn-grid-snap').click();
 
   return {
@@ -2451,7 +2452,7 @@ const c6 = await evalInChrome(`(() => {
 })()`);
 console.log('Chrome 6. Grid & Snap controls:', c6);
 if (!c6.gridPass || !c6.snapPass) {
-  throw new Error('Chrome: Grid labels mismatch');
+  throw new Error('Chrome: Grid/Snap state labels mismatch');
 }
 
 // Flow 7: Coherent Theme Switching in Chrome
@@ -3747,6 +3748,118 @@ try {
     fs.rmdirSync(tmpDownloadDir);
   } catch (_) {}
 }
+
+await new Promise(r => setTimeout(r, 250));
+await cdpSend('Emulation.setDeviceMetricsOverride', {
+  width: 1440,
+  height: 810,
+  deviceScaleFactor: 1,
+  mobile: true
+});
+await new Promise(r => setTimeout(r, 80));
+const visualSystemSeam = await evalInChrome(`(() => {
+  const appMark = document.querySelector('.sabura-vs-app-mark');
+  const appMarkRect = appMark?.getBoundingClientRect();
+  const topbarRect = document.querySelector('.sabura-topbar')?.getBoundingClientRect();
+  const localIconUses = [...document.querySelectorAll('.sabura-topbar use, .wheel-trigger-fab use, .zoom-help-toolbar use')];
+  const pigmentLayers = document.querySelectorAll('[data-sabura-vs-pigment-layer]');
+  return {
+    spriteCount: document.querySelectorAll('#sabura-vs-sprite').length,
+    appMarkVisible36: Boolean(appMarkRect && appMarkRect.width >= 35 && appMarkRect.height >= 35),
+    localIconCount: localIconUses.length,
+    localIconsOnly: localIconUses.every(use => (use.getAttribute('href') || '').startsWith('#sabura-vs-icon-') || use.getAttribute('href') === '#sabura-vs-app-icon'),
+    paperPigmentLayers: pigmentLayers.length,
+    allPigmentLayersNumbered: [...pigmentLayers].every(path => ['1', '2'].includes(path.getAttribute('data-sabura-vs-pigment-layer'))),
+    boardThemeBridge: document.getElementById('app')?.getAttribute('data-sabura-vs-board-theme'),
+    interfaceTheme: document.documentElement.getAttribute('data-ui-theme'),
+    topbarWithinViewport: Boolean(topbarRect && topbarRect.left >= 0 && topbarRect.right <= window.innerWidth)
+  };
+})()`);
+if (visualSystemSeam.spriteCount !== 1 || !visualSystemSeam.appMarkVisible36 || visualSystemSeam.localIconCount < 9 || !visualSystemSeam.localIconsOnly || visualSystemSeam.paperPigmentLayers !== 6 || !visualSystemSeam.allPigmentLayersNumbered || visualSystemSeam.boardThemeBridge !== 'paper' || !visualSystemSeam.topbarWithinViewport) {
+  throw new Error(`Visual system browser seam failed: ${JSON.stringify(visualSystemSeam)}`);
+}
+console.log('  ✓ Visual system seam: one namespaced sprite, local icons, 36px identity, six deterministic Paper pigment layers, independent theme bridge, desktop topbar fit');
+
+for (const compactWidth of [760, 641]) {
+  await cdpSend('Emulation.setDeviceMetricsOverride', {
+    width: compactWidth,
+    height: 810,
+    deviceScaleFactor: 1,
+    mobile: true
+  });
+  await new Promise(r => setTimeout(r, 120));
+  const intermediateEditingFit = await evalInChrome(`(() => {
+    window.sabura.setMode('editing');
+    const boardSelect = document.getElementById('select-board-theme');
+    const uiSelect = document.getElementById('select-ui-theme');
+    if (${compactWidth} === 760 && uiSelect) uiSelect.value = 'light';
+    const targets = [
+      ['identity', '.mode-editing .brand-title'],
+      ['view', '#btn-view'],
+      ['status', '.mode-editing .status-badge'],
+      ['board', '.mode-editing .topbar-center .control-label:nth-of-type(1)'],
+      ['ui', '.mode-editing .topbar-center .control-label:nth-of-type(2)'],
+      ['grid', '#btn-grid-visible'],
+      ['snap', '#btn-grid-snap'],
+      ['undo', '#btn-undo'],
+      ['redo', '#btn-redo'],
+      ['fullscreen', '#btn-fullscreen'],
+      ['present', '#btn-present'],
+      ['save', '#btn-save']
+    ];
+    const controls = targets.map(([id, selector]) => {
+      const el = document.querySelector(selector);
+      const rect = el?.getBoundingClientRect();
+      const style = el ? getComputedStyle(el) : null;
+      return { id, exists: Boolean(el), visible: Boolean(el && style.display !== 'none' && style.visibility !== 'hidden'), left: rect?.left, right: rect?.right, width: rect?.width };
+    });
+    const adjacentPairs = controls.slice(1).map((item, index) => ({ before: controls[index].id, after: item.id, gap: item.left - controls[index].right }));
+    const controlsFit = controls.every(item => item.exists && item.visible && item.width > 0 && item.left >= 0 && item.right <= ${compactWidth});
+    const controlsOrderedWithoutOverlap = adjacentPairs.every(pair => pair.gap >= -0.75);
+    const nativeValuesReadable = ${compactWidth} !== 760 || Boolean(
+      boardSelect && uiSelect &&
+      boardSelect.value === 'paper' && uiSelect.value === 'light' &&
+      boardSelect.getBoundingClientRect().width >= 60 && uiSelect.getBoundingClientRect().width >= 48
+    );
+    return { controls, adjacentPairs, controlsFit, controlsOrderedWithoutOverlap, nativeValuesReadable, boardSelectWidth: boardSelect?.getBoundingClientRect().width, uiSelectWidth: uiSelect?.getBoundingClientRect().width };
+  })()`);
+  if (!intermediateEditingFit.controlsFit || !intermediateEditingFit.controlsOrderedWithoutOverlap || !intermediateEditingFit.nativeValuesReadable) {
+    throw new Error(`Visual system ${compactWidth}px Editing fit failed: ${JSON.stringify(intermediateEditingFit)}`);
+  }
+  if (compactWidth === 760) {
+    const subRingLabelGeometry = await evalInChrome(`(() => {
+      const app = window.saburaApp;
+      const shape = Object.values(app.doc.objects).find(object => object.type === 'rectangle');
+      app.wheel.open(380, 405, 'object', shape, app.doc.theme.palette, 1, [shape]);
+      const results = [];
+      for (const menuId of ['menu_shape', 'menu_type', 'menu_style', 'menu_order']) {
+        app.wheel.activeSubMenu = menuId;
+        app.wheel.render();
+        const labels = [...document.querySelectorAll('.wheel-sub-text')].map(label => {
+          const rect = label.getBoundingClientRect();
+          return { text: label.textContent, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        });
+        const overlaps = [];
+        for (let first = 0; first < labels.length; first++) {
+          for (let second = first + 1; second < labels.length; second++) {
+            const horizontal = Math.min(labels[first].right, labels[second].right) - Math.max(labels[first].left, labels[second].left);
+            const vertical = Math.min(labels[first].bottom, labels[second].bottom) - Math.max(labels[first].top, labels[second].top);
+            if (horizontal > 0.5 && vertical > 0.5) overlaps.push({ first: labels[first].text, second: labels[second].text, horizontal, vertical });
+          }
+        }
+        results.push({ menuId, labelCount: labels.length, overlaps });
+      }
+      app.wheel.close();
+      return results;
+    })()`);
+    if (subRingLabelGeometry.some(result => result.overlaps.length > 0)) {
+      throw new Error(`Visual system sub-ring label geometry failed: ${JSON.stringify(subRingLabelGeometry)}`);
+    }
+  }
+}
+console.log('  ✓ Visual system intermediate viewports: every Editing control and representative sub-ring label remains ordered, visible, and non-overlapping at 760 and 641 CSS px');
+
+await evalInChrome(`window.sabura.setMode('reading')`);
 // -------------------------------------------------------------
 // FLOW 32: Narrow Viewport (400 CSS px) TopBar Actions in Reading and Editing Mode (F-08 & F-09)
 // -------------------------------------------------------------
@@ -3766,6 +3879,7 @@ await new Promise(r => setTimeout(r, 200));
 // 1. Reading Mode checks at 400 CSS px
 const readingButtons = await evalInChrome(`(() => {
   const edit = document.getElementById('btn-edit');
+  const fullscreen = document.getElementById('btn-reading-fullscreen');
   const present = document.getElementById('btn-present');
   const save = document.getElementById('btn-save');
   const vpWidth = window.innerWidth;
@@ -3782,6 +3896,8 @@ const readingButtons = await evalInChrome(`(() => {
       withinViewport,
       left: r.left,
       right: r.right,
+      top: r.top,
+      bottom: r.bottom,
       width: r.width,
       height: r.height,
       focusable: el.tabIndex >= 0 || el.tagName === 'BUTTON'
@@ -3791,6 +3907,7 @@ const readingButtons = await evalInChrome(`(() => {
   return {
     vpWidth,
     edit: getCheck(edit),
+    fullscreen: getCheck(fullscreen),
     present: getCheck(present),
     save: getCheck(save)
   };
@@ -3799,13 +3916,16 @@ const readingButtons = await evalInChrome(`(() => {
 if (!readingButtons.edit.exists || !readingButtons.edit.visible || !readingButtons.edit.withinViewport) {
   throw new Error(`Flow 32: Edit button not fully within 400px viewport: ${JSON.stringify(readingButtons.edit)}`);
 }
+if (!readingButtons.fullscreen.exists || !readingButtons.fullscreen.visible || !readingButtons.fullscreen.withinViewport || !readingButtons.fullscreen.focusable) {
+  throw new Error(`Flow 32: Reading Fullscreen button not fully available within 400px viewport: ${JSON.stringify(readingButtons.fullscreen)}`);
+}
 if (!readingButtons.present.exists || !readingButtons.present.visible || !readingButtons.present.withinViewport) {
   throw new Error(`Flow 32: Present button not fully within 400px viewport: ${JSON.stringify(readingButtons.present)}`);
 }
 if (!readingButtons.save.exists || !readingButtons.save.visible || !readingButtons.save.withinViewport) {
   throw new Error(`Flow 32: Save Copy button not fully within 400px viewport: ${JSON.stringify(readingButtons.save)}`);
 }
-console.log('  ✓ 32a. Reading mode: Edit, Present, and Save Copy all visible and within 400px viewport');
+console.log('  ✓ 32a. Reading mode: Edit, icon-only Fullscreen, Present, and Save Copy all visible and within 400px viewport');
 
 // 2. Switch to Editing Mode via Edit button click
 const editClickOk = await evalInChrome(`(() => {
@@ -3824,12 +3944,16 @@ const editingChecks = await evalInChrome(`(() => {
   const present = document.getElementById('btn-present');
   const save = document.getElementById('btn-save');
   const docTitle = document.querySelector('.doc-title');
+  const boardSelect = document.getElementById('select-board-theme');
+  const uiSelect = document.getElementById('select-ui-theme');
+  const grid = document.getElementById('btn-grid-visible');
+  const snap = document.getElementById('btn-grid-snap');
   const undo = document.getElementById('btn-undo');
   const redo = document.getElementById('btn-redo');
   const fullscreen = document.getElementById('btn-fullscreen');
-  const divider = document.querySelector('.topbar-divider');
   const secondary = document.querySelector('.topbar-secondary-actions');
   const center = document.querySelector('.mode-editing .topbar-center');
+  const topbar = document.querySelector('.sabura-topbar.mode-editing');
   const vpWidth = window.innerWidth;
 
   function getCheck(el) {
@@ -3844,29 +3968,33 @@ const editingChecks = await evalInChrome(`(() => {
       withinViewport,
       left: r.left,
       right: r.right,
+      top: r.top,
+      bottom: r.bottom,
       width: r.width,
       height: r.height,
       focusable: el.tabIndex >= 0 || el.tagName === 'BUTTON'
     };
   }
 
-  function isHidden(el) {
-    if (!el) return true;
-    const style = window.getComputedStyle(el);
-    const r = el.getBoundingClientRect();
-    return style.display === 'none' || style.visibility === 'hidden' || r.width === 0 || r.height === 0;
-  }
-
   const vCheck = getCheck(view);
   const pCheck = getCheck(present);
   const sCheck = getCheck(save);
   const tCheck = getCheck(docTitle);
+  const utilityChecks = [boardSelect, uiSelect, grid, snap, undo, redo, fullscreen].map(getCheck);
 
   // Overlap checks
   const overlaps = (r1, r2) => {
     if (!r1.visible || !r2.visible) return false;
-    return !(r1.right <= r2.left || r1.left >= r2.right || r1.bottom <= r2.top || r1.top >= r2.bottom);
+    return !(r1.right <= r2.left + 0.5 || r1.left >= r2.right - 0.5 || r1.bottom <= r2.top + 0.5 || r1.top >= r2.bottom - 0.5);
   };
+
+  const allChecks = [vCheck, pCheck, sCheck, tCheck, ...utilityChecks];
+  const overlappingPairs = [];
+  for (let first = 0; first < allChecks.length; first++) {
+    for (let secondIndex = first + 1; secondIndex < allChecks.length; secondIndex++) {
+      if (overlaps(allChecks[first], allChecks[secondIndex])) overlappingPairs.push([first, secondIndex]);
+    }
+  }
 
   return {
     vpWidth,
@@ -3874,13 +4002,11 @@ const editingChecks = await evalInChrome(`(() => {
     present: pCheck,
     save: sCheck,
     title: tCheck,
-    undoHidden: isHidden(undo),
-    redoHidden: isHidden(redo),
-    fullscreenHidden: isHidden(fullscreen),
-    dividerHidden: isHidden(divider),
-    secondaryHidden: isHidden(secondary),
-    centerHidden: isHidden(center),
-    hasOverlap: overlaps(vCheck, pCheck) || overlaps(pCheck, sCheck) || overlaps(vCheck, sCheck) || overlaps(tCheck, vCheck) || overlaps(tCheck, pCheck)
+    utilities: utilityChecks,
+    centerVisible: getCheck(center).visible,
+    secondaryVisible: getCheck(secondary).visible,
+    topbarHeight: topbar?.getBoundingClientRect().height,
+    overlappingPairs
   };
 })()`);
 
@@ -3893,16 +4019,16 @@ if (!editingChecks.present.exists || !editingChecks.present.visible || !editingC
 if (!editingChecks.save.exists || !editingChecks.save.visible || !editingChecks.save.withinViewport) {
   throw new Error(`Flow 32: Save Copy button not fully within 400px viewport in editing mode: ${JSON.stringify(editingChecks.save)}`);
 }
-if (!editingChecks.title.exists || !editingChecks.title.visible || editingChecks.title.width < 30) {
-  throw new Error(`Flow 32: Document title not visible or squeezed away at 400px: ${JSON.stringify(editingChecks.title)}`);
+if (!editingChecks.title.exists || editingChecks.title.visible || editingChecks.title.width !== 0) {
+  throw new Error(`Flow 32: Compact document title must be hidden without reserved width at 400px: ${JSON.stringify(editingChecks.title)}`);
 }
-if (!editingChecks.undoHidden || !editingChecks.redoHidden || !editingChecks.fullscreenHidden || !editingChecks.secondaryHidden) {
-  throw new Error(`Flow 32: Secondary editing actions not hidden at 400px viewport: ${JSON.stringify(editingChecks)}`);
+if (!editingChecks.centerVisible || !editingChecks.secondaryVisible || editingChecks.utilities.some(control => !control.exists || !control.visible || !control.withinViewport)) {
+  throw new Error(`Flow 32: Two-row Editing utility controls are not fully available at 400px: ${JSON.stringify(editingChecks)}`);
 }
-if (editingChecks.hasOverlap) {
-  throw new Error(`Flow 32: Overlapping elements detected in 400px editing header`);
+if (editingChecks.topbarHeight < 90 || editingChecks.overlappingPairs.length > 0) {
+  throw new Error(`Flow 32: Two-row Editing toolbar overlaps or did not expand at 400px: ${JSON.stringify(editingChecks)}`);
 }
-console.log('  ✓ 32b. Editing mode: View, Present, Save Copy and readable Document Title visible without overlap; secondary controls cleanly hidden at 400px');
+console.log('  ✓ 32b. Editing mode: readable primary row plus Board/UI/Grid/Snap/Undo/Redo/Fullscreen utility row at 400px');
 
 // 4. Switch back to Reading Mode via View button click
 const viewClickOk = await evalInChrome(`(() => {
@@ -3932,6 +4058,126 @@ if (!textEditorAttrs.exists || textEditorAttrs.id !== 'sabura-inline-text-editor
   throw new Error(`Flow 32: TextEditor accessibility attributes invalid: ${JSON.stringify(textEditorAttrs)}`);
 }
 console.log('  ✓ 32d. F-09: Inline text editor has stable id, name, aria-label, and autocomplete=off in live DOM');
+
+const responsiveWidths = [1440, 1401, 1400, 1337, 1301, 1300, 1280, 1053, 1052, 1051, 1050, 1024, 768, 641, 480, 400, 360];
+for (const responsiveWidth of responsiveWidths) {
+  await cdpSend('Emulation.setDeviceMetricsOverride', {
+    width: responsiveWidth,
+    height: 810,
+    deviceScaleFactor: 1,
+    mobile: true
+  });
+  await new Promise(r => setTimeout(r, 80));
+
+  for (const responsiveMode of ['reading', 'editing']) {
+    const responsiveAudit = await evalInChrome(`(() => {
+      window.sabura.setMode('${responsiveMode}');
+      const compact = ${responsiveWidth} <= 1050;
+      const titleCompact = ${responsiveWidth} <= 1400;
+      const narrowEditing = ${responsiveWidth} <= 640 && '${responsiveMode}' === 'editing';
+      const bar = document.querySelector('.sabura-topbar');
+      const selectors = '${responsiveMode}' === 'reading'
+        ? ['.sabura-vs-app-mark', '.brand-name', '.doc-title', '.mode-badge', '.status-badge', '#btn-edit', '#btn-reading-fullscreen', '#btn-present', '#btn-save']
+        : ['.sabura-vs-app-mark', '.brand-name', '.doc-title', '#btn-view', '.status-badge', '#select-board-theme', '#select-ui-theme', '#btn-grid-visible', '#btn-grid-snap', '#btn-undo', '#btn-redo', '#btn-fullscreen', '#btn-present', '#btn-save'];
+
+      const isVisible = el => {
+        if (!el) return false;
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0;
+      };
+      const checks = selectors.map(selector => {
+        const el = document.querySelector(selector);
+        if (!el) return { selector, exists: false };
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          selector,
+          exists: true,
+          visible: isVisible(el),
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+          fontSize: Number.parseFloat(style.fontSize),
+          ariaLabel: el.getAttribute('aria-label'),
+          title: el.getAttribute('title')
+        };
+      });
+
+      const requiredSelectors = '${responsiveMode}' === 'reading'
+        ? ['.sabura-vs-app-mark', '.status-badge', '#btn-edit', '#btn-reading-fullscreen', '#btn-present', '#btn-save']
+        : ['.sabura-vs-app-mark', '#btn-view', '.status-badge', '#select-board-theme', '#select-ui-theme', '#btn-grid-visible', '#btn-grid-snap', '#btn-undo', '#btn-redo', '#btn-fullscreen', '#btn-present', '#btn-save'];
+      if (!titleCompact) requiredSelectors.splice(1, 0, '.doc-title');
+      const required = checks.filter(check => requiredSelectors.includes(check.selector));
+      const allRequiredVisible = required.every(check => check.exists && check.visible && check.left >= -0.5 && check.right <= ${responsiveWidth} + 0.5 && check.top >= 0 && check.bottom <= 810);
+
+      const visibleChecks = checks.filter(check => check.visible);
+      const overlaps = [];
+      for (let first = 0; first < visibleChecks.length; first++) {
+        for (let second = first + 1; second < visibleChecks.length; second++) {
+          const a = visibleChecks[first];
+          const b = visibleChecks[second];
+          const horizontal = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const vertical = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (horizontal > 0.5 && vertical > 0.5) overlaps.push([a.selector, b.selector, horizontal, vertical]);
+        }
+      }
+
+      const textNodes = [...bar.querySelectorAll('.brand-name, .doc-title, .mode-badge, .status-text, .topbar-btn-label, .control-prefix, .topbar-select')]
+        .filter(isVisible)
+        .map(el => ({ text: (el.textContent || '').trim(), fontSize: Number.parseFloat(getComputedStyle(el).fontSize) }));
+      const tinyText = textNodes.filter(item => item.fontSize < 12);
+      const actionControls = [...bar.querySelectorAll('button')];
+      const undersizedButtons = actionControls.filter(button => {
+        const rect = button.getBoundingClientRect();
+        return isVisible(button) && (rect.width < 33.5 || rect.height < 33.5);
+      }).map(button => button.id);
+      const missingAccessibleNames = [...bar.querySelectorAll('button, select')]
+        .filter(isVisible)
+        .filter(control => !(control.getAttribute('aria-label') || '').trim())
+        .map(control => control.id);
+      const missingButtonTitles = actionControls.filter(isVisible).filter(button => !(button.getAttribute('title') || '').trim()).map(button => button.id);
+      const titleRect = document.querySelector('.doc-title')?.getBoundingClientRect();
+      const titleVisible = isVisible(document.querySelector('.doc-title'));
+      const appMark = document.querySelector('.sabura-vs-app-mark');
+      const persistedTitle = window.saburaApp?.doc?.title || 'Untitled';
+      const expectedAppIdentity = 'Sabura — ' + persistedTitle;
+      const brandVisible = isVisible(document.querySelector('.brand-name'));
+      const modeVisible = isVisible(document.querySelector('.mode-badge'));
+      const statusTextVisible = isVisible(document.querySelector('.status-text'));
+      const labelsVisible = [...bar.querySelectorAll('.topbar-btn-label, .control-prefix')].some(isVisible);
+      const boardTop = document.querySelector('#select-board-theme')?.getBoundingClientRect().top;
+      const viewTop = document.querySelector('#btn-view')?.getBoundingClientRect().top;
+      const barRect = bar.getBoundingClientRect();
+
+      return {
+        checks,
+        allRequiredVisible,
+        overlaps,
+        tinyText,
+        undersizedButtons,
+        missingAccessibleNames,
+        missingButtonTitles,
+        titleWidth: titleRect?.width,
+        titleBehaviorCorrect: titleCompact ? (!titleVisible && titleRect?.width === 0) : (titleVisible && titleRect?.width >= 39.5),
+        appIdentityCorrect: appMark?.getAttribute('aria-label') === expectedAppIdentity && appMark?.getAttribute('title') === expectedAppIdentity,
+        barWithinViewport: barRect.left >= 0 && barRect.right <= ${responsiveWidth},
+        barHeight: barRect.height,
+        brandVisibilityCorrect: compact ? !brandVisible : brandVisible,
+        disclosureCorrect: compact ? (!modeVisible && !statusTextVisible && !labelsVisible) : (('${responsiveMode}' === 'editing' || modeVisible) && statusTextVisible && labelsVisible),
+        twoRowCorrect: narrowEditing ? (barRect.height >= 90 && boardTop > viewTop + 20) : barRect.height < 90
+      };
+    })()`);
+
+    if (!responsiveAudit.allRequiredVisible || responsiveAudit.overlaps.length || responsiveAudit.tinyText.length || responsiveAudit.undersizedButtons.length || responsiveAudit.missingAccessibleNames.length || responsiveAudit.missingButtonTitles.length || !responsiveAudit.titleBehaviorCorrect || !responsiveAudit.appIdentityCorrect || !responsiveAudit.barWithinViewport || !responsiveAudit.brandVisibilityCorrect || !responsiveAudit.disclosureCorrect || !responsiveAudit.twoRowCorrect) {
+      throw new Error(`Responsive toolbar ${responsiveWidth}px ${responsiveMode} failed: ${JSON.stringify(responsiveAudit)}`);
+    }
+  }
+}
+console.log('  ✓ 32e. Reading and Editing responsive matrix passes across the 1400px title and 1050px control breakpoints plus 1337/1300/1280/1024/768/641/480/400/360 CSS px with accessible document identity and no overlap/clipping');
 
 // Reset device metrics override back to desktop
 await cdpSend('Emulation.clearDeviceMetricsOverride');
@@ -5306,6 +5552,14 @@ console.log('✓ Flow 34: Rotation Foundation verified cleanly!');
 console.log('\n✓ All Chrome flows passed cleanly!');
 ws.close();
 chrome.kill();
+
+if (chromeOnly) {
+  server.close();
+  console.log('\n=============================================================');
+  console.log('✓ CHROME-ONLY VERIFICATION COMPLETE (Safari intentionally skipped)');
+  console.log('=============================================================\n');
+  process.exit(0);
+}
 
 // -------------------------------------------------------------
 // PART 2: REAL BROWSER VERIFICATION IN SAFARI

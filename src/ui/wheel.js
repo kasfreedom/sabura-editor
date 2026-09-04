@@ -1,4 +1,5 @@
-import { createPRNG, sketchWedge, sketchEllipse, sketchLine } from '../core/sketch.js';
+import { createPRNG, sketchEllipse, sketchLine } from '../core/sketch.js';
+import { iconForWheelItem } from './wheel-icon-map.js';
 
 /**
  * Creates SVG path for an annular sector (pie wedge).
@@ -45,6 +46,30 @@ function isDarkColor(hex) {
   const b = num & 255;
   const luma = 0.299 * r + 0.587 * g + 0.114 * b;
   return luma < 140;
+}
+
+function renderWheelIcon(itemId, fallback, x, y, className = 'sabura-vs-wheel-icon', size = 22) {
+  const dynamicValue = /^(type_[smlx]+|opacity_|width_)/.test(itemId);
+  const iconName = dynamicValue ? null : iconForWheelItem(itemId);
+  if (!iconName) {
+    return `<text x="${x}" y="${y + 5}" text-anchor="middle" class="wheel-icon">${fallback || ''}</text>`;
+  }
+  const half = size / 2;
+  return `<svg x="${x - half}" y="${y - half}" width="${size}" height="${size}" viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false"><use href="#sabura-vs-icon-${iconName}"></use></svg>`;
+}
+
+function renderWheelDivider(cx, cy, rInner, rOuter, angle, prng) {
+  const x1 = cx + rInner * Math.cos(angle);
+  const y1 = cy + rInner * Math.sin(angle);
+  const x2 = cx + rOuter * Math.cos(angle);
+  const y2 = cy + rOuter * Math.sin(angle);
+  const normalX = -Math.sin(angle);
+  const normalY = Math.cos(angle);
+  const bow = (prng() - 0.5) * 1.1;
+  const midX = (x1 + x2) / 2 + normalX * bow;
+  const midY = (y1 + y2) / 2 + normalY * bow;
+  const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${midX.toFixed(1)} ${midY.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  return `<path d="${path}" class="wheel-divider-sketch" pointer-events="none" />`;
 }
 
 function getStrokeWidthItems(curWidth = 2, obj = null) {
@@ -789,6 +814,18 @@ export class ToolWheel {
     const center = size / 2;
 
     svgParts.push(`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="sabura-wheel-svg">`);
+    svgParts.push(`<defs>
+      <linearGradient id="sabura-vs-wheel-wash" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="var(--ui-accent)" stop-opacity="0.08" />
+        <stop offset="0.48" stop-color="var(--ui-accent)" stop-opacity="0.3" />
+        <stop offset="1" stop-color="var(--ui-accent)" stop-opacity="0.12" />
+      </linearGradient>
+      <linearGradient id="sabura-vs-wheel-danger-wash" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#e03131" stop-opacity="0.08" />
+        <stop offset="0.52" stop-color="#e03131" stop-opacity="0.28" />
+        <stop offset="1" stop-color="#e03131" stop-opacity="0.1" />
+      </linearGradient>
+    </defs>`);
 
     const prng = createPRNG(4242);
 
@@ -827,16 +864,16 @@ export class ToolWheel {
       const midAngle = (startAngle + endAngle) / 2;
 
       const isDisabled = Boolean(item.disabled);
-      const pathD = createWedgePath(center, center, rInner, rOuter, startAngle, endAngle);
+      const pathD = createWedgePath(center, center, rInner, rOuter, startAngle, endAngle, 0);
       const isSubActive = this.activeSubMenu === item.id;
       const wedgeClass = `wheel-wedge ${isSubActive ? 'active' : ''} ${item.id.includes('delete') ? 'danger' : ''} ${isDisabled ? 'disabled' : ''}`;
 
       // Solid wedge fill layer with keyboard accessibility
       svgParts.push(`<path d="${pathD}" class="${wedgeClass}" data-item-id="${item.id}" ${isDisabled ? 'aria-disabled="true"' : 'tabindex="0" role="button"'} aria-label="${item.label}" />`);
 
-      // Excalidraw hand-drawn sketchy wedge outline
-      const sketchD = sketchWedge(center, center, rInner, rOuter, startAngle, endAngle, prng, 1);
-      svgParts.push(`<path d="${sketchD}" class="wheel-wedge-sketch ${isSubActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" pointer-events="none" />`);
+      // Lighter dashed spokes separate tools. Circular ring outlines are rendered
+      // independently as solid doubled pencil lines by wheel-bezel-rim.
+      svgParts.push(renderWheelDivider(center, center, rInner, rOuter, startAngle, prng));
 
       // Label & Icon with 19px vertical baseline separation
       const textR = (rInner + rOuter) / 2;
@@ -846,7 +883,7 @@ export class ToolWheel {
       const labelY = center + textR * Math.sin(midAngle) + 12;
 
       svgParts.push(`<g class="wheel-label-group ${isDisabled ? 'disabled' : ''}" pointer-events="none">
-        <text x="${iconX}" y="${iconY}" text-anchor="middle" class="wheel-icon">${item.icon || ''}</text>
+        ${renderWheelIcon(item.id, item.icon, iconX, iconY - 5, 'sabura-vs-wheel-icon', 23)}
         <text x="${labelX}" y="${labelY}" text-anchor="middle" class="wheel-text">${item.label}</text>
       </g>`);
 
@@ -873,13 +910,12 @@ export class ToolWheel {
         const sEnd = sStart + subStep;
         const sMid = (sStart + sEnd) / 2;
 
-        const subPath = createWedgePath(center, center, rOuter + 4, rSubOuter, sStart, sEnd);
+        const subPath = createWedgePath(center, center, rOuter + 4, rSubOuter, sStart, sEnd, 0);
         const colorStyle = (sub.color && sub.color !== 'none') ? `fill: ${sub.color}; stroke: #dee2e6;` : '';
         const isSubActive = Boolean(sub.isActive);
 
-        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge ${isSubActive ? 'active-choice' : ''}" data-sub-id="${sub.id}" tabindex="0" role="button" aria-label="${sub.label}" style="${colorStyle}" />`);
-        const subSketchD = sketchWedge(center, center, rOuter + 4, rSubOuter, sStart, sEnd, prng, 1);
-        svgParts.push(`<path d="${subSketchD}" class="wheel-wedge-sketch ${isSubActive ? 'active' : ''}" pointer-events="none" />`);
+        svgParts.push(`<path d="${subPath}" class="wheel-sub-wedge ${(sub.color && sub.color !== 'none') ? 'color-choice' : ''} ${isSubActive ? 'active-choice' : ''}" data-sub-id="${sub.id}" tabindex="0" role="button" aria-label="${sub.label}" style="${colorStyle}" />`);
+        svgParts.push(renderWheelDivider(center, center, rOuter + 4, rSubOuter, sStart, prng));
 
         const sTextR = (rOuter + 4 + rSubOuter) / 2;
         const sX = center + sTextR * Math.cos(sMid);
@@ -896,11 +932,14 @@ export class ToolWheel {
         } else {
           // Standard tool / text wedge
           svgParts.push(`<g class="wheel-label-group" pointer-events="none">
-            <text x="${sX}" y="${sY - 6}" text-anchor="middle" class="wheel-icon">${sub.icon || ''}</text>
+            ${renderWheelIcon(sub.id, sub.icon, sX, sY - 8, 'sabura-vs-wheel-icon sabura-vs-wheel-icon-sub', 20)}
             <text x="${sX}" y="${sY + 11}" text-anchor="middle" class="wheel-sub-text">${sub.label}${isSubActive ? ' ✓' : ''}</text>
           </g>`);
         }
       }
+
+      // Close the visible submenu fan without drawing dashed circular arcs.
+      svgParts.push(renderWheelDivider(center, center, rOuter + 4, rSubOuter, subStartBase + totalSpan, prng));
 
       // Render Ring 3 (outer 3rd circle / crescent) if thirdItems exist (e.g. Opacity in Fill)
       if (thirdMenuToRender && thirdMenuToRender.length > 0) {
@@ -919,12 +958,11 @@ export class ToolWheel {
           const tEnd = tStart + thirdStep;
           const tMid = (tStart + tEnd) / 2;
 
-          const tPath = createWedgePath(center, center, rSubOuter + 4, rThirdOuter, tStart, tEnd);
+          const tPath = createWedgePath(center, center, rSubOuter + 4, rThirdOuter, tStart, tEnd, 0);
           const isThirdActive = Boolean(third.isActive);
 
           svgParts.push(`<path d="${tPath}" class="wheel-sub-wedge wheel-third-wedge ${isThirdActive ? 'active-choice' : ''}" data-sub-id="${third.id}" tabindex="0" role="button" aria-label="${third.label}" />`);
-          const tSketchD = sketchWedge(center, center, rSubOuter + 4, rThirdOuter, tStart, tEnd, prng, 1);
-          svgParts.push(`<path d="${tSketchD}" class="wheel-wedge-sketch ${isThirdActive ? 'active' : ''}" pointer-events="none" />`);
+          svgParts.push(renderWheelDivider(center, center, rSubOuter + 4, rThirdOuter, tStart, prng));
 
           const tTextR = (rSubOuter + 4 + rThirdOuter) / 2;
           const tX = center + tTextR * Math.cos(tMid);
@@ -932,7 +970,7 @@ export class ToolWheel {
 
           if (third.icon) {
             svgParts.push(`<g class="wheel-label-group" pointer-events="none">
-              <text x="${tX}" y="${tY - 2}" text-anchor="middle" class="wheel-sub-icon">${third.icon}</text>
+              ${renderWheelIcon(third.id, third.icon, tX, tY - 7, 'sabura-vs-wheel-icon sabura-vs-wheel-icon-sub', 18)}
               <text x="${tX}" y="${tY + 12}" text-anchor="middle" class="wheel-sub-text" style="font-weight: 700;">${third.label}${isThirdActive ? ' ✓' : ''}</text>
             </g>`);
           } else {
@@ -941,6 +979,10 @@ export class ToolWheel {
             </g>`);
           }
         }
+
+
+        // Close the visible third-ring fan with the same divider treatment.
+        svgParts.push(renderWheelDivider(center, center, rSubOuter + 4, rThirdOuter, thirdStartBase + totalThirdSpan, prng));
       }
     }
 

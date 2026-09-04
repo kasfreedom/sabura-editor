@@ -4,6 +4,7 @@
  */
 
 import { THEME_PRESETS } from '../core/types.js';
+import { renderSaburaIcon } from './wheel-icon-map.js';
 
 function escapeXml(str) {
   return String(str || '')
@@ -46,6 +47,7 @@ export class TopBar {
     const snapGrid = Boolean(this.snapGrid);
     const showGrid = this.showGrid !== false;
     const safeTitle = escapeXml(this.doc?.title || 'Untitled');
+    const safeAppIdentity = escapeXml(`Sabura — ${this.doc?.title || 'Untitled'}`);
 
     let statusColor = '#2f9e44'; // Clean green
     if (status === 'Changed') statusColor = '#f08c00'; // Amber
@@ -59,6 +61,7 @@ export class TopBar {
       this.barEl.innerHTML = `
         <div class="topbar-left">
           <div class="brand-title">
+            <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
             <span class="brand-name">Sabura</span>
             <span class="doc-title" title="Board Title">${safeTitle}</span>
           </div>
@@ -73,23 +76,23 @@ export class TopBar {
 
         <div class="topbar-right">
           <!-- Edit action -->
-          <button id="btn-edit" class="topbar-btn primary" title="Enter Editing Mode">
-            ✎ Edit
+          <button id="btn-edit" class="topbar-btn primary" title="Enter Editing Mode" aria-label="Enter Editing Mode">
+            ${renderSaburaIcon('edit')}<span class="topbar-btn-label">Edit</span>
           </button>
 
           <!-- Browser fullscreen, without changing Reading mode -->
           <button id="btn-reading-fullscreen" class="topbar-btn" title="Toggle Fullscreen Reading" aria-label="Toggle Fullscreen Reading">
-            ⛶ <span class="reading-fullscreen-label">Fullscreen</span>
+            ${renderSaburaIcon('fullscreen')}<span class="topbar-btn-label reading-fullscreen-label">Fullscreen</span>
           </button>
 
           <!-- Present -->
-          <button id="btn-present" class="topbar-btn" title="Enter Presentation Mode (Laser pointer)">
-            ▶ Present
+          <button id="btn-present" class="topbar-btn" title="Enter Presentation Mode (Laser pointer)" aria-label="Enter Presentation Mode">
+            ${renderSaburaIcon('present')}<span class="topbar-btn-label">Present</span>
           </button>
 
           <!-- Save Copy -->
-          <button id="btn-save" class="topbar-btn save-btn" title="Download self-contained offline HTML copy">
-            ↓ Save Copy
+          <button id="btn-save" class="topbar-btn save-btn" title="Download self-contained offline HTML copy" aria-label="Save Copy">
+            ${renderSaburaIcon('save-copy')}<span class="topbar-btn-label">Save Copy</span>
           </button>
         </div>
       `;
@@ -116,12 +119,13 @@ export class TopBar {
     this.barEl.innerHTML = `
       <div class="topbar-left">
         <div class="brand-title">
+          <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
           <span class="brand-name">Sabura</span>
           <span class="doc-title" title="Board Title">${safeTitle}</span>
         </div>
         <!-- Return to reading mode -->
-        <button id="btn-view" class="topbar-btn" title="Return to Reading Mode">
-          👁 View
+        <button id="btn-view" class="topbar-btn" title="Return to Reading Mode" aria-label="Return to Reading Mode">
+          ${renderSaburaIcon('view')}<span class="topbar-btn-label">View</span>
         </button>
         <div class="status-badge" title="Document State: ${escapeXml(status)}">
           <span class="status-dot" style="background-color: ${statusColor};"></span>
@@ -132,8 +136,8 @@ export class TopBar {
       <div class="topbar-center">
         <!-- Board Theme -->
         <label class="control-label" title="Board Theme (persisted with document)">
-          <span>Board:</span>
-          <select id="select-board-theme" class="topbar-select">
+          ${renderSaburaIcon('board')}<span class="control-prefix">Board:</span>
+          <select id="select-board-theme" class="topbar-select" aria-label="Board Theme">
             <option value="paper" ${docThemeId === 'paper' ? 'selected' : ''}>Paper</option>
             <option value="blueprint" ${docThemeId === 'blueprint' ? 'selected' : ''}>Blueprint</option>
             <option value="night" ${docThemeId === 'night' ? 'selected' : ''}>Night</option>
@@ -143,8 +147,8 @@ export class TopBar {
 
         <!-- Interface Appearance -->
         <label class="control-label" title="Interface Appearance (local preference, never dirties board)">
-          <span>UI:</span>
-          <select id="select-ui-theme" class="topbar-select">
+          ${renderSaburaIcon('appearance')}<span class="control-prefix">UI:</span>
+          <select id="select-ui-theme" class="topbar-select" aria-label="Interface Appearance">
             <option value="system" ${ifaceTheme === 'system' ? 'selected' : ''}>System</option>
             <option value="light" ${ifaceTheme === 'light' ? 'selected' : ''}>Light</option>
             <option value="dark" ${ifaceTheme === 'dark' ? 'selected' : ''}>Dark</option>
@@ -153,11 +157,11 @@ export class TopBar {
 
         <!-- Grid visibility and snapping -->
         <div class="grid-controls-group">
-          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility (Currently ${showGrid ? 'On' : 'Off'})">
-            Grid ${showGrid ? 'On' : 'Off'}
+          <button id="btn-grid-visible" class="topbar-btn ${showGrid ? 'active' : ''}" title="Toggle Grid Visibility (Currently ${showGrid ? 'On' : 'Off'})" aria-label="Grid ${showGrid ? 'On' : 'Off'}" aria-pressed="${showGrid}">
+            ${renderSaburaIcon('grid')}<span class="topbar-btn-label">Grid ${showGrid ? 'On' : 'Off'}</span>
           </button>
-          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping (Currently ${snapGrid ? 'On' : 'Off'})">
-            Snap ${snapGrid ? 'On' : 'Off'}
+          <button id="btn-grid-snap" class="topbar-btn ${snapGrid ? 'active' : ''}" title="Toggle Object & Grid Snapping (Currently ${snapGrid ? 'On' : 'Off'})" aria-label="Snap ${snapGrid ? 'On' : 'Off'}" aria-pressed="${snapGrid}">
+            ${renderSaburaIcon('snap')}<span class="topbar-btn-label">Snap ${snapGrid ? 'On' : 'Off'}</span>
           </button>
         </div>
       </div>
@@ -165,26 +169,28 @@ export class TopBar {
       <div class="topbar-right">
         <div class="topbar-secondary-actions">
           <!-- Undo / Redo -->
-          <button id="btn-undo" class="topbar-btn" title="Undo (Cmd+Z)">↶</button>
-          <button id="btn-redo" class="topbar-btn" title="Redo (Cmd+Shift+Z)">↷</button>
+          <button id="btn-undo" class="topbar-btn icon-only" title="Undo (Cmd+Z)" aria-label="Undo">${renderSaburaIcon('undo')}</button>
+          <button id="btn-redo" class="topbar-btn icon-only" title="Redo (Cmd+Shift+Z)" aria-label="Redo">${renderSaburaIcon('redo')}</button>
 
           <div class="topbar-divider"></div>
 
           <!-- Fullscreen Editing -->
-          <button id="btn-fullscreen" class="topbar-btn" title="Toggle Full-Screen Editing">
-            ⛶ Fullscreen
+          <button id="btn-fullscreen" class="topbar-btn" title="Toggle Full-Screen Editing" aria-label="Toggle Full-Screen Editing">
+            ${renderSaburaIcon('fullscreen')}<span class="topbar-btn-label">Fullscreen</span>
           </button>
         </div>
 
-        <!-- Present -->
-        <button id="btn-present" class="topbar-btn primary" title="Enter Presentation Mode (Laser pointer)">
-          ▶ Present
-        </button>
+        <div class="topbar-primary-actions">
+          <!-- Present -->
+          <button id="btn-present" class="topbar-btn" title="Enter Presentation Mode (Laser pointer)" aria-label="Enter Presentation Mode">
+            ${renderSaburaIcon('present')}<span class="topbar-btn-label">Present</span>
+          </button>
 
-        <!-- Save Copy -->
-        <button id="btn-save" class="topbar-btn save-btn" title="Download self-contained offline HTML copy">
-          ↓ Save Copy
-        </button>
+          <!-- Save Copy -->
+          <button id="btn-save" class="topbar-btn save-btn" title="Download self-contained offline HTML copy" aria-label="Save Copy">
+            ${renderSaburaIcon('save-copy')}<span class="topbar-btn-label">Save Copy</span>
+          </button>
+        </div>
       </div>
     `;
 

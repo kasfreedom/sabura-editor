@@ -28,6 +28,7 @@ const moduleFiles = [
   'src/storage/file-packer.js',
   'src/renderer/laser.js',
   'src/renderer/svg-renderer.js',
+  'src/ui/wheel-icon-map.js',
   'src/ui/wheel.js',
   'src/ui/text-editor.js',
   'src/ui/topbar.js',
@@ -226,7 +227,27 @@ PUBLIC API  (window.sabura.*)
   generateBoardFile() never returns the HTML source. The runtime remains opaque.
 -->`;
 
-function generateHtml(css, bundledJs, serializedDoc) {
+function namespaceSvgAsset(source) {
+  return source
+    .replace(/id="([^"]+)"/g, 'id="sabura-vs-$1"')
+    .replace(/href="#([^"]+)"/g, 'href="#sabura-vs-$1"')
+    .replace(/url\(#([^)]+)\)/g, 'url(#sabura-vs-$1)')
+    .replace(/class="line"/g, 'class="sabura-vs-line"')
+    .replace(/class="ghost"/g, 'class="sabura-vs-ghost"')
+    .replace(/\.line\s*\{/g, '.sabura-vs-line {')
+    .replace(/\.ghost\s*\{/g, '.sabura-vs-ghost {');
+}
+
+function buildVisualSystemSprite() {
+  const menuSource = namespaceSvgAsset(fs.readFileSync(path.join(rootDir, 'assets/sabura-menu-icons.svg'), 'utf8'));
+  const appSource = namespaceSvgAsset(fs.readFileSync(path.join(rootDir, 'assets/sabura-app-icon.svg'), 'utf8'));
+  const menuInner = menuSource.replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  const appViewBox = appSource.match(/viewBox="([^"]+)"/)?.[1] || '0 0 1024 1024';
+  const appInner = appSource.replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  return `<svg id="sabura-vs-sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden"><defs>${menuInner}<symbol id="sabura-vs-app-icon" viewBox="${appViewBox}">${appInner}</symbol></defs></svg>`;
+}
+
+function generateHtml(css, bundledJs, serializedDoc, visualSystemSprite) {
   return `<!DOCTYPE html>
 <html lang="en" data-ui-theme="system">
 <head>
@@ -246,6 +267,7 @@ ${css}
   </style>
 </head>
 <body>
+  ${visualSystemSprite}
   <div id="app"></div>
   <script>
 ${bundledJs}
@@ -259,6 +281,7 @@ async function build() {
 
   const cssPath = path.join(rootDir, 'styles/sabura.css');
   const css = fs.readFileSync(cssPath, 'utf8');
+  const visualSystemSprite = buildVisualSystemSprite();
 
   const bundledJs = await bundleModules();
   const sampleDoc = createSampleBoard();
@@ -267,8 +290,8 @@ async function build() {
   const emptyDoc = createDefaultDocument({ title: 'Untitled Board' });
   const serializedEmpty = canonicalJson(emptyDoc);
 
-  const sampleHtml = generateHtml(css, bundledJs, serializedSample).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
-  const emptyHtml = generateHtml(css, bundledJs, serializedEmpty).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
+  const sampleHtml = generateHtml(css, bundledJs, serializedSample, visualSystemSprite).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
+  const emptyHtml = generateHtml(css, bundledJs, serializedEmpty, visualSystemSprite).replace(/[ \t]+$/gm, '').trimEnd() + '\n';
 
   const outputPath = path.join(rootDir, 'sabura.html');
   fs.writeFileSync(outputPath, sampleHtml, 'utf8');

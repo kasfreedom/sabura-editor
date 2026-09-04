@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Sabura application icon</title>
+  <desc id="desc">A tactile paper-colored board with a blue hand-sketched diagram and coral marker.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset="0.56" stop-color="#f8f2e7"/>
+      <stop offset="1" stop-color="#e9e0d1"/>
+    </linearGradient>
+    <linearGradient id="marker" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8174"/>
+      <stop offset="0.55" stop-color="#f35f55"/>
+      <stop offset="1" stop-color="#d94741"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86ead6"/>
+      <stop offset="1" stop-color="#45bea9"/>
+    </linearGradient>
+    <filter id="tile-shadow" x="-18%" y="-18%" width="136%" height="145%">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#2f3437" flood-opacity="0.22"/>
+    </filter>
+    <filter id="marker-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="5" dy="9" stdDeviation="9" flood-color="#2f3437" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#tile-shadow)">
+    <path d="M171 112C112 127 82 174 76 244L60 751c-2 80 43 134 120 146 200 31 453 33 666 3 70-10 110-60 115-132l18-518c3-80-40-132-119-143-213-30-493-28-689 5Z" fill="url(#paper)" stroke="#d9d0c1" stroke-width="14"/>
+    <path d="M192 153C137 167 119 201 115 258L101 736c-2 61 29 96 87 106 193 29 432 30 638 2 55-8 84-42 88-99l15-478c2-61-29-95-90-104-204-27-465-26-647-10Z" fill="none" stroke="#3c4145" stroke-width="14" stroke-linecap="round" stroke-dasharray="190 17 421 13"/>
+    <path d="M196 159C145 172 126 207 122 261L109 731c-2 57 26 91 83 100 185 27 427 28 627 2" fill="none" stroke="#3c4145" stroke-opacity="0.26" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <g fill="none" stroke="#1971c2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M274 475c4-37 29-59 66-60l164-4c40-1 65 24 65 64l-4 159c-1 40-26 63-67 64l-157 3c-43 1-69-24-69-66l2-160Z" stroke-width="30"/>
+    <path d="M286 481c2-33 22-51 56-52l153-4c34 0 54 19 54 53l-3 148c0 35-20 54-55 55l-146 3c-37 0-58-20-58-56l-1-147Z" stroke-width="10" opacity="0.36"/>
+    <path d="M566 456c73-17 80-120 144-147" stroke-width="28"/>
+    <path d="M568 466c77-23 89-116 147-145" stroke-width="9" opacity="0.34"/>
+    <path d="M715 214c64-17 122 18 135 78 15 66-20 120-82 134-65 15-119-20-133-80-15-65 19-116 80-132Z" stroke-width="28"/>
+    <path d="M721 227c52-13 101 15 112 67 12 53-16 98-68 110-52 12-97-16-109-66-12-53 15-98 65-111Z" stroke-width="9" opacity="0.34"/>
+  </g>
+
+  <g transform="translate(657 702) rotate(-39)" filter="url(#marker-shadow)">
+    <rect x="0" y="0" width="276" height="104" rx="48" fill="url(#marker)" stroke="#cf4842" stroke-width="8"/>
+    <rect x="225" y="2" width="84" height="100" rx="38" fill="url(#mint)" stroke="#39aa98" stroke-width="7"/>
+    <path d="M-41 52 7 17v70L-41 52Z" fill="#34393d"/>
+    <path d="M35 15c61-12 132-11 186 2" fill="none" stroke="#ffaba2" stroke-opacity="0.54" stroke-width="9" stroke-linecap="round"/>
+  </g>
+</svg>
+

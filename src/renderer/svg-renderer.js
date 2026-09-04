@@ -30,6 +30,37 @@ function safeSvgId(value) {
   return encoded || 'empty';
 }
 
+const VISUAL_THEME_PROFILES = Object.freeze({
+  paper: Object.freeze({ pigment: true, amplitude: 1.2, fillRoughnessScale: 1, outlineRoughnessScale: 1, layerOpacity: [0.66, 0.48], paperTexture: true, cleanSketch: false }),
+  blueprint: Object.freeze({ pigment: true, amplitude: 0.45, fillRoughnessScale: 0.35, outlineRoughnessScale: 0.65, layerOpacity: [0.76, 0.36], paperTexture: false, cleanSketch: false }),
+  night: Object.freeze({ pigment: true, amplitude: 0.4, fillRoughnessScale: 0.35, outlineRoughnessScale: 0.65, layerOpacity: [0.76, 0.34], paperTexture: false, cleanSketch: false }),
+  'high-contrast': Object.freeze({ pigment: false, amplitude: 0, fillRoughnessScale: 0, outlineRoughnessScale: 0, layerOpacity: [1, 0], paperTexture: false, cleanSketch: true })
+});
+
+/** Render-only profile. Unknown/custom themes intentionally return null. */
+export function getVisualThemeProfile(themeId) {
+  return VISUAL_THEME_PROFILES[themeId] || null;
+}
+
+function stablePigmentOffset(obj, layerIndex, amplitude) {
+  const typeSalt = Array.from(String(obj.type || '')).reduce((sum, char) => sum + char.codePointAt(0), 0);
+  const seed = (Math.floor(Math.abs(Number(obj.seed) || 12345)) + typeSalt * 97 + layerIndex * 7919) >>> 0;
+  const xUnit = ((Math.imul(seed ^ (seed >>> 13), 2654435761) >>> 0) % 2001) / 1000 - 1;
+  const yUnit = ((Math.imul(seed ^ (seed >>> 11), 2246822519) >>> 0) % 2001) / 1000 - 1;
+  return { x: (xUnit * amplitude).toFixed(2), y: (yUnit * amplitude).toFixed(2) };
+}
+
+export function renderPigmentFill(obj, fillPath, fill, themeId) {
+  const profile = getVisualThemeProfile(themeId);
+  if (!profile?.pigment) {
+    return `<path d="${fillPath}" fill="${fill}" fill-opacity="1.0" stroke="none" />`;
+  }
+  return profile.layerOpacity.map((layerOpacity, layerIndex) => {
+    const offset = stablePigmentOffset(obj, layerIndex, profile.amplitude);
+    return `<path d="${fillPath}" fill="${fill}" fill-opacity="${layerOpacity}" stroke="none" transform="translate(${offset.x} ${offset.y})" data-sabura-vs-pigment-layer="${layerIndex + 1}" />`;
+  }).join('');
+}
+
 /**
  * Renders an SVG arrowhead marker with natural Excalidraw stroke character.
  */
@@ -102,18 +133,32 @@ export function renderSvgScene(doc, runtime) {
   let out = [];
   out.push('<svg id="canvas-svg" width="100%" height="100%" style="display: block; width: 100%; height: 100%;">');
 
-  // Defs for filters / patterns
+  const visualProfile = getVisualThemeProfile(theme.id);
+
+  // Defs for deterministic board patterns. Document content never references these IDs.
   out.push('<defs>');
   if (theme.id === 'blueprint') {
     out.push(`
-      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+      <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
         <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${theme.gridColor || 'rgba(56, 189, 248, 0.15)'}" stroke-width="0.8" />
       </pattern>
     `);
+  } else if (theme.id === 'paper') {
+    out.push(`
+      <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+        patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
+        <circle cx="${1.35 * camera.zoom}" cy="${1.05 * camera.zoom}" r="${1.05 * Math.min(1.35, Math.max(0.65, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
+      </pattern>
+      <pattern id="sabura-vs-paper-grain" width="37" height="31" patternUnits="userSpaceOnUse">
+        <path d="M2 8h7M21 25h5M31 5h3" stroke="#7c7264" stroke-opacity="0.025" stroke-width="0.55" />
+        <circle cx="15" cy="16" r="0.55" fill="#8f8271" fill-opacity="0.028" />
+        <circle cx="34" cy="22" r="0.4" fill="#8f8271" fill-opacity="0.022" />
+      </pattern>
+    `);
   } else {
     out.push(`
-      <pattern id="canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
+      <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
         <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
       </pattern>
@@ -123,8 +168,11 @@ export function renderSvgScene(doc, runtime) {
 
   // Background rect with grid pattern
   out.push(`<rect width="100%" height="100%" fill="${theme.background}" />`);
+  if (visualProfile?.paperTexture) {
+    out.push('<rect width="100%" height="100%" fill="url(#sabura-vs-paper-grain)" pointer-events="none" />');
+  }
   if (runtime.showGrid !== false) {
-    out.push('<rect width="100%" height="100%" fill="url(#canvas-grid)" pointer-events="none" />');
+    out.push('<rect width="100%" height="100%" fill="url(#sabura-vs-canvas-grid)" pointer-events="none" />');
   }
 
   // World transform group
@@ -218,7 +266,8 @@ export function renderSvgScene(doc, runtime) {
  * Renders an individual object to SVG.
  */
 export function renderObject(doc, obj, isSelected = false) {
-  const isSketch = (obj.roughness !== undefined ? obj.roughness : 1) > 0;
+  const visualProfile = getVisualThemeProfile(doc.theme?.id);
+  const isSketch = !visualProfile?.cleanSketch && (obj.roughness !== undefined ? obj.roughness : 1) > 0;
   const strokeWidth = obj.strokeWidth !== undefined ? obj.strokeWidth : 2;
   const baseStroke = obj.stroke || '#1e1e1e';
   const stroke = resolveContrastColor(baseStroke, doc.theme?.background || '#ffffff', '#ffffff', '#1e1e1e');
@@ -301,16 +350,23 @@ export function renderObject(doc, obj, isSelected = false) {
     }
   } else if (['rectangle', 'ellipse', 'diamond', 'triangle', 'path'].includes(obj.type)) {
     // Shape base background for fill (solid fill controlled by object opacity)
-    if (fill !== 'none') {
-      const fillPath = generateClosedFillPath(obj);
+    const eligibleClosedFill = obj.type !== 'path' || Boolean(obj.closed);
+    if (fill !== 'none' && eligibleClosedFill) {
+      const fillObject = visualProfile
+        ? { ...obj, roughness: (obj.roughness !== undefined ? obj.roughness : 1) * visualProfile.fillRoughnessScale }
+        : obj;
+      const fillPath = generateClosedFillPath(fillObject);
       if (fillPath) {
-        markup.push(`<path d="${fillPath}" fill="${fill}" fill-opacity="1.0" stroke="none" />`);
+        markup.push(renderPigmentFill(obj, fillPath, fill, doc.theme?.id));
       }
     }
 
     // Stroke path (sketchy or clean) - only render if strokeWidth > 0
     if (strokeWidth > 0) {
-      const strokePath = generateSketchPath(obj);
+      const strokeObject = visualProfile
+        ? { ...obj, roughness: (obj.roughness !== undefined ? obj.roughness : 1) * visualProfile.outlineRoughnessScale }
+        : obj;
+      const strokePath = generateSketchPath(strokeObject);
       if (strokePath) {
         markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
       }

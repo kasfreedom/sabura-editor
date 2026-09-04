@@ -30,6 +30,7 @@ import { TopBar } from './ui/topbar.js';
 import { TextEditor } from './ui/text-editor.js';
 import { ShortcutsCoordinator } from './ui/shortcuts.js';
 import { ZoomToolbar } from './ui/zoom-toolbar.js';
+import { renderSaburaIcon } from './ui/wheel-icon-map.js';
 import { HelpModal } from './ui/help-modal.js';
 import { LaserPointer } from './renderer/laser.js';
 
@@ -148,11 +149,12 @@ export class SaburaApp {
   initDOM() {
     const app = document.getElementById('app');
     this.appElement = app;
+    app.setAttribute('data-sabura-vs-board-theme', this.doc?.theme?.id || 'custom');
     app.innerHTML = `
       <div id="canvas-container"></div>
       <canvas id="laser-canvas"></canvas>
       <button class="wheel-trigger-fab" id="btn-wheel-fab" title="Open Tool Wheel (Shortcut: Q or Right-Click)">
-        <span>Wheel</span>
+        ${renderSaburaIcon('wheel')}<span>Wheel</span>
         <span class="fab-key">Q</span>
       </button>
       <input id="image-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -1315,6 +1317,7 @@ export class SaburaApp {
   }
 
   updateUI() {
+    this.appElement?.setAttribute('data-sabura-vs-board-theme', this.doc?.theme?.id || 'custom');
     this.topbar.update(this.doc, this.status, this.interfaceTheme, this.workspace.snapGrid, this.workspace.showGrid, this.mode);
     this.workspace.render();
   }
