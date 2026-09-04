@@ -850,9 +850,11 @@ export class SaburaApp {
       this.dispatchCommand({ type: 'set_typography', ids: selectedIds, updates: { fontFamily: family } });
     } else if (actionId.startsWith('conn_route_')) {
       const routing = payload.routing || actionId.replace('conn_route_', '');
-      for (const id of selectedIds) {
-        this.dispatchCommand({ type: 'configure_connector', id, routing });
-      }
+      const commands = selectedIds
+        .filter(id => this.doc.objects[id]?.type === 'connector' && !this.doc.objects[id]?.locked)
+        .map(id => ({ type: 'configure_connector', id, routing }));
+      if (commands.length === 1) this.dispatchCommand(commands[0]);
+      else if (commands.length > 1) this.dispatchCommandBatch(commands);
     } else if (actionId === 'conn_curve_flip') {
       for (const id of selectedIds) {
         const conn = this.doc.objects[id];
@@ -881,14 +883,16 @@ export class SaburaApp {
         this.dispatchCommand({ type: 'configure_connector', id, elbowOffset: null });
       }
     } else if (actionId.startsWith('conn_arrows_')) {
-      for (const id of selectedIds) {
-        this.dispatchCommand({
+      const commands = selectedIds
+        .filter(id => this.doc.objects[id]?.type === 'connector' && !this.doc.objects[id]?.locked)
+        .map(id => ({
           type: 'configure_connector',
           id,
           startArrow: payload.startArrow,
           endArrow: payload.endArrow
-        });
-      }
+        }));
+      if (commands.length === 1) this.dispatchCommand(commands[0]);
+      else if (commands.length > 1) this.dispatchCommandBatch(commands);
     } else if (actionId === 'conn_points_auto') {
       const cmds = [];
       for (const id of selectedIds) {

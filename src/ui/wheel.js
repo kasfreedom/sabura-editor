@@ -614,6 +614,44 @@ export class ToolWheel {
     ];
   }
 
+  getConnectorMultiItems(isGrouped, anyUnlocked) {
+    const connectors = this.selectedObjects.filter(object => object?.type === 'connector');
+    const common = getter => {
+      const value = getter(connectors[0]);
+      return connectors.every(connector => getter(connector) === value) ? value : null;
+    };
+    const arrowMode = connector => {
+      const start = Boolean(connector?.startArrow);
+      const end = Boolean(connector?.endArrow);
+      return !start && !end ? 'none' : (start && !end ? 'start' : (!start && end ? 'end' : 'both'));
+    };
+    const items = this.getConnectorItems(connectors[0], !anyUnlocked);
+    const routing = common(connector => connector?.routing || 'straight');
+    items[0].subItems = items[0].subItems.slice(0, 3);
+    for (const item of items[0].subItems) item.isActive = routing === item.routing;
+    const arrows = common(arrowMode);
+    for (const item of items[1].subItems) item.isActive = arrows === item.id.replace('conn_arrows_', '');
+    const roughness = common(connector => connector?.roughness === 0 ? 'clean' : 'sketch');
+    const strokeStyle = common(connector => connector?.strokeStyle || 'solid');
+    for (const item of items[5].subItems) {
+      item.isActive = item.id === `style_${roughness}` || item.id === `stroke_${strokeStyle}`;
+    }
+    if (common(connector => connector?.strokeWidth ?? 2) === null) {
+      for (const item of items[5].thirdItems) item.isActive = false;
+    }
+    const stroke = common(connector => connector?.stroke || null);
+    for (const item of items[6].subItems) item.isActive = stroke !== null && item.color === stroke;
+    items[4].subItems.push({
+      id: isGrouped ? 'action_ungroup' : 'action_group',
+      label: isGrouped ? 'Ungroup' : 'Group',
+      icon: '⧉'
+    });
+    if (!anyUnlocked) {
+      for (const index of [0, 1, 2, 3, 5, 6, 7]) items[index].disabled = true;
+    }
+    return items;
+  }
+
   getMultiItems(spatialCount, isGrouped, anyUnlocked) {
     // Slot 0 (12:00): Align
     const alignItem = {
@@ -703,6 +741,8 @@ export class ToolWheel {
       const anyUnlocked = this.selectedObjects.length > 0 ? this.selectedObjects.some(o => !o.locked) : true;
       const allImages = this.selectedObjects.length > 0 && this.selectedObjects.every(o => o?.type === 'image');
       if (allImages) return this.getImageMultiItems(spatialObjects.length, isGrouped, anyUnlocked);
+      const allConnectors = this.selectedObjects.length > 0 && this.selectedObjects.every(o => o?.type === 'connector');
+      if (allConnectors) return this.getConnectorMultiItems(isGrouped, anyUnlocked);
       return this.getMultiItems(spatialObjects.length, isGrouped, anyUnlocked);
     }
 

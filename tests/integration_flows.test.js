@@ -88,6 +88,82 @@ test('canonical history boundary suppresses idempotent command, batch, public AP
   assert.equal(staleRedo.notifications, 0);
 });
 
+test('bulk connector route and arrows are atomic, reversible, and skip locked connectors', () => {
+  const makeApp = () => {
+    const app = Object.create(SaburaApp.prototype);
+    app.doc = createDefaultDocument({ title: 'Bulk connectors' });
+    app.doc.objects.c1 = createDefaultObject('connector', {
+      id: 'c1', routing: 'straight', startArrow: false, endArrow: false
+    }, app.doc.theme);
+    app.doc.objects.c2 = createDefaultObject('connector', {
+      id: 'c2', routing: 'curved', startArrow: true, endArrow: true
+    }, app.doc.theme);
+    app.doc.objects.c3 = createDefaultObject('connector', {
+      id: 'c3', routing: 'elbow', startArrow: true, endArrow: false, locked: true
+    }, app.doc.theme);
+    app.doc.order = ['c1', 'c2', 'c3'];
+    app.workspace = { selectedIds: ['c1', 'c2', 'c3'] };
+    app.undoStack = [];
+    app.redoStack = [];
+    app.status = 'Clean';
+    app.updateUI = () => {};
+    app.notifySubscribers = () => {};
+    return app;
+  };
+
+  const routeApp = makeApp();
+  routeApp.handleWheelAction('conn_route_elbow', { routing: 'elbow' });
+  assert.equal(routeApp.doc.objects.c1.routing, 'elbow');
+  assert.equal(routeApp.doc.objects.c2.routing, 'elbow');
+  assert.equal(routeApp.doc.objects.c3.routing, 'elbow');
+  assert.equal(routeApp.undoStack.length, 1, 'bulk route is one history entry');
+  assert.equal(routeApp.undo(), true);
+  assert.equal(routeApp.doc.objects.c1.routing, 'straight');
+  assert.equal(routeApp.doc.objects.c2.routing, 'curved');
+  assert.equal(routeApp.doc.objects.c3.routing, 'elbow');
+  assert.equal(routeApp.redo(), true);
+  assert.equal(routeApp.doc.objects.c1.routing, 'elbow');
+  assert.equal(routeApp.doc.objects.c2.routing, 'elbow');
+
+  const arrowApp = makeApp();
+  arrowApp.handleWheelAction('conn_arrows_none', { startArrow: false, endArrow: false });
+  assert.equal(arrowApp.doc.objects.c1.startArrow, false);
+  assert.equal(arrowApp.doc.objects.c2.startArrow, false);
+  assert.equal(arrowApp.doc.objects.c2.endArrow, false);
+  assert.equal(arrowApp.doc.objects.c3.startArrow, true, 'locked connector remains unchanged');
+  assert.equal(arrowApp.undoStack.length, 1, 'bulk arrows are one history entry');
+  assert.equal(arrowApp.undo(), true);
+  assert.equal(arrowApp.doc.objects.c2.startArrow, true);
+  assert.equal(arrowApp.doc.objects.c2.endArrow, true);
+
+  const lockedApp = makeApp();
+  lockedApp.doc.objects.c1.locked = true;
+  lockedApp.doc.objects.c2.locked = true;
+  lockedApp.handleWheelAction('conn_route_straight', { routing: 'straight' });
+  assert.equal(lockedApp.undoStack.length, 0, 'all-locked bulk action is a history no-op');
+
+  const idempotentApp = makeApp();
+  idempotentApp.doc.objects.c2.routing = 'straight';
+  idempotentApp.handleWheelAction('conn_route_straight', { routing: 'straight' });
+  assert.equal(idempotentApp.undoStack.length, 0, 'unchanged bulk route is a history no-op');
+
+  const pointsApp = makeApp();
+  pointsApp.doc.objects.s1 = createDefaultObject('rectangle', { id: 's1' }, pointsApp.doc.theme);
+  pointsApp.doc.objects.s2 = createDefaultObject('rectangle', { id: 's2', x: 300 }, pointsApp.doc.theme);
+  pointsApp.doc.objects.c1.from = { id: 's1', anchor: { x: 0.2, y: 0.3 } };
+  pointsApp.doc.objects.c1.to = { id: 's2', anchor: { x: 0.8, y: 0.7 } };
+  pointsApp.doc.objects.c2.from = { id: 's1', anchor: { x: 0.4, y: 0.5 } };
+  pointsApp.doc.objects.c2.to = { id: 's2', anchor: { x: 0.6, y: 0.5 } };
+  pointsApp.doc.order.push('s1', 's2');
+  pointsApp.handleWheelAction('conn_points_auto', {});
+  assert.equal(pointsApp.doc.objects.c1.from.anchor, undefined);
+  assert.equal(pointsApp.doc.objects.c2.to.anchor, undefined);
+  assert.equal(pointsApp.undoStack.length, 1, 'bulk point reset is one history entry');
+  assert.equal(pointsApp.undo(), true);
+  assert.deepEqual(pointsApp.doc.objects.c1.from.anchor, { x: 0.2, y: 0.3 });
+  assert.deepEqual(pointsApp.doc.objects.c2.to.anchor, { x: 0.6, y: 0.5 });
+});
+
 test('Public AI API command validation and atomic batch execution', () => {
   let doc = createDefaultDocument();
   let undoStack = [];

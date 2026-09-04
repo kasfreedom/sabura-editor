@@ -173,6 +173,44 @@ test('Multi-selection disables ineligible actions without collapsing slot count'
   assert.equal(items3[1].disabled, false, 'Distribute should be enabled for 3 spatial objects');
 });
 
+test('all-connector multi-selection keeps connector controls and honest mixed state', () => {
+  const wheel = new ToolWheel(createMockContainer(), () => {});
+  wheel.context = 'object';
+  wheel.selectedCount = 2;
+  wheel.selectedObjects = [
+    { id: 'c1', type: 'connector', routing: 'straight', startArrow: false, endArrow: false, stroke: '#111' },
+    { id: 'c2', type: 'connector', routing: 'curved', startArrow: true, endArrow: true, stroke: '#222' }
+  ];
+  wheel.selectedObject = wheel.selectedObjects[0];
+  wheel.themePalette = ['#111', '#222'];
+
+  const items = wheel.getItems();
+  assert.deepEqual(items.map(item => item.id), [
+    'menu_route', 'menu_arrows', 'menu_conn_points', 'action_duplicate',
+    'menu_order', 'menu_style', 'menu_ink', 'action_delete'
+  ]);
+  assert.deepEqual(items[0].subItems.map(item => item.id), [
+    'conn_route_straight', 'conn_route_elbow', 'conn_route_curved'
+  ]);
+  assert.equal(items[0].subItems.some(item => item.isActive), false, 'mixed routes have no false active choice');
+  assert.equal(items[1].subItems.some(item => item.isActive), false, 'mixed arrows have no false active choice');
+  assert.deepEqual(items[2].subItems.map(item => item.id), [
+    'conn_points_auto', 'conn_points_auto_from', 'conn_points_auto_to'
+  ]);
+  assert.equal(items[4].subItems.at(-1).id, 'action_group');
+
+  wheel.selectedObjects[1] = { ...wheel.selectedObjects[1], routing: 'straight', startArrow: false, endArrow: false };
+  wheel.selectedObject = wheel.selectedObjects[0];
+  const shared = wheel.getItems();
+  assert.equal(shared[0].subItems.find(item => item.id === 'conn_route_straight').isActive, true);
+  assert.equal(shared[1].subItems.find(item => item.id === 'conn_arrows_none').isActive, true);
+
+  wheel.selectedObjects[1] = { id: 'r1', type: 'rectangle' };
+  wheel.selectedObject = wheel.selectedObjects[0];
+  const mixedTypes = wheel.getItems();
+  assert.equal(mixedTypes[0].id, 'menu_align', 'mixed object types retain the generic multi wheel');
+});
+
 test('Style submenu contains only visual style options and never color swatches across all contexts', () => {
   const container = createMockContainer();
   const wheel = new ToolWheel(container, () => {});
