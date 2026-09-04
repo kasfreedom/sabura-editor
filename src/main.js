@@ -182,7 +182,7 @@ export class SaburaApp {
       onDoubleClickedObject: (obj) => {
         if (this.mode === 'reading') return;
         if (!obj.locked && obj.type !== 'connector' && obj.type !== 'image') {
-          this.textEditor.open(obj, this.workspace.camera);
+          this.textEditor.open(obj, this.workspace.camera, this.doc.theme);
         }
       },
       onZoomChange: (zoom) => {
@@ -294,7 +294,7 @@ export class SaburaApp {
         if (this.workspace.selectedIds.length === 1) {
           const obj = this.doc.objects[this.workspace.selectedIds[0]];
           if (obj && !obj.locked && obj.type !== 'connector' && obj.type !== 'image') {
-            this.textEditor.open(obj, this.workspace.camera);
+            this.textEditor.open(obj, this.workspace.camera, this.doc.theme);
           }
         }
       },

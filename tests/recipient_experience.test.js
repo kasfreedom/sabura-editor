@@ -919,6 +919,21 @@ test('15. F-09: Inline text editor has stable id, name, and accessibility form s
   assert.equal(editor.textarea.getAttribute('spellcheck'), 'false');
   assert.equal(editor.textarea.style.display, 'none');
 
+  // Editing colors follow the same effective theme/shape background as SVG text.
+  const darkText = { id: 'dark-text', text: 'Night text', x: 0, y: 0, width: 120, height: 40,
+    type: 'text', stroke: '#1e1e1e' };
+  editor.open(darkText, { x: 0, y: 0, zoom: 1 }, { background: '#18181b' });
+  assert.equal(editor.textarea.style.color, '#ffffff');
+  assert.equal(editor.textarea.style.backgroundColor, '#18181b');
+  editor.close(false);
+
+  const darkShape = { id: 'dark-shape', text: 'Blueprint shape', x: 0, y: 0, width: 120, height: 40,
+    type: 'rectangle', stroke: '#1e1e1e', fill: '#0c192e' };
+  editor.open(darkShape, { x: 0, y: 0, zoom: 1 }, { background: '#0c192e' });
+  assert.equal(editor.textarea.style.color, '#ffffff');
+  assert.equal(editor.textarea.style.backgroundColor, '#0c192e');
+  editor.close(false);
+
   // Verify lifecycle with proper semantics intact
   const obj = { id: 'text_sem', text: 'Semantics Test', x: 50, y: 50, width: 120, height: 40 };
   editor.open(obj, { x: 0, y: 0, zoom: 1 });
@@ -939,10 +954,12 @@ test('16. F-08: TopBar renders all essential actions in Reading and Editing, key
   let modeChangedTo = null;
   let presentCalled = false;
   let saveCopyCalled = false;
+  let fullscreenCalled = false;
 
   const topbar = new TopBar(container, {
     onSetMode: (m) => { modeChangedTo = m; },
     onPresent: () => { presentCalled = true; },
+    onToggleFullscreen: () => { fullscreenCalled = true; },
     onSaveCopy: () => { saveCopyCalled = true; }
   });
 
@@ -953,10 +970,14 @@ test('16. F-08: TopBar renders all essential actions in Reading and Editing, key
   const btnEdit = topbar.barEl.querySelector('#btn-edit');
   const btnPresent = topbar.barEl.querySelector('#btn-present');
   const btnSave = topbar.barEl.querySelector('#btn-save');
+  const btnReadingFullscreen = topbar.barEl.querySelector('#btn-reading-fullscreen');
 
   assert.ok(btnEdit, 'Edit button must exist in Reading mode');
   assert.ok(btnPresent, 'Present button must exist in Reading mode');
   assert.ok(btnSave, 'Save Copy button must exist in Reading mode');
+  assert.ok(btnReadingFullscreen, 'Fullscreen button must exist in Reading mode');
+  assert.match(topbar.barEl.innerHTML, /aria-label="Toggle Fullscreen Reading"/);
+  assert.match(topbar.barEl.innerHTML, /title="Toggle Fullscreen Reading"/);
 
   // Essential actions are HTML button elements (standard keyboard focusable)
   assert.equal(btnEdit.tagName, 'BUTTON');
@@ -970,6 +991,8 @@ test('16. F-08: TopBar renders all essential actions in Reading and Editing, key
   assert.equal(presentCalled, true);
   btnSave.click();
   assert.equal(saveCopyCalled, true);
+  btnReadingFullscreen.click();
+  assert.equal(fullscreenCalled, true);
 
   // 2. Editing mode
   modeChangedTo = null;

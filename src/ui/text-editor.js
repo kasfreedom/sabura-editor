@@ -3,6 +3,7 @@
  */
 
 import { FONT_FAMILIES } from '../core/types.js';
+import { resolveContrastColor } from '../core/color.js';
 
 export class TextEditor {
   constructor(containerElement, onCommit) {
@@ -30,7 +31,7 @@ export class TextEditor {
     this.textarea.addEventListener('keydown', this.onKeyDown);
   }
 
-  open(object, camera = { x: 0, y: 0, zoom: 1 }) {
+  open(object, camera = { x: 0, y: 0, zoom: 1 }, theme = {}) {
     this.targetObject = object;
     this.initialText = object.text || '';
 
@@ -39,7 +40,11 @@ export class TextEditor {
     const fontFamily = FONT_FAMILIES[textStyle.fontFamily] || FONT_FAMILIES.sans;
     const fontWeight = textStyle.bold ? 'bold' : 'normal';
     const align = textStyle.align || (object.type === 'text' ? 'left' : 'center');
-    const color = textStyle.color || object.stroke || '#1e1e1e';
+    const rawColor = textStyle.color || object.stroke || '#1e1e1e';
+    const background = object.type === 'text' || !object.fill || object.fill === 'none'
+      ? (theme.background || '#ffffff')
+      : object.fill;
+    const color = resolveContrastColor(rawColor, background, '#ffffff', '#1e1e1e');
 
     const rot = object.rotation || 0;
     const centerScreenX = (object.x + object.width / 2) * camera.zoom + camera.x;
@@ -62,6 +67,7 @@ export class TextEditor {
     this.textarea.style.fontWeight = fontWeight;
     this.textarea.style.textAlign = align;
     this.textarea.style.color = color;
+    this.textarea.style.backgroundColor = background;
 
     this.textarea.value = this.initialText;
     this.textarea.focus();

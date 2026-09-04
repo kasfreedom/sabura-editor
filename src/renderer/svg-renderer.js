@@ -6,37 +6,7 @@
 import { generateSketchPath, sketchLine, generateClosedFillPath } from '../core/sketch.js';
 import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox } from '../core/geometry.js';
 import { FONT_FAMILIES } from '../core/types.js';
-
-/**
- * Calculates perceived luminance of a hex color.
- */
-function hexToLuminance(hex) {
-  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return 0.5;
-  let c = hex.slice(1);
-  if (c.length === 3) c = c.split('').map(x => x + x).join('');
-  const num = parseInt(c, 16);
-  if (isNaN(num)) return 0.5;
-  const r = ((num >> 16) & 255) / 255;
-  const g = ((num >> 8) & 255) / 255;
-  const b = (num & 255) / 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/**
- * Ensures text or stroke remains legible across dark/light theme transitions.
- */
-function resolveContrastColor(color, background, fallbackLight = '#ffffff', fallbackDark = '#1e1e1e') {
-  if (!color || color === 'none') return color;
-  const bgLum = hexToLuminance(background);
-  const colLum = hexToLuminance(color);
-  if (bgLum < 0.25 && colLum < 0.22) {
-    return fallbackLight;
-  }
-  if (bgLum > 0.75 && colLum > 0.78) {
-    return fallbackDark;
-  }
-  return color;
-}
+import { resolveContrastColor } from '../core/color.js';
 
 /**
  * Escapes XML/HTML text.

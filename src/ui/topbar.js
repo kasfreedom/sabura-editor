@@ -55,7 +55,7 @@ export class TopBar {
     this.barEl.className = `sabura-topbar ${isReading ? 'mode-reading' : 'mode-editing'}`;
 
     if (isReading) {
-      // Clean reading header: Title, reading badge, status, and essential actions (Edit, Present, Save Copy)
+      // Clean reading header: Title, reading badge, status, and essential actions.
       this.barEl.innerHTML = `
         <div class="topbar-left">
           <div class="brand-title">
@@ -77,6 +77,11 @@ export class TopBar {
             ✎ Edit
           </button>
 
+          <!-- Browser fullscreen, without changing Reading mode -->
+          <button id="btn-reading-fullscreen" class="topbar-btn" title="Toggle Fullscreen Reading" aria-label="Toggle Fullscreen Reading">
+            ⛶ <span class="reading-fullscreen-label">Fullscreen</span>
+          </button>
+
           <!-- Present -->
           <button id="btn-present" class="topbar-btn" title="Enter Presentation Mode (Laser pointer)">
             ▶ Present
@@ -91,6 +96,10 @@ export class TopBar {
 
       this.barEl.querySelector('#btn-edit')?.addEventListener('click', () => {
         this.callbacks.onSetMode?.('editing');
+      });
+
+      this.barEl.querySelector('#btn-reading-fullscreen')?.addEventListener('click', () => {
+        this.callbacks.onToggleFullscreen?.();
       });
 
       this.barEl.querySelector('#btn-present')?.addEventListener('click', () => {
