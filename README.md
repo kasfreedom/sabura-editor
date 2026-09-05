@@ -20,3 +20,11 @@ format is described in `docs/canvas-v1-format.md`.
 
 Cross-product vision, strategy, and architecture live in the sibling
 `../product` repository.
+
+## Design implementation handoff
+
+[011 — Graphite interface layout](docs/handoffs/011-graphite-interface/brief.md)
+records the approved visual direction, bundled reference previews, implementation
+boundaries, implementation status and verification checklist. The approved
+visual implementation is ready for independent review; read the brief and its
+latest implementation report before acting.

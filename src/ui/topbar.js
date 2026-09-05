@@ -56,6 +56,12 @@ export class TopBar {
 
     this.barEl.className = `sabura-topbar ${isReading ? 'mode-reading' : 'mode-editing'}`;
 
+    const statusRegion = `
+        <div class="status-region status-badge" data-status="${escapeXml(status)}" role="status" aria-live="polite" title="Document State: ${escapeXml(status)}">
+          <span class="status-dot" style="background-color: ${statusColor};"></span>
+          <span class="status-text">${escapeXml(status)}</span>
+        </div>`;
+
     if (isReading) {
       // Clean reading header: Title, reading badge, status, and essential actions.
       this.barEl.innerHTML = `
@@ -66,10 +72,6 @@ export class TopBar {
             <span class="doc-title" title="Board Title">${safeTitle}</span>
           </div>
           <span class="mode-badge" title="Mode: Reading">Reading</span>
-          <div class="status-badge" title="Document State: ${escapeXml(status)}">
-            <span class="status-dot" style="background-color: ${statusColor};"></span>
-            <span class="status-text">${escapeXml(status)}</span>
-          </div>
         </div>
 
         <div class="topbar-center"></div>
@@ -95,6 +97,7 @@ export class TopBar {
             ${renderSaburaIcon('save-copy')}<span class="topbar-btn-label">Save Copy</span>
           </button>
         </div>
+        ${statusRegion}
       `;
 
       this.barEl.querySelector('#btn-edit')?.addEventListener('click', () => {
@@ -127,10 +130,6 @@ export class TopBar {
         <button id="btn-view" class="topbar-btn" title="Return to Reading Mode" aria-label="Return to Reading Mode">
           ${renderSaburaIcon('view')}<span class="topbar-btn-label">View</span>
         </button>
-        <div class="status-badge" title="Document State: ${escapeXml(status)}">
-          <span class="status-dot" style="background-color: ${statusColor};"></span>
-          <span class="status-text">${escapeXml(status)}</span>
-        </div>
       </div>
 
       <div class="topbar-center">
@@ -192,6 +191,7 @@ export class TopBar {
           </button>
         </div>
       </div>
+      ${statusRegion}
     `;
 
     this.barEl.querySelector('#btn-view')?.addEventListener('click', () => {

@@ -8,61 +8,61 @@
   --font-hand: "Caveat", "Comic Sans MS", "Chalkboard SE", "Segoe Print", cursive, sans-serif;
 
   /* UI Chrome Theme - Concepts / Excalidraw Warm Default */
-  --ui-bg: rgba(252, 250, 246, 0.92);
-  --ui-bg-solid: #fcfaf6;
-  --ui-text: #212529;
-  --ui-text-muted: #6c757d;
-  --ui-border: rgba(0, 0, 0, 0.22);
-  --ui-hover: rgba(0, 0, 0, 0.05);
-  --ui-active: rgba(0, 0, 0, 0.1);
-  --ui-accent: #1971c2;
-  --ui-accent-hover: #1864ab;
+  --ui-bg: rgba(255, 253, 247, 0.96);
+  --ui-bg-solid: #fffdf7;
+  --ui-text: #303a3e;
+  --ui-text-muted: #6b7474;
+  --ui-border: #b9c0ba;
+  --ui-hover: #f0f2ed;
+  --ui-active: #dce7ed;
+  --ui-accent: #366b93;
+  --ui-accent-hover: #2d5878;
   --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --ui-wheel-bg: #fffefc;
-  --ui-wheel-hover: #fff3bf;
-  --ui-wheel-active: #d0ebff;
-  --ui-wheel-danger: #ffe3e3;
-  --ui-wheel-text: #1e1e1e;
-  --ui-wheel-stroke: #1e1e1e;
+  --ui-wheel-bg: #fffdf7;
+  --ui-wheel-hover: #dce7ed;
+  --ui-wheel-active: #dce7ed;
+  --ui-wheel-danger: #f7e3e1;
+  --ui-wheel-text: #303a3e;
+  --ui-wheel-stroke: #303a3e;
 }
 
 [data-ui-theme="dark"] {
-  --ui-bg: rgba(26, 27, 38, 0.92);
-  --ui-bg-solid: #1a1b26;
-  --ui-text: #c0caf5;
-  --ui-text-muted: #7982a9;
-  --ui-border: rgba(255, 255, 255, 0.18);
-  --ui-hover: rgba(255, 255, 255, 0.08);
-  --ui-active: rgba(255, 255, 255, 0.15);
-  --ui-accent: #7aa2f7;
-  --ui-accent-hover: #89b4fa;
+  --ui-bg: rgba(43, 47, 51, 0.97);
+  --ui-bg-solid: #2b2f33;
+  --ui-text: #edf0f0;
+  --ui-text-muted: #b6bec5;
+  --ui-border: #687078;
+  --ui-hover: #363c42;
+  --ui-active: #414b70;
+  --ui-accent: #c1c8ff;
+  --ui-accent-hover: #d8dcff;
   --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  --ui-wheel-bg: #1e202e;
-  --ui-wheel-hover: #2e344e;
-  --ui-wheel-active: #3b4261;
-  --ui-wheel-danger: #442b36;
-  --ui-wheel-text: #c0caf5;
-  --ui-wheel-stroke: #c0caf5;
+  --ui-wheel-bg: #2b2f33;
+  --ui-wheel-hover: #414b70;
+  --ui-wheel-active: #414b70;
+  --ui-wheel-danger: #4b363a;
+  --ui-wheel-text: #edf0f0;
+  --ui-wheel-stroke: #edf0f0;
 }
 
 @media (prefers-color-scheme: dark) {
   [data-ui-theme="system"] {
-    --ui-bg: rgba(26, 27, 38, 0.92);
-    --ui-bg-solid: #1a1b26;
-    --ui-text: #c0caf5;
-    --ui-text-muted: #7982a9;
-    --ui-border: rgba(255, 255, 255, 0.18);
-    --ui-hover: rgba(255, 255, 255, 0.08);
-    --ui-active: rgba(255, 255, 255, 0.15);
-    --ui-accent: #7aa2f7;
-    --ui-accent-hover: #89b4fa;
+    --ui-bg: rgba(43, 47, 51, 0.97);
+    --ui-bg-solid: #2b2f33;
+    --ui-text: #edf0f0;
+    --ui-text-muted: #b6bec5;
+    --ui-border: #687078;
+    --ui-hover: #363c42;
+    --ui-active: #414b70;
+    --ui-accent: #c1c8ff;
+    --ui-accent-hover: #d8dcff;
     --ui-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    --ui-wheel-bg: #1e202e;
-    --ui-wheel-hover: #2e344e;
-    --ui-wheel-active: #3b4261;
-    --ui-wheel-danger: #442b36;
-    --ui-wheel-text: #c0caf5;
-    --ui-wheel-stroke: #c0caf5;
+    --ui-wheel-bg: #2b2f33;
+    --ui-wheel-hover: #414b70;
+    --ui-wheel-active: #414b70;
+    --ui-wheel-danger: #4b363a;
+    --ui-wheel-text: #edf0f0;
+    --ui-wheel-stroke: #edf0f0;
   }
 }
 
@@ -878,33 +878,33 @@ body.in-presentation {
    deliberately shared by the topbar, utility rails, and circular ToolWheel. */
 :root {
   --sabura-vs-graphite: #343b3f;
-  --sabura-vs-graphite-soft: rgba(52, 59, 63, 0.36);
-  --sabura-vs-rail: rgba(255, 254, 250, 0.94);
-  --sabura-vs-wash-blue: linear-gradient(104deg, rgba(116, 192, 252, 0.12), rgba(77, 171, 247, 0.31) 48%, rgba(165, 216, 255, 0.16));
-  --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(255, 236, 153, 0.16), rgba(255, 212, 59, 0.28) 52%, rgba(255, 243, 191, 0.18));
-  --sabura-vs-wash-green: linear-gradient(104deg, rgba(178, 242, 187, 0.14), rgba(81, 207, 102, 0.26) 52%, rgba(211, 249, 216, 0.18));
-  --sabura-vs-wash-red: linear-gradient(104deg, rgba(255, 201, 201, 0.12), rgba(255, 107, 107, 0.25) 52%, rgba(255, 227, 227, 0.18));
+  --sabura-vs-graphite-soft: rgba(52, 59, 63, 0.34);
+  --sabura-vs-rail: rgba(255, 253, 247, 0.97);
+  --sabura-vs-wash-blue: #dce7ed;
+  --sabura-vs-wash-yellow: #f4f0df;
+  --sabura-vs-wash-green: #e5f1e6;
+  --sabura-vs-wash-red: #f7e3e1;
 }
 
 [data-ui-theme="dark"] {
-  --sabura-vs-graphite: #c0caf5;
-  --sabura-vs-graphite-soft: rgba(192, 202, 245, 0.34);
-  --sabura-vs-rail: rgba(30, 32, 46, 0.95);
-  --sabura-vs-wash-blue: linear-gradient(104deg, rgba(122, 162, 247, 0.13), rgba(122, 162, 247, 0.3) 50%, rgba(137, 180, 250, 0.12));
-  --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(224, 175, 104, 0.12), rgba(224, 175, 104, 0.25), rgba(229, 192, 123, 0.12));
-  --sabura-vs-wash-green: linear-gradient(104deg, rgba(115, 218, 202, 0.12), rgba(115, 218, 202, 0.25), rgba(158, 206, 106, 0.12));
-  --sabura-vs-wash-red: linear-gradient(104deg, rgba(247, 118, 142, 0.12), rgba(247, 118, 142, 0.24), rgba(255, 158, 100, 0.1));
+  --sabura-vs-graphite: #edf0f0;
+  --sabura-vs-graphite-soft: rgba(237, 240, 240, 0.34);
+  --sabura-vs-rail: rgba(43, 47, 51, 0.98);
+  --sabura-vs-wash-blue: #414b70;
+  --sabura-vs-wash-yellow: #4a4540;
+  --sabura-vs-wash-green: #30463b;
+  --sabura-vs-wash-red: #4b363a;
 }
 
 @media (prefers-color-scheme: dark) {
   [data-ui-theme="system"] {
-    --sabura-vs-graphite: #c0caf5;
-    --sabura-vs-graphite-soft: rgba(192, 202, 245, 0.34);
-    --sabura-vs-rail: rgba(30, 32, 46, 0.95);
-    --sabura-vs-wash-blue: linear-gradient(104deg, rgba(122, 162, 247, 0.13), rgba(122, 162, 247, 0.3) 50%, rgba(137, 180, 250, 0.12));
-    --sabura-vs-wash-yellow: linear-gradient(104deg, rgba(224, 175, 104, 0.12), rgba(224, 175, 104, 0.25), rgba(229, 192, 123, 0.12));
-    --sabura-vs-wash-green: linear-gradient(104deg, rgba(115, 218, 202, 0.12), rgba(115, 218, 202, 0.25), rgba(158, 206, 106, 0.12));
-    --sabura-vs-wash-red: linear-gradient(104deg, rgba(247, 118, 142, 0.12), rgba(247, 118, 142, 0.24), rgba(255, 158, 100, 0.1));
+    --sabura-vs-graphite: #edf0f0;
+    --sabura-vs-graphite-soft: rgba(237, 240, 240, 0.34);
+    --sabura-vs-rail: rgba(43, 47, 51, 0.98);
+    --sabura-vs-wash-blue: #414b70;
+    --sabura-vs-wash-yellow: #4a4540;
+    --sabura-vs-wash-green: #30463b;
+    --sabura-vs-wash-red: #4b363a;
   }
 }
 
@@ -1117,13 +1117,16 @@ body.in-presentation {
 
 .sabura-wheel {
   filter: drop-shadow(4px 6px 0 rgba(52, 59, 63, 0.18)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.12));
+  transform: translate(-50%, -50%) scale(var(--wheel-scale, 1));
+  transform-origin: center;
 }
 
 .wheel-bezel-rim {
   stroke: var(--sabura-vs-graphite);
-  stroke-width: 1.35px;
+  stroke-width: 1.5px;
   stroke-dasharray: none;
-  opacity: 0.52;
+  fill: none;
+  opacity: 0.78;
 }
 
 .wheel-hub,
@@ -1496,4 +1499,243 @@ body.in-presentation {
   .sabura-topbar #select-ui-theme {
     width: 50px;
   }
+}
+
+/* Graphite interface layout. Tokens are defined once above; this block owns
+   the final component geometry after the legacy compatibility rules. */
+html, body { background: var(--ui-bg-solid); }
+
+.sabura-topbar {
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
+.sabura-topbar::after { display: none; }
+.sabura-topbar > * { pointer-events: auto; }
+
+.sabura-topbar .topbar-left,
+.sabura-topbar .topbar-center,
+.sabura-topbar .topbar-right,
+.sabura-topbar .status-region {
+  background: var(--sabura-vs-rail);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 var(--sabura-vs-graphite-soft);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.sabura-topbar .topbar-left,
+.sabura-topbar .topbar-right {
+  position: fixed;
+  top: 12px;
+  min-height: 44px;
+  gap: 0;
+}
+
+.sabura-topbar .topbar-left { left: 12px; }
+.sabura-topbar .topbar-right { right: 12px; }
+
+.sabura-topbar .topbar-center {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  min-height: 44px;
+  max-width: calc(100vw - 24px);
+  margin: 0;
+  border-color: var(--ui-border);
+  white-space: nowrap;
+}
+
+.sabura-topbar .status-region {
+  position: fixed;
+  right: 12px;
+  bottom: 14px;
+  z-index: 41;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  max-width: min(34vw, 360px);
+  padding: 5px 9px;
+  color: var(--ui-text);
+  font: 600 12px/1.25 var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.mode-reading .status-region[data-status="Clean"] { display: none; }
+.mode-reading .topbar-center { display: none; }
+
+.sabura-topbar .brand-name {
+  color: var(--ui-text);
+  font: 600 19px/1 var(--font-sans);
+  letter-spacing: -0.02em;
+}
+
+.sabura-topbar .doc-title {
+  color: var(--ui-text-muted);
+  font: 500 12px/1.2 var(--font-sans);
+}
+
+.sabura-topbar .mode-badge {
+  min-height: 30px;
+  padding: 0 9px;
+  color: var(--ui-accent);
+  font: 600 12px/1 var(--font-sans);
+  border-left: 1px solid var(--ui-border);
+}
+
+.sabura-topbar .topbar-btn,
+.sabura-topbar .control-label,
+.sabura-topbar .topbar-select {
+  min-height: 42px;
+  font: 600 12px/1.1 var(--font-sans);
+}
+
+.sabura-topbar .topbar-btn {
+  color: var(--ui-text);
+  border-right: 1px dotted var(--ui-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sabura-topbar .topbar-btn:first-child { border-left: 0; }
+.sabura-topbar .topbar-btn:last-child { border-right: 0; }
+.sabura-topbar .topbar-btn:hover { background: var(--sabura-vs-wash-yellow); }
+.sabura-topbar .topbar-btn.primary { background: var(--ui-active); color: var(--ui-accent); }
+.sabura-topbar .topbar-btn.save-btn { background: var(--sabura-vs-wash-green); color: var(--ui-text); border: 0; }
+.sabura-topbar .control-label { padding: 0 9px; border-right: 1px dotted var(--ui-border); }
+.sabura-topbar .topbar-select { color: var(--ui-text); background: transparent; border: 0; padding: 3px 16px 3px 4px; }
+.sabura-topbar .topbar-btn:focus-visible,
+.sabura-topbar .topbar-select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
+
+.sabura-vs-app-mark { color: var(--ui-accent); }
+
+.wheel-trigger-fab {
+  bottom: 62px;
+  left: 12px;
+  padding: 7px 10px;
+  min-height: 36px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 var(--sabura-vs-graphite-soft);
+  background: var(--sabura-vs-rail);
+  font: 600 12px/1 var(--font-sans);
+}
+
+.zoom-help-toolbar {
+  bottom: 12px;
+  left: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 var(--sabura-vs-graphite-soft);
+  background: var(--sabura-vs-rail);
+}
+
+.zoom-btn { color: var(--ui-text); font-family: var(--font-sans); }
+
+.sabura-wheel {
+  transform: translate(-50%, -50%) scale(var(--wheel-scale, 1));
+  transform-origin: center;
+}
+
+.wheel-bezel-rim {
+  fill: none;
+  stroke: var(--sabura-vs-graphite);
+  stroke-width: 1.5px;
+  stroke-dasharray: none;
+  opacity: 0.78;
+}
+
+.wheel-divider-sketch {
+  stroke: var(--sabura-vs-graphite-soft);
+  stroke-width: 1.1px;
+  stroke-dasharray: 2.4 4.8;
+  opacity: 0.82;
+}
+
+@media (max-width: 1050px) {
+  .sabura-topbar .doc-title { display: none; }
+}
+
+@media (min-width: 641px) and (max-width: 1050px) {
+  .sabura-topbar .status-region {
+    position: absolute;
+    left: 84px;
+    right: auto;
+    top: 6px;
+    bottom: auto;
+    max-width: 120px;
+    width: auto;
+    min-width: 0;
+    padding: 5px 9px;
+  }
+
+  .sabura-topbar .topbar-center { transform: translateX(calc(-50% - 12px)); }
+  .sabura-topbar .status-region .status-text { display: inline; }
+}
+
+@media (max-width: 640px) {
+  .sabura-topbar { top: 6px; left: 6px; right: 6px; }
+  .sabura-topbar .topbar-left,
+  .sabura-topbar .topbar-right { top: 6px; }
+  .sabura-topbar .topbar-left { left: 6px; }
+  .sabura-topbar .topbar-right { right: 6px; }
+  .sabura-topbar .topbar-center {
+    top: 58px;
+    bottom: auto;
+    max-width: calc(100vw - 12px);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  /* The legacy compact grid uses display: contents for the editing right
+     rail. Restore one framed flex group so all five actions share the same
+     top-right hit area. */
+  .sabura-topbar.mode-editing .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .sabura-topbar.mode-editing .topbar-secondary-actions,
+  .sabura-topbar.mode-editing .topbar-primary-actions {
+    position: static;
+    display: flex;
+    align-items: center;
+  }
+  .sabura-topbar .status-region { right: 6px; bottom: 12px; max-width: 46vw; width: auto; min-width: 0; }
+  .sabura-topbar .status-region .status-text { display: inline; }
+  .sabura-topbar .topbar-btn { min-height: 38px; min-width: 36px; padding: 5px 7px; }
+  .sabura-topbar .control-label { min-height: 38px; padding: 0 5px; }
+  .wheel-trigger-fab { left: 6px; bottom: 58px; }
+  .zoom-help-toolbar { left: 6px; bottom: 8px; }
+}
+
+@media (min-width: 641px) and (max-width: 680px) {
+  /* At the 641px edge the bottom dock would share the zoom rail's hit area;
+     keep the settings group on the same independent upper row as compact mode. */
+  .sabura-topbar .topbar-center { top: 58px; bottom: auto; }
+}
+
+@media (max-width: 400px) {
+  .sabura-topbar .topbar-btn { min-width: 34px; padding-inline: 5px; }
+  .sabura-topbar .status-region { max-width: 42vw; }
+}
+
+@media (max-width: 380px) {
+  /* Preserve compact 360px wheel geometry while keeping labels readable after
+     the required outer-ring scale; hierarchy and slot positions stay fixed. */
+  .sabura-wheel .wheel-text { font-size: 15px; }
+  .sabura-wheel .wheel-sub-text { font-size: 13px; letter-spacing: -0.25px; }
 }

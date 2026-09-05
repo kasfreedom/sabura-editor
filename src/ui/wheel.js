@@ -63,12 +63,7 @@ function renderWheelDivider(cx, cy, rInner, rOuter, angle, prng) {
   const y1 = cy + rInner * Math.sin(angle);
   const x2 = cx + rOuter * Math.cos(angle);
   const y2 = cy + rOuter * Math.sin(angle);
-  const normalX = -Math.sin(angle);
-  const normalY = Math.cos(angle);
-  const bow = (prng() - 0.5) * 1.1;
-  const midX = (x1 + x2) / 2 + normalX * bow;
-  const midY = (y1 + y2) / 2 + normalY * bow;
-  const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${midX.toFixed(1)} ${midY.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
   return `<path d="${path}" class="wheel-divider-sketch" pointer-events="none" />`;
 }
 
@@ -114,6 +109,7 @@ export class ToolWheel {
     this.hoveredItem = null;
     this.activeSubMenu = null;
     this.themePalette = [];
+    this.wheelScale = 1;
 
     this.wheelEl = document.createElement('div');
     this.wheelEl.className = 'sabura-wheel';
@@ -122,6 +118,7 @@ export class ToolWheel {
 
     this.onPointerDownOutside = this.onPointerDownOutside.bind(this);
     this.onKeyDown = this.onKeyDown.bind(this);
+    this.onViewportResize = this.onViewportResize.bind(this);
   }
 
   setThemePalette(palette) {
@@ -137,22 +134,51 @@ export class ToolWheel {
     this.activeSubMenu = null;
     this.hoveredItem = null;
 
-    // Clamp wheel position within viewport (including 3-tier outer ring and topbar clearance)
-    const pad = 226; // Max radius with outer Ring 3
-    const topBarPad = 72; // Header clearance
-    const clampedX = Math.max(pad + 10, Math.min(window.innerWidth - pad - 10, x));
-    const clampedY = Math.max(pad + topBarPad, Math.min(window.innerHeight - pad - 10, y));
-    this.pos = { x: clampedX, y: clampedY };
+    this.positionWithinViewport(x, y);
 
     this.isOpen = true;
     this.wheelEl.style.display = 'block';
     this.wheelEl.style.left = `${this.pos.x}px`;
     this.wheelEl.style.top = `${this.pos.y}px`;
+    this.wheelEl.style.setProperty?.('--wheel-scale', String(this.wheelScale));
+    this.wheelEl.setAttribute?.('data-wheel-scale', String(this.wheelScale));
 
     this.render();
 
     window.addEventListener('pointerdown', this.onPointerDownOutside, true);
     window.addEventListener('keydown', this.onKeyDown, true);
+    window.addEventListener('resize', this.onViewportResize);
+  }
+
+  positionWithinViewport(x = this.pos.x, y = this.pos.y) {
+    const viewportWidth = Math.max(1, Number(window.innerWidth) || 1);
+    const viewportHeight = Math.max(1, Number(window.innerHeight) || 1);
+    const wheelDiameter = 472;
+    const half = wheelDiameter / 2;
+    // The SVG remains the same size for hit testing and keyboard geometry. A
+    // CSS scale is applied only when the viewport cannot contain its 3rd ring.
+    this.wheelScale = Math.min(1, (viewportWidth - 20) / wheelDiameter, (viewportHeight - 20) / wheelDiameter);
+    this.wheelScale = Math.max(0.72, this.wheelScale);
+    const scaledHalf = half * this.wheelScale;
+    const minX = scaledHalf + 10;
+    const maxX = viewportWidth - scaledHalf - 10;
+    const minY = scaledHalf + 10;
+    const maxY = viewportHeight - scaledHalf - 10;
+    this.pos = {
+      x: maxX >= minX ? Math.max(minX, Math.min(maxX, x)) : viewportWidth / 2,
+      y: maxY >= minY ? Math.max(minY, Math.min(maxY, y)) : viewportHeight / 2
+    };
+    if (this.wheelEl?.style) {
+      this.wheelEl.style.left = `${this.pos.x}px`;
+      this.wheelEl.style.top = `${this.pos.y}px`;
+      this.wheelEl.style.setProperty?.('--wheel-scale', String(this.wheelScale));
+      this.wheelEl.setAttribute?.('data-wheel-scale', String(this.wheelScale));
+    }
+  }
+
+  onViewportResize() {
+    if (!this.isOpen) return;
+    this.positionWithinViewport(this.pos.x, this.pos.y);
   }
 
   close() {
@@ -163,6 +189,7 @@ export class ToolWheel {
     this.hoveredItem = null;
     window.removeEventListener('pointerdown', this.onPointerDownOutside, true);
     window.removeEventListener('keydown', this.onKeyDown, true);
+    window.removeEventListener('resize', this.onViewportResize);
   }
 
   onPointerDownOutside(e) {
@@ -816,26 +843,24 @@ export class ToolWheel {
     svgParts.push(`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="sabura-wheel-svg">`);
     svgParts.push(`<defs>
       <linearGradient id="sabura-vs-wheel-wash" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="var(--ui-accent)" stop-opacity="0.08" />
-        <stop offset="0.48" stop-color="var(--ui-accent)" stop-opacity="0.3" />
-        <stop offset="1" stop-color="var(--ui-accent)" stop-opacity="0.12" />
+        <stop offset="0" stop-color="var(--ui-wheel-bg)" />
+        <stop offset="0.48" stop-color="var(--ui-wheel-active)" />
+        <stop offset="1" stop-color="var(--ui-wheel-bg)" />
       </linearGradient>
       <linearGradient id="sabura-vs-wheel-danger-wash" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#e03131" stop-opacity="0.08" />
-        <stop offset="0.52" stop-color="#e03131" stop-opacity="0.28" />
-        <stop offset="1" stop-color="#e03131" stop-opacity="0.1" />
+        <stop offset="0" stop-color="var(--ui-wheel-bg)" />
+        <stop offset="0.52" stop-color="#e03131" />
+        <stop offset="1" stop-color="var(--ui-wheel-bg)" />
       </linearGradient>
     </defs>`);
 
     const prng = createPRNG(4242);
 
-    // Bezel guide outer rims: hand-drawn sketchy compass circles
-    const rimSketch = sketchEllipse(center, center, rOuter + 2, rOuter + 2, prng, 1);
-    svgParts.push(`<path d="${rimSketch}" class="wheel-bezel-rim" pointer-events="none" />`);
+    // Crisp circular rims remain separate from the interactive wedge fills.
+    svgParts.push(`<circle cx="${center}" cy="${center}" r="${rOuter + 2}" class="wheel-bezel-rim" pointer-events="none" />`);
 
     if (this.activeSubMenu) {
-      const subRimSketch = sketchEllipse(center, center, rSubOuter + 2, rSubOuter + 2, prng, 1);
-      svgParts.push(`<path d="${subRimSketch}" class="wheel-bezel-rim sub" pointer-events="none" />`);
+      svgParts.push(`<circle cx="${center}" cy="${center}" r="${rSubOuter + 2}" class="wheel-bezel-rim sub" pointer-events="none" />`);
     }
 
     // Center hub: underlying clickable disc
@@ -943,8 +968,7 @@ export class ToolWheel {
 
       // Render Ring 3 (outer 3rd circle / crescent) if thirdItems exist (e.g. Opacity in Fill)
       if (thirdMenuToRender && thirdMenuToRender.length > 0) {
-        const thirdRimSketch = sketchEllipse(center, center, rThirdOuter + 2, rThirdOuter + 2, prng, 1);
-        svgParts.push(`<path d="${thirdRimSketch}" class="wheel-bezel-rim sub" pointer-events="none" />`);
+        svgParts.push(`<circle cx="${center}" cy="${center}" r="${rThirdOuter + 2}" class="wheel-bezel-rim sub" pointer-events="none" />`);
 
         const thirdCount = thirdMenuToRender.length;
         const spanPerThird = thirdCount <= 3 ? 0.42 : 0.28;
@@ -971,11 +995,11 @@ export class ToolWheel {
           if (third.icon) {
             svgParts.push(`<g class="wheel-label-group" pointer-events="none">
               ${renderWheelIcon(third.id, third.icon, tX, tY - 7, 'sabura-vs-wheel-icon sabura-vs-wheel-icon-sub', 18)}
-              <text x="${tX}" y="${tY + 12}" text-anchor="middle" class="wheel-sub-text" style="font-weight: 700;">${third.label}${isThirdActive ? ' ✓' : ''}</text>
+              <text x="${tX}" y="${tY + 12}" text-anchor="middle" class="wheel-sub-text" data-third-label-id="${third.id}" style="font-weight: 700;">${third.label}${isThirdActive ? ' ✓' : ''}</text>
             </g>`);
           } else {
             svgParts.push(`<g class="wheel-label-group" pointer-events="none">
-              <text x="${tX}" y="${tY + 4}" text-anchor="middle" class="wheel-sub-text" style="font-weight: 700;">${third.label}${isThirdActive ? ' ✓' : ''}</text>
+              <text x="${tX}" y="${tY + 4}" text-anchor="middle" class="wheel-sub-text" data-third-label-id="${third.id}" style="font-weight: 700;">${third.label}${isThirdActive ? ' ✓' : ''}</text>
             </g>`);
           }
         }

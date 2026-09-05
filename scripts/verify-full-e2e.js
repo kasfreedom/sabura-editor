@@ -9,6 +9,9 @@ import { extractDocumentFromHtml } from '../src/storage/file-packer.js';
 const rootDir = path.resolve('.');
 const port = 8092;
 const chromeOnly = process.argv.includes('--chrome-only');
+const captureReviewEvidence = process.argv.includes('--capture-review-evidence');
+const reviewEvidenceDir = path.join(rootDir, 'docs/handoffs/011-graphite-interface/evidence');
+if (captureReviewEvidence) fs.mkdirSync(reviewEvidenceDir, { recursive: true });
 
 // 1. Build sabura.html before running tests
 console.log('--- Step 0: Building latest sabura.html ---');
@@ -2301,6 +2304,14 @@ async function evalInChrome(expression) {
   return res.result?.value;
 }
 
+async function captureReviewScreenshot(name) {
+  if (!captureReviewEvidence) return null;
+  const result = await cdpSend('Page.captureScreenshot', { format: 'png', fromSurface: true });
+  const outputPath = path.join(reviewEvidenceDir, `${name}.png`);
+  fs.writeFileSync(outputPath, Buffer.from(result.data, 'base64'));
+  return outputPath;
+}
+
 await cdpSend('Runtime.enable');
 await cdpSend('Page.enable');
 await cdpSend('Page.navigate', { url: `http://127.0.0.1:${port}/sabura.html` });
@@ -3780,6 +3791,203 @@ if (visualSystemSeam.spriteCount !== 1 || !visualSystemSeam.appMarkVisible36 || 
 }
 console.log('  ✓ Visual system seam: one namespaced sprite, local icons, 36px identity, six deterministic Paper pigment layers, independent theme bridge, desktop topbar fit');
 
+// Explicit Light/Dark interface matrix across every persisted board theme.
+// Interface changes must remain render-only: no document, history, revision,
+// digest, or status mutation is allowed while the board theme is held fixed.
+await evalInChrome(`window.sabura.setMode('editing')`);
+const interfaceThemeMatrix = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const boardThemes = ['paper', 'night', 'blueprint', 'high-contrast'];
+  const interfaceThemes = ['light', 'dark'];
+  const original = {
+    board: app.doc.theme.id,
+    interface: app.interfaceTheme,
+    mode: app.mode,
+    document: JSON.stringify(window.sabura.getDocument()),
+    canonical: window.sabura.exportCanonicalJson(),
+    historyDepth: app.undoStack.length,
+    redoDepth: app.redoStack.length,
+    status: app.status,
+    revision: JSON.stringify(app.doc['ext:sabura:revision'] || null)
+  };
+  const originalRedoStack = app.redoStack.slice();
+  const setSelect = async (selector, value) => {
+    const select = document.querySelector(selector);
+    if (!select) throw new Error('Missing ' + selector);
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(40);
+  };
+  const parseColor = (value) => {
+    const match = String(value).trim().match(/^#([0-9a-f]{6})$/i);
+    if (match) return [0, 2, 4].map(offset => parseInt(match[1].slice(offset, offset + 2), 16));
+    const rgb = String(value).match(/rgba?\\(\\s*(\\d+)\\D+(\\d+)\\D+(\\d+)/i);
+    return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : null;
+  };
+  const luminance = (channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  const contrastRatio = (foreground, background) => {
+    const fg = parseColor(foreground);
+    const bg = parseColor(background);
+    if (!fg || !bg) return 0;
+    const fgLum = 0.2126 * luminance(fg[0]) + 0.7152 * luminance(fg[1]) + 0.0722 * luminance(fg[2]);
+    const bgLum = 0.2126 * luminance(bg[0]) + 0.7152 * luminance(bg[1]) + 0.0722 * luminance(bg[2]);
+    const lighter = Math.max(fgLum, bgLum);
+    const darker = Math.min(fgLum, bgLum);
+    return (lighter + 0.05) / (darker + 0.05);
+  };
+  const resolvedTokens = () => {
+    const styles = getComputedStyle(document.documentElement);
+    const bg = styles.getPropertyValue('--ui-bg-solid').trim();
+    const text = styles.getPropertyValue('--ui-text').trim();
+    const border = styles.getPropertyValue('--ui-border').trim();
+    return {
+      bg, text, border,
+      contrast: contrastRatio(text, bg),
+      rootTheme: document.documentElement.getAttribute('data-ui-theme'),
+      boardTheme: app.doc.theme.id,
+      boardBridge: document.getElementById('app')?.getAttribute('data-sabura-vs-board-theme')
+    };
+  };
+  const results = [];
+  for (const board of boardThemes) {
+    await setSelect('#select-board-theme', board);
+    const boardBaseline = {
+      document: JSON.stringify(window.sabura.getDocument()),
+      canonical: window.sabura.exportCanonicalJson(),
+      historyDepth: app.undoStack.length,
+      redoDepth: app.redoStack.length,
+      status: app.status,
+      revision: JSON.stringify(app.doc['ext:sabura:revision'] || null)
+    };
+    for (const interfaceTheme of interfaceThemes) {
+      await setSelect('#select-ui-theme', interfaceTheme);
+      const tokens = resolvedTokens();
+      const uiUnchanged = JSON.stringify(window.sabura.getDocument()) === boardBaseline.document &&
+        window.sabura.exportCanonicalJson() === boardBaseline.canonical &&
+        app.undoStack.length === boardBaseline.historyDepth &&
+        app.redoStack.length === boardBaseline.redoDepth &&
+        app.status === boardBaseline.status &&
+        JSON.stringify(app.doc['ext:sabura:revision'] || null) === boardBaseline.revision;
+      results.push({ board, interfaceTheme, tokens, uiUnchanged,
+        expectedBoard: tokens.boardTheme === board && tokens.boardBridge === board,
+        readable: tokens.contrast >= 4.5 });
+    }
+  }
+  const byInterface = Object.fromEntries(interfaceThemes.map(theme => [
+    theme,
+    results.filter(result => result.interfaceTheme === theme).map(result => result.tokens)
+  ]));
+  const interfaceStableAcrossBoards = interfaceThemes.every(theme => {
+    const snapshots = byInterface[theme];
+    return snapshots.length === boardThemes.length && snapshots.every(snapshot =>
+      snapshot.bg === snapshots[0].bg && snapshot.text === snapshots[0].text && snapshot.border === snapshots[0].border
+    );
+  });
+  const distinctLightDark = byInterface.light[0]?.bg !== byInterface.dark[0]?.bg &&
+    byInterface.light[0]?.text !== byInterface.dark[0]?.text;
+  while (app.undoStack.length > original.historyDepth) app.undo();
+  app.redoStack.splice(0, app.redoStack.length, ...originalRedoStack);
+  app.setInterfaceTheme(original.interface);
+  app.setMode(original.mode);
+  await sleep(40);
+  const restored = JSON.stringify(window.sabura.getDocument()) === original.document &&
+    window.sabura.exportCanonicalJson() === original.canonical &&
+    app.undoStack.length === original.historyDepth &&
+    app.redoStack.length === original.redoDepth &&
+    app.status === original.status &&
+    JSON.stringify(app.doc['ext:sabura:revision'] || null) === original.revision &&
+    app.doc.theme.id === original.board;
+  return { results, interfaceStableAcrossBoards, distinctLightDark, restored };
+})()`);
+const interfaceMatrixOk = interfaceThemeMatrix.interfaceStableAcrossBoards &&
+  interfaceThemeMatrix.distinctLightDark && interfaceThemeMatrix.restored &&
+  interfaceThemeMatrix.results.every(result => result.uiUnchanged && result.expectedBoard && result.readable);
+if (!interfaceMatrixOk) {
+  throw new Error(`Interface theme matrix failed: ${JSON.stringify(interfaceThemeMatrix)}`);
+}
+console.log('  ✓ Interface matrix: Light/Dark × Paper/Night/Blueprint/High Contrast preserves document JSON, history, revision, digest, status, and contrast');
+
+// Emulate the OS preference for System, including a live preference change.
+await cdpSend('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+const systemAppearance = await evalInChrome(`(async () => {
+  const app = window.saburaApp;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const select = document.querySelector('#select-ui-theme');
+  select.value = 'system';
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(40);
+  const before = {
+    bg: getComputedStyle(document.documentElement).getPropertyValue('--ui-bg-solid').trim(),
+    text: getComputedStyle(document.documentElement).getPropertyValue('--ui-text').trim(),
+    matchesDark: matchMedia('(prefers-color-scheme: dark)').matches,
+    document: JSON.stringify(window.sabura.getDocument()), canonical: window.sabura.exportCanonicalJson(),
+    historyDepth: app.undoStack.length, status: app.status,
+    redoDepth: app.redoStack.length,
+    revision: JSON.stringify(app.doc['ext:sabura:revision'] || null)
+  };
+  return before;
+})()`);
+await cdpSend('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+await new Promise(resolve => setTimeout(resolve, 80));
+const systemAppearanceDark = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    bg: styles.getPropertyValue('--ui-bg-solid').trim(),
+    text: styles.getPropertyValue('--ui-text').trim(),
+    matchesDark: matchMedia('(prefers-color-scheme: dark)').matches,
+    document: JSON.stringify(window.sabura.getDocument()), canonical: window.sabura.exportCanonicalJson(),
+    historyDepth: app.undoStack.length, status: app.status,
+    redoDepth: app.redoStack.length,
+    revision: JSON.stringify(app.doc['ext:sabura:revision'] || null)
+  };
+})()`);
+await cdpSend('Emulation.setEmulatedMedia', { media: '', features: [] });
+const systemAppearanceRestored = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  return {
+    interfaceTheme: app.interfaceTheme,
+    document: JSON.stringify(window.sabura.getDocument()), canonical: window.sabura.exportCanonicalJson(),
+    historyDepth: app.undoStack.length, status: app.status,
+    redoDepth: app.redoStack.length,
+    revision: JSON.stringify(app.doc['ext:sabura:revision'] || null)
+  };
+})()`);
+const systemAppearanceOk = systemAppearance.bg !== systemAppearanceDark.bg &&
+  systemAppearance.text !== systemAppearanceDark.text &&
+  !systemAppearance.matchesDark && systemAppearanceDark.matchesDark &&
+  systemAppearance.document === systemAppearanceDark.document &&
+  systemAppearance.canonical === systemAppearanceDark.canonical &&
+  systemAppearance.historyDepth === systemAppearanceDark.historyDepth &&
+  systemAppearance.redoDepth === systemAppearanceDark.redoDepth &&
+  systemAppearance.status === systemAppearanceDark.status &&
+  systemAppearance.revision === systemAppearanceDark.revision &&
+  systemAppearanceRestored.interfaceTheme === 'system' &&
+  systemAppearanceRestored.document === systemAppearance.document &&
+  systemAppearanceRestored.canonical === systemAppearance.canonical &&
+  systemAppearanceRestored.historyDepth === systemAppearance.historyDepth &&
+  systemAppearanceRestored.redoDepth === systemAppearance.redoDepth &&
+  systemAppearanceRestored.status === systemAppearance.status &&
+  systemAppearanceRestored.revision === systemAppearance.revision;
+if (!systemAppearanceOk) {
+  throw new Error(`System appearance emulation failed: ${JSON.stringify({ systemAppearance, systemAppearanceDark, systemAppearanceRestored })}`);
+}
+console.log('  ✓ System appearance: emulated light/dark preference and live change update resolved tokens without document/history/revision/status mutation');
+
+if (captureReviewEvidence) {
+  await cdpSend('Emulation.setDeviceMetricsOverride', { width: 1440, height: 810, deviceScaleFactor: 1, mobile: true });
+  await evalInChrome(`(() => { window.sabura.setMode('editing'); window.saburaApp.setInterfaceTheme('light'); window.saburaApp.updateUI(); })()`);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await captureReviewScreenshot('light-desktop-1440x810');
+  await evalInChrome(`(() => { window.saburaApp.setInterfaceTheme('dark'); window.saburaApp.updateUI(); })()`);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await captureReviewScreenshot('dark-desktop-1440x810');
+}
+
 for (const compactWidth of [760, 641]) {
   await cdpSend('Emulation.setDeviceMetricsOverride', {
     width: compactWidth,
@@ -4060,6 +4268,28 @@ if (!textEditorAttrs.exists || textEditorAttrs.id !== 'sabura-inline-text-editor
 console.log('  ✓ 32d. F-09: Inline text editor has stable id, name, aria-label, and autocomplete=off in live DOM');
 
 const responsiveWidths = [1440, 1401, 1400, 1337, 1301, 1300, 1280, 1053, 1052, 1051, 1050, 1024, 768, 641, 480, 400, 360];
+
+const nonCleanReadingStatusAudit = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  if (!app?.topbar) return { ok: false, error: 'TopBar unavailable' };
+  const original = { status: app.status, mode: app.mode };
+  const states = ['Changed', 'Preparing copy', 'Copy requested', 'Error'];
+  const results = {};
+  for (const state of states) {
+    app.topbar.update(app.doc, state, app.interfaceTheme, app.workspace.snapGrid, app.workspace.showGrid, 'reading');
+    const status = document.querySelector('.mode-reading .status-region');
+    const style = status ? getComputedStyle(status) : null;
+    const text = status?.querySelector('.status-text');
+    results[state] = Boolean(status && status.getAttribute('role') === 'status' && status.getAttribute('aria-live') === 'polite' && text?.textContent?.trim() === state && style.display !== 'none' && style.visibility !== 'hidden' && status.getBoundingClientRect().width > 0);
+  }
+  app.topbar.update(app.doc, original.status, app.interfaceTheme, app.workspace.snapGrid, app.workspace.showGrid, original.mode);
+  return { ok: Object.values(results).every(Boolean), results };
+})()`);
+if (!nonCleanReadingStatusAudit.ok) {
+  throw new Error(`Reading non-Clean status audit failed: ${JSON.stringify(nonCleanReadingStatusAudit)}`);
+}
+console.log('  ✓ Reading status invariant: Clean may be hidden; Changed, pending, copy and Error remain visible and announced');
+
 for (const responsiveWidth of responsiveWidths) {
   await cdpSend('Emulation.setDeviceMetricsOverride', {
     width: responsiveWidth,
@@ -4107,8 +4337,10 @@ for (const responsiveWidth of responsiveWidths) {
         };
       });
 
+      const statusElement = document.querySelector('.status-badge');
+      const statusIsClean = statusElement?.dataset.status === 'Clean';
       const requiredSelectors = '${responsiveMode}' === 'reading'
-        ? ['.sabura-vs-app-mark', '.status-badge', '#btn-edit', '#btn-reading-fullscreen', '#btn-present', '#btn-save']
+        ? ['.sabura-vs-app-mark', '#btn-edit', '#btn-reading-fullscreen', '#btn-present', '#btn-save']
         : ['.sabura-vs-app-mark', '#btn-view', '.status-badge', '#select-board-theme', '#select-ui-theme', '#btn-grid-visible', '#btn-grid-snap', '#btn-undo', '#btn-redo', '#btn-fullscreen', '#btn-present', '#btn-save'];
       if (!titleCompact) requiredSelectors.splice(1, 0, '.doc-title');
       const required = checks.filter(check => requiredSelectors.includes(check.selector));
@@ -4148,6 +4380,9 @@ for (const responsiveWidth of responsiveWidths) {
       const brandVisible = isVisible(document.querySelector('.brand-name'));
       const modeVisible = isVisible(document.querySelector('.mode-badge'));
       const statusTextVisible = isVisible(document.querySelector('.status-text'));
+      const statusVisibilityCorrect = '${responsiveMode}' === 'reading'
+        ? (statusIsClean ? !statusTextVisible : statusTextVisible && isVisible(statusElement))
+        : statusTextVisible && isVisible(statusElement);
       const labelsVisible = [...bar.querySelectorAll('.topbar-btn-label, .control-prefix')].some(isVisible);
       const boardTop = document.querySelector('#select-board-theme')?.getBoundingClientRect().top;
       const viewTop = document.querySelector('#btn-view')?.getBoundingClientRect().top;
@@ -4167,12 +4402,13 @@ for (const responsiveWidth of responsiveWidths) {
         barWithinViewport: barRect.left >= 0 && barRect.right <= ${responsiveWidth},
         barHeight: barRect.height,
         brandVisibilityCorrect: compact ? !brandVisible : brandVisible,
-        disclosureCorrect: compact ? (!modeVisible && !statusTextVisible && !labelsVisible) : (('${responsiveMode}' === 'editing' || modeVisible) && statusTextVisible && labelsVisible),
+        statusVisibilityCorrect,
+        disclosureCorrect: compact ? (!modeVisible && (statusIsClean || !statusTextVisible) && !labelsVisible) : (('${responsiveMode}' === 'editing' || modeVisible) && (('${responsiveMode}' === 'reading' && statusIsClean) || statusTextVisible) && labelsVisible),
         twoRowCorrect: narrowEditing ? (barRect.height >= 90 && boardTop > viewTop + 20) : barRect.height < 90
       };
     })()`);
 
-    if (!responsiveAudit.allRequiredVisible || responsiveAudit.overlaps.length || responsiveAudit.tinyText.length || responsiveAudit.undersizedButtons.length || responsiveAudit.missingAccessibleNames.length || responsiveAudit.missingButtonTitles.length || !responsiveAudit.titleBehaviorCorrect || !responsiveAudit.appIdentityCorrect || !responsiveAudit.barWithinViewport || !responsiveAudit.brandVisibilityCorrect || !responsiveAudit.disclosureCorrect || !responsiveAudit.twoRowCorrect) {
+    if (!responsiveAudit.allRequiredVisible || responsiveAudit.overlaps.length || responsiveAudit.tinyText.length || responsiveAudit.undersizedButtons.length || responsiveAudit.missingAccessibleNames.length || responsiveAudit.missingButtonTitles.length || !responsiveAudit.titleBehaviorCorrect || !responsiveAudit.appIdentityCorrect || !responsiveAudit.barWithinViewport || !responsiveAudit.brandVisibilityCorrect || !responsiveAudit.statusVisibilityCorrect || !responsiveAudit.disclosureCorrect || !responsiveAudit.twoRowCorrect) {
       throw new Error(`Responsive toolbar ${responsiveWidth}px ${responsiveMode} failed: ${JSON.stringify(responsiveAudit)}`);
     }
   }
@@ -4184,7 +4420,236 @@ await cdpSend('Emulation.clearDeviceMetricsOverride');
 await new Promise(r => setTimeout(r, 100));
 console.log('✓ Flow 32: Narrow viewport 400 CSS px TopBar & TextEditor verified cleanly!');
 
+const compactLayoutViewports = [
+  { width: 360, height: 640 },
+  { width: 400, height: 640 },
+  { width: 480, height: 640 },
+  { width: 640, height: 640 },
+  { width: 641, height: 640 },
+  { width: 360, height: 605 }
+];
+for (const viewport of compactLayoutViewports) {
+  await cdpSend('Emulation.setDeviceMetricsOverride', {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: true
+  });
+  await new Promise(r => setTimeout(r, 80));
+  const compactLayoutAudit = await evalInChrome(`(() => {
+    const app = window.saburaApp;
+    app.setMode('editing');
+    app.wheel.close();
+    // Keep the persistent chrome audit independent of the modal wheel. Flow 32W
+    // below exercises the open wheel's viewport geometry and interaction.
+    const selectors = [
+      ['settings', '.mode-editing .topbar-center'],
+      ['wheelLauncher', '.wheel-trigger-fab'],
+      ['zoom', '.zoom-help-toolbar'],
+      ['status', '.mode-editing .status-region'],
+      ['topLeft', '.mode-editing .topbar-left'],
+      ['topRight', '.mode-editing .topbar-right']
+    ];
+    const regions = selectors.map(([name, selector]) => {
+      const element = document.querySelector(selector);
+      const rect = element?.getBoundingClientRect();
+      const style = element ? getComputedStyle(element) : null;
+      return { name, exists: Boolean(element), visible: Boolean(element && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0), left: rect && rect.left, right: rect && rect.right, top: rect && rect.top, bottom: rect && rect.bottom, width: rect && rect.width, height: rect && rect.height };
+    });
+    const visible = regions.filter(region => region.visible);
+    const overlaps = [];
+    for (let first = 0; first < visible.length; first++) {
+      for (let second = first + 1; second < visible.length; second++) {
+        const a = visible[first];
+        const b = visible[second];
+        if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5) overlaps.push([a.name, b.name]);
+      }
+    }
+    const withinViewport = visible.every(region => region.left >= -0.5 && region.right <= innerWidth + 0.5 && region.top >= -0.5 && region.bottom <= innerHeight + 0.5);
+    const settings = regions.find(region => region.name === 'settings');
+    const launcher = regions.find(region => region.name === 'wheelLauncher');
+    const zoom = regions.find(region => region.name === 'zoom');
+    const settingsOwnUpperRow = ${viewport.width} <= 640 ? settings?.top >= 50 && settings?.bottom <= 140 : true;
+    const launcherAboveZoom = launcher && zoom && launcher.bottom <= zoom.top + 0.5;
+    return { viewport: { width: innerWidth, height: innerHeight }, regions, overlaps, withinViewport, settingsOwnUpperRow, launcherAboveZoom };
+  })()`);
+  const compactLayoutOk = compactLayoutAudit.withinViewport && compactLayoutAudit.overlaps.length === 0 && compactLayoutAudit.settingsOwnUpperRow && compactLayoutAudit.launcherAboveZoom;
+  if (!compactLayoutOk) throw new Error(`Compact layout ${viewport.width}x${viewport.height} failed: ${JSON.stringify(compactLayoutAudit)}`);
+}
+await cdpSend('Emulation.clearDeviceMetricsOverride');
+await new Promise(r => setTimeout(r, 100));
+console.log('  ✓ Compact persistent layout separation: settings, wheel launcher, zoom rail, status, top actions, and board dock do not overlap at 360/400/480/640/641px and 605px height; open-wheel geometry is covered by Flow 32W');
+
 // -------------------------------------------------------------
+// Flow 32W: Real 360×640 three-ring wheel usability and keyboard access
+// -------------------------------------------------------------
+await cdpSend('Emulation.setDeviceMetricsOverride', {
+  width: 360,
+  height: 640,
+  deviceScaleFactor: 1,
+  mobile: true
+});
+await new Promise(r => setTimeout(r, 120));
+await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  app.setMode('editing');
+  app.workspace.selectedIds = [];
+  app.workspace.render();
+  const shape = Object.values(app.doc.objects).find(object => object.type === 'rectangle');
+  if (!shape) throw new Error('360 wheel: no rectangle context available');
+  app.wheel.open(180, 320, 'object', shape, app.doc.theme.palette, 1, [shape]);
+  app.wheel.activeSubMenu = 'menu_fill';
+  app.wheel.render();
+})()`);
+const wheel360Audit = await evalInChrome(`(() => {
+  const wheel = document.querySelector('.sabura-wheel');
+  const svg = document.querySelector('.sabura-wheel-svg');
+  const scale = Number(wheel?.dataset.wheelScale || 0);
+  const wheelRect = wheel?.getBoundingClientRect();
+  const labels = [...document.querySelectorAll('.sabura-wheel .wheel-text, .sabura-wheel .wheel-sub-text')].map(label => {
+    const rect = label.getBoundingClientRect();
+    const fontSize = Number.parseFloat(getComputedStyle(label).fontSize) || 0;
+    return { text: label.textContent?.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, effectiveFontSize: fontSize * scale };
+  });
+  const overlaps = [];
+  for (let first = 0; first < labels.length; first++) {
+    for (let second = first + 1; second < labels.length; second++) {
+      const a = labels[first];
+      const b = labels[second];
+      const horizontal = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const vertical = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (horizontal > 0.5 && vertical > 0.5) overlaps.push([a.text, b.text]);
+    }
+  }
+  const rims = [...document.querySelectorAll('.sabura-wheel .wheel-bezel-rim')];
+  const dividers = [...document.querySelectorAll('.sabura-wheel .wheel-divider-sketch')];
+  const interactive = [...document.querySelectorAll('.sabura-wheel .wheel-wedge:not(.disabled), .sabura-wheel .wheel-sub-wedge')];
+  const disabled = document.querySelector('.sabura-wheel .wheel-wedge.disabled');
+  const selected = document.querySelector('.sabura-wheel .wheel-sub-wedge.active-choice');
+  return {
+    viewport: { width: innerWidth, height: innerHeight },
+    scale, wheelRect: wheelRect && { left: wheelRect.left, right: wheelRect.right, top: wheelRect.top, bottom: wheelRect.bottom, width: wheelRect.width, height: wheelRect.height },
+    svgSize: svg && { width: svg.getBoundingClientRect().width, height: svg.getBoundingClientRect().height },
+    labelCount: labels.length, labels,
+    labelsWithinViewport: labels.length > 0 && labels.every(label => label.left >= -0.5 && label.right <= innerWidth + 0.5 && label.top >= -0.5 && label.bottom <= innerHeight + 0.5),
+    labelsLegible: labels.length > 0 && labels.every(label => label.effectiveFontSize >= 9),
+    overlaps,
+    solidRims: rims.length >= 3 && rims.every(rim => getComputedStyle(rim).strokeDasharray === 'none' || getComputedStyle(rim).strokeDasharray === '0px'),
+    dottedDividers: dividers.length >= 3 && dividers.every(divider => getComputedStyle(divider).strokeDasharray !== 'none'),
+    pointerTargets: interactive.length > 0 && interactive.every(element => { const rect = element.getBoundingClientRect(); return Math.min(rect.width, rect.height) >= 33.5; }),
+    pointerTargetMinimum: interactive.length ? Math.min(...interactive.map(element => { const rect = element.getBoundingClientRect(); return Math.min(rect.width, rect.height); })) : 0,
+    disabledDistinguishable: Boolean(disabled && disabled.getAttribute('aria-disabled') === 'true' && getComputedStyle(disabled).opacity < 1),
+    selectedDistinguishable: Boolean(selected && selected.classList.contains('active-choice'))
+  };
+})()`);
+const activeThirdLabelContrast = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const originalTheme = app.interfaceTheme;
+  const parseColor = (value) => {
+    const match = String(value || '').match(/rgba?\\(([^)]+)\\)/);
+    if (!match) return null;
+    const channels = match[1].split(',').slice(0, 3).map(channel => Number.parseFloat(channel.trim()));
+    if (channels.length !== 3 || channels.some(channel => !Number.isFinite(channel))) return null;
+    return channels.map(channel => channel / 255);
+  };
+  const luminance = (value) => {
+    const rgb = parseColor(value);
+    if (!rgb) return null;
+    return rgb.reduce((sum, channel, index) => {
+      const linear = channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+  };
+  const inspectTheme = (theme) => {
+    app.setInterfaceTheme(theme);
+    app.wheel.render();
+    const selected = document.querySelector('.sabura-wheel .wheel-third-wedge.active-choice');
+    const selectedId = selected?.getAttribute('data-sub-id') || null;
+    const label = selectedId ? [...document.querySelectorAll('[data-third-label-id]')].find(node => node.getAttribute('data-third-label-id') === selectedId) : null;
+    const labelLum = luminance(label ? getComputedStyle(label).fill : '');
+    const stops = selected ? [...selected.ownerSVGElement.querySelectorAll('#sabura-vs-wheel-wash stop')].map(stop => getComputedStyle(stop).stopColor) : [];
+    const ratios = stops.map(stop => {
+      const stopLum = luminance(stop);
+      if (labelLum === null || stopLum === null) return 0;
+      const lighter = Math.max(labelLum, stopLum);
+      const darker = Math.min(labelLum, stopLum);
+      return (lighter + 0.05) / (darker + 0.05);
+    });
+    return {
+      theme,
+      boardTheme: app.doc.theme?.id || document.documentElement.dataset.saburaVsBoardTheme || null,
+      selectedId,
+      label: label?.textContent?.trim() || null,
+      stops,
+      activeThirdLabelContrast: ratios.length ? Math.min(...ratios) : 0
+    };
+  };
+  const dark = inspectTheme('dark');
+  const light = inspectTheme('light');
+  app.setInterfaceTheme(originalTheme);
+  app.wheel.render();
+  return { dark, light, ok: dark.boardTheme === 'paper' && light.boardTheme === 'paper' && dark.activeThirdLabelContrast >= 4.5 && light.activeThirdLabelContrast >= 4.5 };
+})()`);
+if (!activeThirdLabelContrast.ok) throw new Error(`360 wheel active third-ring label contrast failed: ${JSON.stringify(activeThirdLabelContrast)}`);
+if (captureReviewEvidence) await captureReviewScreenshot('wheel-360x640-3ring');
+const lockedWheelState = await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const shape = Object.values(app.doc.objects).find(object => object.type === 'rectangle');
+  if (!shape) return { disabledDistinguishable: false };
+  app.wheel.close();
+  const textContext = { ...shape, type: 'text', text: 'A', textStyle: { size: 'm', fontFamily: 'sans' }, locked: false };
+  app.wheel.open(180, 320, 'object', textContext, app.doc.theme.palette, 1, [textContext]);
+  const disabled = document.querySelector('.sabura-wheel .wheel-wedge.disabled');
+  return { disabledDistinguishable: Boolean(disabled && disabled.getAttribute('aria-disabled') === 'true' && getComputedStyle(disabled).opacity < 1 && getComputedStyle(disabled).pointerEvents === 'none') };
+})()`);
+await evalInChrome(`(() => {
+  const app = window.saburaApp;
+  const shape = Object.values(app.doc.objects).find(object => object.type === 'rectangle');
+  app.wheel.close();
+  app.wheel.open(180, 320, 'object', shape, app.doc.theme.palette, 1, [shape]);
+  app.wheel.activeSubMenu = null;
+  app.wheel.render();
+})()`);
+const wheelMenuFill = await evalInChrome(`(() => {
+  const target = document.querySelector('.sabura-wheel .wheel-wedge[data-item-id="menu_fill"]');
+  if (!target) return null;
+  const rect = target.getBoundingClientRect();
+  for (let row = 1; row < 5; row++) {
+    for (let column = 1; column < 5; column++) {
+      const x = rect.left + rect.width * column / 5;
+      const y = rect.top + rect.height * row / 5;
+      if (document.elementFromPoint(x, y) === target) return { x, y };
+    }
+  }
+  return null;
+})()`);
+if (!wheelMenuFill) throw new Error('360 wheel: Fill pointer target missing');
+await cdpSend('Input.dispatchMouseEvent', { type: 'mousePressed', x: wheelMenuFill.x, y: wheelMenuFill.y, button: 'left', clickCount: 1 });
+await cdpSend('Input.dispatchMouseEvent', { type: 'mouseReleased', x: wheelMenuFill.x, y: wheelMenuFill.y, button: 'left', clickCount: 1 });
+const physicalWheelActivation = await evalInChrome(`(() => window.saburaApp.wheel.activeSubMenu === 'menu_fill' && document.querySelectorAll('.wheel-third-wedge').length > 0)()`);
+let wheelFocusActivation = { focused: false, focusVisible: false, outlineWidth: 0, id: null };
+for (let tabCount = 0; tabCount < 80; tabCount++) {
+  await cdpSend('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+  await cdpSend('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+  wheelFocusActivation = await evalInChrome(`(() => {
+    const target = document.activeElement;
+    const style = target ? getComputedStyle(target) : null;
+    return { focused: Boolean(target?.classList.contains('wheel-third-wedge')), focusVisible: Boolean(target?.matches(':focus-visible')), outlineWidth: parseFloat(style?.outlineWidth || '0') || 0, id: target?.getAttribute('data-sub-id') || null };
+  })()`);
+  if (wheelFocusActivation.focused) break;
+}
+await cdpSend('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+await cdpSend('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+const wheelKeyboardActivated = await evalInChrome(`(() => !window.saburaApp.wheel.isOpen)()`);
+const wheel360Ok = wheel360Audit.wheelRect && wheel360Audit.wheelRect.left >= -0.5 && wheel360Audit.wheelRect.right <= 360.5 && wheel360Audit.wheelRect.top >= -0.5 && wheel360Audit.wheelRect.bottom <= 640.5 &&
+  wheel360Audit.labelsWithinViewport && wheel360Audit.labelsLegible && wheel360Audit.overlaps.length === 0 && wheel360Audit.solidRims && wheel360Audit.dottedDividers && wheel360Audit.pointerTargets && lockedWheelState.disabledDistinguishable && wheel360Audit.selectedDistinguishable && physicalWheelActivation && wheelFocusActivation.focused && wheelFocusActivation.focusVisible && wheelFocusActivation.outlineWidth >= 2 && wheelKeyboardActivated;
+if (!wheel360Ok) {
+  throw new Error(`360 wheel usability failed: ${JSON.stringify({ wheel360Audit, lockedWheelState, physicalWheelActivation, wheelFocusActivation, wheelKeyboardActivated })}`);
+}
+console.log(`  ✓ 32w. 360×640 three-ring wheel fits, remains legible and targetable (minimum target ${wheel360Audit.pointerTargetMinimum.toFixed(1)}px; active third-ring label contrast dark/light ${activeThirdLabelContrast.dark.activeThirdLabelContrast.toFixed(2)}/${activeThirdLabelContrast.light.activeThirdLabelContrast.toFixed(2)}), supports physical pointer + keyboard activation, and preserves disabled/selected/focus states`);
+await cdpSend('Emulation.clearDeviceMetricsOverride');
+await new Promise(r => setTimeout(r, 100));
+
 // Flow 33: Resizing and Transform Foundation in Chrome (Comprehensive Physical Pointer-Driven)
 // -------------------------------------------------------------
 console.log('\n--- Flow 33: Resizing and Transform Foundation in Chrome ---');
