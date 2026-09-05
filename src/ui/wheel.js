@@ -1,4 +1,5 @@
 import { createPRNG, sketchEllipse, sketchLine } from '../core/sketch.js';
+import { FONT_SIZES } from '../core/types.js';
 import { iconForWheelItem } from './wheel-icon-map.js';
 
 /**
@@ -65,6 +66,14 @@ function renderWheelDivider(cx, cy, rInner, rOuter, angle, prng) {
   const y2 = cy + rOuter * Math.sin(angle);
   const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
   return `<path d="${path}" class="wheel-divider-sketch" pointer-events="none" />`;
+}
+
+function getEffectiveFontSizePreset(textStyle) {
+  const resolvedSize = textStyle?.resolvedSize;
+  if (Number.isFinite(resolvedSize)) {
+    return Object.keys(FONT_SIZES).find(token => FONT_SIZES[token] === resolvedSize) || null;
+  }
+  return textStyle?.size || 'm';
 }
 
 function getStrokeWidthItems(curWidth = 2, obj = null) {
@@ -242,7 +251,7 @@ export class ToolWheel {
     const curShapeType = shape?.type || 'rectangle';
     const curRoughness = shape?.roughness === 0 ? 'clean' : 'sketch';
     const curStrokeStyle = shape?.strokeStyle || 'solid';
-    const curFontSize = shape?.textStyle?.size || 'm';
+    const curFontSize = getEffectiveFontSizePreset(shape?.textStyle);
     const curFontFamily = shape?.textStyle?.fontFamily || 'hand';
     const curBold = Boolean(shape?.textStyle?.bold);
     const curOpacity = shape?.opacity !== undefined ? shape.opacity : 1.0;
@@ -510,7 +519,7 @@ export class ToolWheel {
   }
 
   getTextItems(textObj, isLocked) {
-    const curFontSize = textObj?.textStyle?.size || 'm';
+    const curFontSize = getEffectiveFontSizePreset(textObj?.textStyle);
     const curFontFamily = textObj?.textStyle?.fontFamily || 'hand';
     const curBold = Boolean(textObj?.textStyle?.bold);
     const curOpacity = textObj?.opacity !== undefined ? textObj.opacity : 1.0;

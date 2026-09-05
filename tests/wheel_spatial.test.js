@@ -341,6 +341,37 @@ test('Type menu partitions fonts and formatting into Ring 2 and text sizes into 
   assert.equal(activeSize.id, 'type_m');
 });
 
+test('Type menu highlights only the preset matching the effective rendered font size', () => {
+  const wheel = new ToolWheel(createMockContainer(), () => {});
+  wheel.context = 'object';
+  wheel.selectedCount = 1;
+  wheel.selectedObjects = [];
+
+  for (const type of ['ellipse', 'text']) {
+    wheel.selectedObject = {
+      id: `${type}_1`,
+      type,
+      text: 'Device',
+      textStyle: { size: 'm', resolvedSize: 10, fontFamily: 'hand' }
+    };
+
+    let sizes = wheel.getItems().find(item => item.id === 'menu_type').thirdItems;
+    assert.deepEqual(
+      sizes.filter(item => item.isActive).map(item => item.id),
+      [],
+      `${type} scaled to a custom 10px size must not keep M highlighted`
+    );
+
+    wheel.selectedObject.textStyle.resolvedSize = 14;
+    sizes = wheel.getItems().find(item => item.id === 'menu_type').thirdItems;
+    assert.deepEqual(
+      sizes.filter(item => item.isActive).map(item => item.id),
+      ['type_s'],
+      `${type} at the exact 14px S preset must highlight S regardless of its previous token`
+    );
+  }
+});
+
 test('fill_none does not have fill: none inline style which would break SVG pointer events', () => {
   const container = createMockContainer();
   let dispatchedAction = null;
