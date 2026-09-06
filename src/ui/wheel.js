@@ -1,5 +1,6 @@
 import { createPRNG, sketchEllipse, sketchLine } from '../core/sketch.js';
 import { FONT_SIZES } from '../core/types.js';
+import { inkPaletteFor } from '../core/theme-colors.js';
 import { iconForWheelItem } from './wheel-icon-map.js';
 
 /**
@@ -323,7 +324,7 @@ export class ToolWheel {
     ];
 
     // Slot 6 (9:00): Ink
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: shape?.stroke === col }));
+    const inkSub = inkPaletteFor(this.themePalette).map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: shape?.stroke === col }));
 
     // Slot 7 (10:30): Delete
     const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };
@@ -406,7 +407,7 @@ export class ToolWheel {
     ];
 
     // Slot 6 (9:00): Ink
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: conn?.stroke === col }));
+    const inkSub = inkPaletteFor(this.themePalette).map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: conn?.stroke === col }));
 
     // Slot 7 (10:30): Delete
     const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };
@@ -501,7 +502,7 @@ export class ToolWheel {
     ];
 
     // Slot 6 (9:00): Ink
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: pObj.stroke === col }));
+    const inkSub = inkPaletteFor(this.themePalette).map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: pObj.stroke === col }));
 
     // Slot 7 (10:30): Delete
     const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };
@@ -580,7 +581,7 @@ export class ToolWheel {
     const styleItem = { id: 'menu_style', label: 'Style', icon: '✎', disabled: true };
 
     // Slot 6 (9:00): Color / Ink
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: curTextColor === col }));
+    const inkSub = inkPaletteFor(this.themePalette).map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col, isActive: curTextColor === col }));
 
     // Slot 7 (10:30): Delete
     const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };
@@ -771,7 +772,7 @@ export class ToolWheel {
     ];
 
     // Slot 6 (9:00): Ink
-    const inkSub = this.themePalette.map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
+    const inkSub = inkPaletteFor(this.themePalette).map((col, idx) => ({ id: `ink_${idx}`, label: col, color: col }));
 
     // Slot 7 (10:30): Delete
     const delItem = { id: 'action_delete', label: 'Delete', icon: '🗑' };

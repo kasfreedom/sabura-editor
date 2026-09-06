@@ -32,6 +32,7 @@ if (typeof document === 'undefined') {
 }
 
 import { ToolWheel } from '../src/ui/wheel.js';
+import { THEME_PRESETS } from '../src/core/types.js';
 
 function createMockContainer() {
   return {
@@ -209,6 +210,20 @@ test('all-connector multi-selection keeps connector controls and honest mixed st
   wheel.selectedObject = wheel.selectedObjects[0];
   const mixedTypes = wheel.getItems();
   assert.equal(mixedTypes[0].id, 'menu_align', 'mixed object types retain the generic multi wheel');
+});
+
+test('connector Ink exposes only the usable ink colors from the active theme', () => {
+  const wheel = new ToolWheel(createMockContainer(), () => {});
+  wheel.context = 'object';
+  wheel.selectedCount = 1;
+  wheel.selectedObject = { id: 'c1', type: 'connector', stroke: '#1e1e1e' };
+  wheel.selectedObjects = [wheel.selectedObject];
+  wheel.themePalette = [...THEME_PRESETS.paper.palette];
+
+  const inkColors = wheel.getItems()[6].subItems.map(item => item.color);
+  assert.deepEqual(inkColors, [
+    '#1e1e1e', '#1971c2', '#2f9e44', '#e03131', '#f08c00', '#9c36b5'
+  ]);
 });
 
 test('Style submenu contains only visual style options and never color swatches across all contexts', () => {

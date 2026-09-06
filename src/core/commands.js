@@ -16,6 +16,7 @@ import {
   PATH_POINT_ALLOWED_FIELDS
 } from './document.js';
 import { alignObjects, distributeObjects, measureText, resolveConnectorGeometry } from './geometry.js';
+import { mapPresetThemeColor } from './theme-colors.js';
 
 export const SUPPORTED_COMMAND_TYPES = new Set([
   'create_object',
@@ -1467,18 +1468,26 @@ export function applyCommand(doc, cmd) {
           const styleBackup = {};
 
           // 1. Stroke (shapes & connectors)
+          const mappedStroke = mapPresetThemeColor(obj.stroke, prevTheme, newDoc.theme, 'stroke');
           const strokeLum = hexToLuminance(obj.stroke);
           const bgLum = hexToLuminance(newBg);
           const isDarkOnDark = bgLum < 0.25 && strokeLum < 0.15;
           const isLightOnLight = bgLum > 0.75 && strokeLum > 0.85;
           const matchesOldStroke = obj.stroke === oldStroke || obj.stroke === prevTheme.palette?.[0] || obj.stroke === '#1e1e1e';
-          if (matchesOldStroke || isDarkOnDark || isLightOnLight) {
+          if (mappedStroke !== obj.stroke) {
+            styleBackup.stroke = obj.stroke;
+            obj.stroke = mappedStroke;
+          } else if (matchesOldStroke || isDarkOnDark || isLightOnLight) {
             styleBackup.stroke = obj.stroke;
             obj.stroke = newStroke;
           }
 
           // 2. Fill (shapes)
-          if (obj.fill === oldBg) {
+          const mappedFill = mapPresetThemeColor(obj.fill, prevTheme, newDoc.theme, 'fill');
+          if (mappedFill !== obj.fill) {
+            styleBackup.fill = obj.fill;
+            obj.fill = mappedFill;
+          } else if (obj.fill === oldBg) {
             styleBackup.fill = obj.fill;
             obj.fill = newBg;
           } else if (prevTheme.defaultFill && obj.fill === prevTheme.defaultFill) {
@@ -1499,7 +1508,12 @@ export function applyCommand(doc, cmd) {
           const effBgLum = hexToLuminance(effectiveBg);
           const textDarkOnDark = effBgLum < 0.25 && textLum < 0.15;
           const textLightOnLight = effBgLum > 0.75 && textLum > 0.85;
-          if (obj.textStyle?.color === oldStroke || textDarkOnDark || textLightOnLight) {
+          const mappedTextColor = mapPresetThemeColor(obj.textStyle?.color, prevTheme, newDoc.theme, 'stroke');
+          if (mappedTextColor !== obj.textStyle?.color) {
+            styleBackup.textColor = obj.textStyle?.color;
+            if (!obj.textStyle) obj.textStyle = {};
+            obj.textStyle.color = mappedTextColor;
+          } else if (obj.textStyle?.color === oldStroke || textDarkOnDark || textLightOnLight) {
             styleBackup.textColor = obj.textStyle?.color;
             if (!obj.textStyle) obj.textStyle = {};
             obj.textStyle.color = newStroke;

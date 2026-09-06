@@ -391,3 +391,50 @@ test('set_board_theme restyles strokes, fills, text, and connectors coherently a
   assert.strictEqual(docHC.objects['r1'].textStyle.color, '#000000');
   assert.strictEqual(docHC.objects['c1'].stroke, '#000000');
 });
+
+test('set_board_theme maps authored preset colors by visual role and preserves custom colors', () => {
+  const doc = createDefaultDocument();
+  const blue = createDefaultObject('rectangle', {
+    id: 'blue',
+    fill: '#a5d8ff',
+    stroke: '#1971c2',
+    text: 'Blue',
+    textStyle: { color: '#1971c2' }
+  });
+  const red = createDefaultObject('rectangle', {
+    id: 'red',
+    fill: '#ffc9c9',
+    stroke: '#e03131'
+  });
+  const custom = createDefaultObject('ellipse', {
+    id: 'custom',
+    fill: '#123456',
+    stroke: '#654321'
+  });
+  const connector = createDefaultObject('connector', {
+    id: 'connector',
+    stroke: '#2f9e44'
+  });
+
+  let current = doc;
+  for (const object of [blue, red, custom, connector]) {
+    current = applyCommand(current, { type: 'create_object', object }).doc;
+  }
+
+  const { doc: night, inverseCmd } = applyCommand(current, {
+    type: 'set_board_theme',
+    themeId: 'night'
+  });
+
+  assert.equal(night.objects.blue.fill, '#7aa2f7');
+  assert.equal(night.objects.blue.stroke, '#7aa2f7');
+  assert.equal(night.objects.blue.textStyle.color, '#7aa2f7');
+  assert.equal(night.objects.red.fill, '#f7768e');
+  assert.equal(night.objects.red.stroke, '#f7768e');
+  assert.equal(night.objects.connector.stroke, '#9ece6a');
+  assert.equal(night.objects.custom.fill, '#123456');
+  assert.equal(night.objects.custom.stroke, '#654321');
+
+  const { doc: restored } = applyCommand(night, inverseCmd);
+  assert.deepEqual(restored, current);
+});
