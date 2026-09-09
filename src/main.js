@@ -33,6 +33,7 @@ import { ZoomToolbar } from './ui/zoom-toolbar.js';
 import { renderSaburaIcon } from './ui/wheel-icon-map.js';
 import { HelpModal } from './ui/help-modal.js';
 import { LaserPointer } from './renderer/laser.js';
+import { AgentApi } from './agent-api.js';
 
 export class SaburaApp {
   constructor() {
@@ -56,6 +57,7 @@ export class SaburaApp {
     this.originalHtml = '';
     this.isCorrupted = false;
     this.loadErrors = [];
+    this.agentApi = new AgentApi(this);
 
     this.initDocument();
     if (this.isCorrupted) {
@@ -557,6 +559,7 @@ export class SaburaApp {
       this.undoStack.push(result.inverseCmd);
     }
     this.redoStack = [];
+    this.agentApi?.recordDocumentChange();
     this.status = 'Changed';
     this.updateUI();
     this.notifySubscribers();
@@ -586,6 +589,7 @@ export class SaburaApp {
     }
     this.doc = newDoc;
     if (redoCmd && redoCmd.type !== 'noop') this.redoStack.push(redoCmd);
+    this.agentApi?.recordDocumentChange();
     this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
@@ -603,6 +607,7 @@ export class SaburaApp {
     }
     this.doc = newDoc;
     if (undoCmd && undoCmd.type !== 'noop') this.undoStack.push(undoCmd);
+    this.agentApi?.recordDocumentChange();
     this.updateDocumentStatus();
     this.updateUI();
     this.notifySubscribers();
@@ -682,9 +687,11 @@ export class SaburaApp {
     const reader = new FileReader();
     this.pendingImageReader = reader;
     reader.onerror = () => {
+      if (this.pendingImageReader === reader) this.pendingImageReader = null;
       if (this.isImageImportActive(token)) this.reportImageImportError('The image could not be read.');
     };
     reader.onload = () => {
+      if (this.pendingImageReader === reader) this.pendingImageReader = null;
       if (!this.isImageImportActive(token)) return;
       const data = typeof reader.result === 'string' ? reader.result : '';
       const parsed = validateRasterDataUrl(data, file.type);
@@ -695,9 +702,11 @@ export class SaburaApp {
       const image = new Image();
       this.pendingImageDecode = image;
       image.onerror = () => {
+        if (this.pendingImageDecode === image) this.pendingImageDecode = null;
         if (this.isImageImportActive(token)) this.reportImageImportError('The image data could not be decoded.');
       };
       image.onload = () => {
+        if (this.pendingImageDecode === image) this.pendingImageDecode = null;
         if (!this.isImageImportActive(token)) return;
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
@@ -1325,7 +1334,7 @@ export class SaburaApp {
   notifySubscribers() {
     for (const sub of this.subscribers) {
       try {
-        sub(this.doc, this.status);
+        sub(cloneDocument(this.doc), this.status);
       } catch (err) {
         console.error('Subscriber error:', err);
       }
@@ -1333,6 +1342,7 @@ export class SaburaApp {
   }
 
   exposeApi() {
+    if (!this.agentApi) this.agentApi = new AgentApi(this);
     window.sabura = {
       isCorrupted: () => this.isCorrupted,
       getLoadErrors: () => [...this.loadErrors],
@@ -1460,7 +1470,8 @@ export class SaburaApp {
       subscribe: (listener) => {
         this.subscribers.add(listener);
         return () => this.subscribers.delete(listener);
-      }
+      },
+      agent: this.agentApi.publicApi()
     };
   }
 }

@@ -99,6 +99,9 @@ test('4. Contract names every public AI operation', () => {
   for (const op of ['readAiContract', 'getDocument', 'validateDocument', 'generateBoardFile', 'applyCommands', 'exportCanonicalJson']) {
     assert.ok(contract.includes(op), `Contract is missing public operation: ${op}`);
   }
+  for (const op of ['agent.describe', 'agent.read', 'agent.apply', 'agent.undo', 'agent.redo', 'agent.focusObjects', 'agent.fitBoard', 'agent.saveCopy']) {
+    assert.ok(contract.includes(op), `Contract is missing live agent operation: ${op}`);
+  }
 });
 
 // ── Test 5 ─────────────────────────────────────────────────────────────────────

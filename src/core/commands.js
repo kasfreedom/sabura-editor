@@ -5,6 +5,7 @@
 import { COMMANDS_SCHEMA_VERSION, FONT_SIZES, MIN_OBJECT_SIZE, THEME_PRESETS, IMAGE_OBJECT_TYPE } from './types.js';
 import {
   cloneDocument,
+  createDefaultObject,
   generateId,
   generateSeed,
   validateDocument,
@@ -227,6 +228,9 @@ export function validateCommand(cmd, doc = null) {
     if (!cmd.object || typeof cmd.object !== 'object' || Array.isArray(cmd.object)) {
       errors.push('create_object requires a valid object payload');
     }
+    if (doc && cmd.object?.id && doc.objects?.[cmd.object.id]) {
+      errors.push(`create_object object ID already exists: "${cmd.object.id}"`);
+    }
   } else if (cmd.type === 'create_asset') {
     if (!cmd.asset || typeof cmd.asset !== 'object' || Array.isArray(cmd.asset)) {
       errors.push('create_asset requires a valid asset payload');
@@ -278,6 +282,35 @@ export function validateCommand(cmd, doc = null) {
   } else if (cmd.type === 'set_text') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('set_text requires a string id');
     if (typeof cmd.text !== 'string') errors.push('set_text requires string text');
+  } else if (cmd.type === 'connect_objects') {
+    if (typeof cmd.fromId !== 'string' || !cmd.fromId.trim()) errors.push('connect_objects requires a string fromId');
+    if (typeof cmd.toId !== 'string' || !cmd.toId.trim()) errors.push('connect_objects requires a string toId');
+    if (cmd.connectorId !== undefined && (typeof cmd.connectorId !== 'string' || !cmd.connectorId.trim())) {
+      errors.push('connect_objects connectorId must be a non-empty string when provided');
+    }
+    if (cmd.routing !== undefined && !['straight', 'elbow', 'curved'].includes(cmd.routing)) {
+      errors.push('connect_objects routing must be straight, elbow, or curved');
+    }
+    const validateAnchor = (anchor, name) => {
+      if (anchor === undefined) return;
+      if (!anchor || typeof anchor !== 'object' || Array.isArray(anchor) ||
+          !isValidFinite(anchor.x) || !isValidFinite(anchor.y) ||
+          anchor.x < 0 || anchor.x > 1 || anchor.y < 0 || anchor.y > 1) {
+        errors.push(`${name} must contain finite x and y values between 0 and 1`);
+      }
+    };
+    validateAnchor(cmd.fromAnchor, 'connect_objects fromAnchor');
+    validateAnchor(cmd.toAnchor, 'connect_objects toAnchor');
+    if (doc?.objects) {
+      for (const [field, id] of [['fromId', cmd.fromId], ['toId', cmd.toId]]) {
+        const target = doc.objects[id];
+        if (!target) errors.push(`connect_objects ${field} references non-existent object ID "${id}"`);
+        else if (target.type === 'connector') errors.push(`connect_objects ${field} cannot reference connector "${id}"`);
+      }
+      if (cmd.connectorId && doc.objects[cmd.connectorId]) {
+        errors.push(`connect_objects connector ID already exists: "${cmd.connectorId}"`);
+      }
+    }
   } else if (cmd.type === 'configure_connector') {
     if (typeof cmd.id !== 'string' || !cmd.id.trim()) errors.push('configure_connector requires a string id');
   } else if (cmd.type === 'configure_connector_endpoints') {
@@ -458,6 +491,8 @@ export function applyCommand(doc, cmd) {
       const obj = cloneDocument(cmd.object);
       if (!obj.id) obj.id = generateId(obj.type || 'obj');
       if (obj.seed === undefined) obj.seed = generateSeed();
+
+      if (newDoc.objects[obj.id]) throw new Error(`Object ID already exists: "${obj.id}"`);
 
       newDoc.objects[obj.id] = obj;
       const atIndex = typeof cmd.atIndex === 'number' ? Math.max(0, Math.min(newDoc.order.length, cmd.atIndex)) : newDoc.order.length;
@@ -976,7 +1011,10 @@ export function applyCommand(doc, cmd) {
           textStyle: obj.textStyle ? cloneDocument(obj.textStyle) : null
         };
         const { textStyle, ...rest } = style;
-        Object.assign(obj, rest);
+        for (const [key, value] of Object.entries(rest)) {
+          if (value === undefined) delete obj[key];
+          else obj[key] = value;
+        }
         if (textStyle !== undefined) {
           if (textStyle) obj.textStyle = cloneDocument(textStyle);
           else delete obj.textStyle;
@@ -1210,39 +1248,35 @@ export function applyCommand(doc, cmd) {
 
     case 'connect_objects': {
       const cId = cmd.connectorId || generateId('conn');
-      const prevConnector = newDoc.objects[cId] ? cloneDocument(newDoc.objects[cId]) : null;
+      if (newDoc.objects[cId]) throw new Error(`Connector ID already exists: "${cId}"`);
 
-      const connectorObj = {
+      const from = { id: cmd.fromId };
+      const to = { id: cmd.toId };
+      if (cmd.fromAnchor !== undefined) from.anchor = cloneDocument(cmd.fromAnchor);
+      if (cmd.toAnchor !== undefined) to.anchor = cloneDocument(cmd.toAnchor);
+      const connectorOverrides = {
         id: cId,
-        type: 'connector',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        stroke: cmd.stroke || newDoc.theme.defaultStroke,
-        strokeWidth: cmd.strokeWidth || newDoc.theme.defaultStrokeWidth,
-        strokeStyle: cmd.strokeStyle || 'solid',
-        opacity: cmd.opacity !== undefined ? cmd.opacity : 1.0,
-        roughness: cmd.roughness !== undefined ? cmd.roughness : newDoc.theme.defaultRoughness,
-        seed: generateSeed(),
-        locked: false,
-        from: { id: cmd.fromId, side: cmd.fromSide },
-        to: { id: cmd.toId, side: cmd.toSide },
+        from,
+        to,
         routing: cmd.routing || 'straight',
-        startArrow: cmd.startArrow || false,
-        endArrow: cmd.endArrow !== undefined ? cmd.endArrow : true
+        curveSide: cmd.curveSide !== undefined ? cmd.curveSide : 1,
+        startArrow: cmd.startArrow === true,
+        endArrow: cmd.endArrow !== undefined ? cmd.endArrow : true,
+        stroke: cmd.stroke !== undefined ? cmd.stroke : newDoc.theme.defaultStroke,
+        strokeWidth: cmd.strokeWidth !== undefined ? cmd.strokeWidth : newDoc.theme.defaultStrokeWidth,
+        strokeStyle: cmd.strokeStyle || 'solid',
+        opacity: cmd.opacity !== undefined ? cmd.opacity : newDoc.theme.defaultOpacity,
+        roughness: cmd.roughness !== undefined ? cmd.roughness : newDoc.theme.defaultRoughness
       };
+      if (cmd.curveDistance !== undefined) connectorOverrides.curveDistance = cmd.curveDistance;
+      if (cmd.elbowOffset !== undefined) connectorOverrides.elbowOffset = cmd.elbowOffset;
+      if (cmd.stacking !== undefined) connectorOverrides.stacking = cmd.stacking;
+      const connectorObj = createDefaultObject('connector', connectorOverrides, newDoc.theme);
 
       newDoc.objects[cId] = connectorObj;
-      if (!newDoc.order.includes(cId)) {
-        newDoc.order.push(cId);
-      }
+      newDoc.order.push(cId);
 
-      const inverseCmd = prevConnector
-        ? { type: 'create_object', object: prevConnector }
-        : { type: 'delete_objects', ids: [cId] };
-
-      return { doc: newDoc, inverseCmd };
+      return { doc: newDoc, inverseCmd: { type: 'delete_objects', ids: [cId] } };
     }
 
     case 'reconnect_connector': {

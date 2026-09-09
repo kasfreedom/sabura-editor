@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "test:agent-browser": "node scripts/verify-agent-api-e2e.js"
   },
   "keywords": [
     "whiteboard",

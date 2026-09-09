@@ -18,6 +18,11 @@ npm run build
 The build writes `sabura.html` in the repository root. The implemented document
 format is described in `docs/canvas-v1-format.md`.
 
+Agents that can execute JavaScript in the loaded page can use the versioned
+[`window.sabura.agent` live-authoring API](docs/agent-api.md). It is an offline
+façade over the same command, validation, history, rendering, and Save Copy
+machinery used by the editor.
+
 Cross-product vision, strategy, and architecture live in the sibling
 `../product` repository.
 

@@ -186,6 +186,37 @@ export class Workspace {
     };
   }
 
+  hasActiveInteraction() {
+    return Boolean(
+      this.isPanning ||
+      this.isDraggingSelection ||
+      this.isDDragging ||
+      this.isResizing ||
+      this.isRotating ||
+      this.isCreating ||
+      this.isReconnecting ||
+      this.isCurvingConnector ||
+      this.isDraggingVertex ||
+      this.isMarquee ||
+      this.isDrawingLine
+    );
+  }
+
+  fitBounds(bounds, padding = 60) {
+    if (!bounds) return false;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const scaleX = bounds.width > 0 ? (w - padding * 2) / bounds.width : 2;
+    const scaleY = bounds.height > 0 ? (h - padding * 2) / bounds.height : 2;
+    const targetZoom = Math.max(0.2, Math.min(2.0, Math.min(scaleX, scaleY)));
+
+    this.camera.zoom = targetZoom;
+    this.camera.x = (w - bounds.width * targetZoom) / 2 - bounds.x * targetZoom;
+    this.camera.y = (h - bounds.height * targetZoom) / 2 - bounds.y * targetZoom;
+    this.render();
+    return true;
+  }
+
   fitToContent(padding = 60) {
     const doc = this.callbacks.getDocument();
     const allObjects = Object.values(doc.objects || {});
@@ -195,19 +226,17 @@ export class Workspace {
       return;
     }
 
-    const union = getUnionBoundingBox(allObjects);
+    const union = getUnionBoundingBox(allObjects, doc);
     if (!union) return;
+    this.fitBounds(union, padding);
+  }
 
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const scaleX = (w - padding * 2) / union.width;
-    const scaleY = (h - padding * 2) / union.height;
-    const targetZoom = Math.max(0.2, Math.min(2.0, Math.min(scaleX, scaleY)));
-
-    this.camera.zoom = targetZoom;
-    this.camera.x = (w - union.width * targetZoom) / 2 - union.x * targetZoom;
-    this.camera.y = (h - union.height * targetZoom) / 2 - union.y * targetZoom;
-    this.render();
+  focusObjects(ids, padding = 60) {
+    const doc = this.callbacks.getDocument();
+    const objects = ids.map(id => doc.objects?.[id]).filter(Boolean);
+    if (objects.length !== ids.length || objects.length === 0) return false;
+    const union = getUnionBoundingBox(objects, doc);
+    return this.fitBounds(union, padding);
   }
 
   bindEvents() {

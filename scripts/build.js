@@ -37,6 +37,7 @@ const moduleFiles = [
   'src/ui/zoom-toolbar.js',
   'src/ui/help-modal.js',
   'src/ui/workspace.js',
+  'src/agent-api.js',
   'src/main.js'
 ];
 
@@ -158,13 +159,31 @@ OVERVIEW
 
 BROWSER-AGENT WORKFLOW  (preferred)
   1. Open sabura.html in a browser.
-  2. Call window.sabura.readAiContract() -> { found, contract }
-  3. Call window.sabura.getDocument() to read the current board (optional).
-  4. Build your document object using the schema below.
-  5. Call window.sabura.validateDocument(doc) -> { valid, errors[] }
-  6. Call window.sabura.generateBoardFile(doc) -> { success, filename, byteLength }
-     A complete HTML board file is downloaded. The runtime is never returned to you.
-  7. Return the downloaded file without opening or reading it.
+  2. For live editing, discover window.sabura.agent.describe(), then call
+     agent.read() and retain its live editToken.
+  3. In Editing mode, call agent.apply({ requestId, expectedEditToken, commands }).
+     Batches are atomic and use the same command/history engine as the UI.
+  4. Inspect the structured result, then use agent.focusObjects(ids) or
+     agent.fitBoard() to inspect the rendered result.
+  5. Call agent.saveCopy(). A successful response means export was prepared and
+     a browser download was requested; it does not confirm file delivery.
+  6. For whole-document generation instead, validateDocument(doc), then call
+     generateBoardFile(doc). The runtime is never returned through the API.
+
+LIVE AGENT API  sabura/agent/v1
+  agent.describe()       -> versions, capabilities, public commands and schemas
+  agent.read()           -> copied document, selection, viewport, mode, editToken
+  agent.apply(request)   -> atomic structured edit result; explicit create IDs required
+  agent.undo(request) / agent.redo(request) -> token-checked history operations
+  agent.focusObjects(ids[, options]) / agent.fitBoard() -> view-only operations
+  agent.saveCopy()       -> exportPrepared, downloadRequested, deliveryConfirmed:false
+  agent.subscribe(fn)    -> copied agent snapshots; returns unsubscribe function
+
+  Mutating requests require a non-empty requestId and expectedEditToken. The token
+  is session-local, advances only on real document changes (including Undo/Redo),
+  and is never persisted. Repeating an identical requestId is idempotent; reusing
+  it with a different payload fails. Agent edits reject stale tokens, Reading or
+  Presentation mode, and active human edit/import/save interactions.
 
 FILE-TOOL WORKFLOW  (fallback — no browser)
   1. Read only the contract and the document seam below. Stop before &lt;style&gt;.
@@ -224,6 +243,7 @@ PUBLIC API  (window.sabura.*)
   applyCommands(cmds[])   -> { success: bool, document?, errors? }
   exportCanonicalJson()   -> canonical JSON string
   undo() / redo()  /  subscribe(listener) -> unsubscribe fn
+  agent                     -> versioned live-authoring facade documented above
 
   generateBoardFile() never returns the HTML source. The runtime remains opaque.
 -->`;
