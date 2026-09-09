@@ -370,7 +370,10 @@ export function validateCommand(cmd, doc = null) {
       errors.push('batch requires an array of commands');
     } else {
       for (let i = 0; i < cmd.commands.length; i++) {
-        const sub = validateCommand(cmd.commands[i], doc);
+        // A batch may intentionally create a target before a later command
+        // references it. Structural validation belongs here; applyCommandBatch
+        // performs document-aware validation against each sequential state.
+        const sub = validateCommand(cmd.commands[i]);
         if (!sub.valid) {
           errors.push(`batch command [${i}]: ${sub.errors.join(', ')}`);
         }
@@ -482,6 +485,34 @@ export function applyCommand(doc, cmd) {
       if (idsToDelete.length === 0) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
+      const idsToDeleteSet = new Set(idsToDelete);
+
+      // Resolve every affected connector while both endpoint objects still
+      // exist. Connector records deliberately have no x/y/width/height box of
+      // their own, so their last visible endpoints must come from geometry.
+      const affectedConnectors = [];
+      for (const [connectorId, connector] of Object.entries(newDoc.objects)) {
+        if (connector.type !== 'connector' || idsToDeleteSet.has(connectorId)) continue;
+        const detachFrom = Boolean(connector.from?.id && idsToDeleteSet.has(connector.from.id));
+        const detachTo = Boolean(connector.to?.id && idsToDeleteSet.has(connector.to.id));
+        if (!detachFrom && !detachTo) continue;
+
+        const resolved = resolveConnectorGeometry(doc, connector);
+        const fromPoint = detachFrom ? resolved.start : null;
+        const toPoint = detachTo ? resolved.end : null;
+        for (const point of [fromPoint, toPoint].filter(Boolean)) {
+          if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+            throw new Error(`Cannot delete attached object: connector "${connectorId}" resolved to a non-finite endpoint`);
+          }
+        }
+        affectedConnectors.push({
+          id: connectorId,
+          prevFrom: cloneDocument(connector.from),
+          prevTo: cloneDocument(connector.to),
+          fromPoint: fromPoint ? { x: fromPoint.x, y: fromPoint.y } : null,
+          toPoint: toPoint ? { x: toPoint.x, y: toPoint.y } : null
+        });
+      }
 
       const savedObjects = [];
       const deletedImageAssetIds = new Set(idsToDelete
@@ -517,28 +548,15 @@ export function applyCommand(doc, cmd) {
         }
       }
 
-      // Reconnect connectors that referenced deleted objects to static points
-      const affectedConnectors = [];
-      for (const [cId, conn] of Object.entries(newDoc.objects)) {
-        if (conn.type !== 'connector') continue;
-        let modified = false;
-        const prevFrom = cloneDocument(conn.from);
-        const prevTo = cloneDocument(conn.to);
-
-        if (conn.from && conn.from.id && idsToDelete.includes(conn.from.id)) {
-          // Disconnect from object
-          conn.from = { point: conn.from.point || { x: conn.x, y: conn.y } };
-          modified = true;
-        }
-        if (conn.to && conn.to.id && idsToDelete.includes(conn.to.id)) {
-          conn.to = { point: conn.to.point || { x: conn.x + conn.width, y: conn.y + conn.height } };
-          modified = true;
-        }
-        if (modified) {
-          affectedConnectors.push({ id: cId, prevFrom, prevTo });
-        }
+      // Replace only deleted attachments; an attachment to a surviving object
+      // remains unchanged.
+      for (const affected of affectedConnectors) {
+        const connector = newDoc.objects[affected.id];
+        if (affected.fromPoint) connector.from = { point: affected.fromPoint };
+        if (affected.toPoint) connector.to = { point: affected.toPoint };
       }
 
+      const savedObjectsInOrder = [...savedObjects].sort((a, b) => a.orderIndex - b.orderIndex);
       const inverseCmd = {
         type: 'batch',
         commands: [
@@ -546,7 +564,7 @@ export function applyCommand(doc, cmd) {
             type: 'create_asset',
             asset: item.asset
           })),
-          ...savedObjects.map(item => ({
+          ...savedObjectsInOrder.map(item => ({
             type: 'create_object',
             object: item.object,
             atIndex: item.orderIndex
