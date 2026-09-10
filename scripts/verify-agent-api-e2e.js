@@ -131,8 +131,65 @@ try {
   await send('Runtime.enable');
   await send('Log.enable');
   await send('Page.enable');
+  // Exercise the built artifact through the WebMCP registration boundary even
+  // when the locally installed Chrome does not expose the experimental native
+  // API. This shim implements only the current registerTool contract; it is not
+  // evidence of native browser-agent availability.
+  await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(() => {
+      const registrations = [];
+      Object.defineProperty(document, 'modelContext', {
+        configurable: true,
+        value: {
+          registrations,
+          async registerTool(tool, options = {}) {
+            if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            registrations.push(tool);
+            options.signal?.addEventListener('abort', () => {
+              const index = registrations.indexOf(tool);
+              if (index >= 0) registrations.splice(index, 1);
+            }, { once: true });
+          },
+          async getTools() {
+            return registrations.map(({ execute, ...metadata }) => metadata);
+          },
+          async executeTool(registeredTool, input = {}, options = {}) {
+            const tool = registrations.find(candidate => candidate.name === registeredTool.name);
+            if (!tool) throw new DOMException('Unknown tool', 'NotFoundError');
+            const inputObject = typeof input === 'string' ? JSON.parse(input) : input;
+            const signal = options.signal || new AbortController().signal;
+            return JSON.stringify(await tool.execute(inputObject, { signal }));
+          }
+        }
+      });
+    })()`
+  });
   await send('Page.navigate', { url: `http://127.0.0.1:${serverPort}/sabura.html` });
   await waitFor('Boolean(window.sabura?.agent && window.saburaApp)', 'built Sabura agent API');
+  await waitFor('document.modelContext?.registrations?.length === 7', 'seven Sabura WebMCP tool registrations');
+
+  const webMcpContract = await evaluate(`(async () => {
+    const tools = await document.modelContext.getTools();
+    const read = tools.find(tool => tool.name === 'sabura_read_board');
+    const signal = new AbortController().signal;
+    const snapshot = JSON.parse(await document.modelContext.executeTool(read, {}, { signal }));
+    return {
+      names: tools.map(tool => tool.name),
+      readAnnotations: read.annotations,
+      editSchemaStrict: tools.find(tool => tool.name === 'sabura_edit_board').inputSchema.additionalProperties === false,
+      snapshotSuccess: snapshot.success,
+      apiVersion: snapshot.apiVersion
+    };
+  })()`);
+  if (JSON.stringify(webMcpContract.names) !== JSON.stringify([
+    'sabura_read_board', 'sabura_edit_board', 'sabura_undo', 'sabura_redo',
+    'sabura_focus_objects', 'sabura_fit_board', 'sabura_save_copy'
+  ]) || !webMcpContract.readAnnotations.readOnlyHint ||
+      !webMcpContract.readAnnotations.untrustedContentHint ||
+      !webMcpContract.editSchemaStrict || !webMcpContract.snapshotSuccess ||
+      webMcpContract.apiVersion !== 'sabura/agent/v1') {
+    throw new Error(`WebMCP browser contract failed: ${JSON.stringify(webMcpContract)}`);
+  }
 
   await evaluate(`(() => {
     window.__agentProofErrors = [];
@@ -163,7 +220,7 @@ try {
     throw new Error('Disposable board did not retain existing human content or enter Editing mode');
   }
 
-  const created = await evaluate(`(() => {
+  const created = await evaluate(`(async () => {
     const token = window.sabura.agent.read().editToken;
     const request = {
       requestId: 'e2e-create-story',
@@ -176,7 +233,8 @@ try {
         { type: 'connect_objects', connectorId: 'agent_bc', fromId: 'agent_b', toId: 'agent_c', routing: 'curved' }
       ]
     };
-    const result = window.sabura.agent.apply(request);
+    const editTool = (await document.modelContext.getTools()).find(tool => tool.name === 'sabura_edit_board');
+    const result = JSON.parse(await document.modelContext.executeTool(editTool, request));
     window.__agentCreateRequest = request;
     const connectorPath = document.querySelector('#elem-agent_ab path')?.getAttribute('d');
     return { result, connectorPath, historyLength: window.saburaApp.undoStack.length };
@@ -185,9 +243,10 @@ try {
     throw new Error(`Atomic creation failed: ${JSON.stringify(created)}`);
   }
 
-  const refined = await evaluate(`(() => {
+  const refined = await evaluate(`(async () => {
     const token = window.sabura.agent.read().editToken;
-    const result = window.sabura.agent.apply({
+    const editTool = (await document.modelContext.getTools()).find(tool => tool.name === 'sabura_edit_board');
+    const result = JSON.parse(await document.modelContext.executeTool(editTool, {
       requestId: 'e2e-refine-story',
       expectedEditToken: token,
       commands: [
@@ -199,7 +258,7 @@ try {
         { type: 'set_style', ids: ['agent_b'], updates: { fill: '#b2f2bb' } },
         { type: 'set_style', ids: ['agent_c'], updates: { fill: '#ffec99' } }
       ]
-    });
+    }));
     return {
       result,
       connectorPath: document.querySelector('#elem-agent_ab path')?.getAttribute('d'),
@@ -211,11 +270,18 @@ try {
     throw new Error('Atomic refinement or connector-follow behavior failed');
   }
 
-  const history = await evaluate(`(() => {
+  const history = await evaluate(`(async () => {
+    const tools = await document.modelContext.getTools();
     const beforeUndo = window.sabura.agent.read();
-    const undo = window.sabura.agent.undo({ requestId: 'e2e-undo', expectedEditToken: beforeUndo.editToken });
+    const undoTool = tools.find(tool => tool.name === 'sabura_undo');
+    const redoTool = tools.find(tool => tool.name === 'sabura_redo');
+    const undo = JSON.parse(await document.modelContext.executeTool(undoTool, {
+      requestId: 'e2e-undo', expectedEditToken: beforeUndo.editToken
+    }));
     const afterUndo = window.sabura.agent.read();
-    const redo = window.sabura.agent.redo({ requestId: 'e2e-redo', expectedEditToken: afterUndo.editToken });
+    const redo = JSON.parse(await document.modelContext.executeTool(redoTool, {
+      requestId: 'e2e-redo', expectedEditToken: afterUndo.editToken
+    }));
     const afterRedo = window.sabura.agent.read();
     return { undo, redo, afterUndo, afterRedo };
   })()`);
@@ -223,17 +289,18 @@ try {
     throw new Error('Agent Undo/Redo did not restore the atomic refinement');
   }
 
-  const invalid = await evaluate(`(() => {
+  const invalid = await evaluate(`(async () => {
     const before = window.sabura.agent.read();
     const historyLength = window.saburaApp.undoStack.length;
-    const result = window.sabura.agent.apply({
+    const editTool = (await document.modelContext.getTools()).find(tool => tool.name === 'sabura_edit_board');
+    const result = JSON.parse(await document.modelContext.executeTool(editTool, {
       requestId: 'e2e-invalid',
       expectedEditToken: before.editToken,
       commands: [
         { type: 'create_object', object: { id: 'agent_partial', type: 'rectangle', x: 0, y: 0, width: 80, height: 60 } },
         { type: 'connect_objects', connectorId: 'agent_invalid_edge', fromId: 'agent_partial', toId: 'missing_target' }
       ]
-    });
+    }));
     const after = window.sabura.agent.read();
     return {
       result,
@@ -247,18 +314,19 @@ try {
     throw new Error('Invalid batch was not fully atomic');
   }
 
-  const concurrency = await evaluate(`(() => {
+  const concurrency = await evaluate(`(async () => {
     const staleToken = window.sabura.agent.read().editToken;
     const themeSelect = document.getElementById('select-board-theme');
     themeSelect.value = 'blueprint';
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
     const afterHuman = window.sabura.agent.read();
-    const stale = window.sabura.agent.apply({
+    const editTool = (await document.modelContext.getTools()).find(tool => tool.name === 'sabura_edit_board');
+    const stale = JSON.parse(await document.modelContext.executeTool(editTool, {
       requestId: 'e2e-stale',
       expectedEditToken: staleToken,
       commands: [{ type: 'set_text', id: 'agent_a', text: 'Must not apply' }]
-    });
-    const retry = window.sabura.agent.apply(window.__agentCreateRequest);
+    }));
+    const retry = JSON.parse(await document.modelContext.executeTool(editTool, window.__agentCreateRequest));
     const final = window.sabura.agent.read();
     return {
       humanAdvancedToken: afterHuman.editToken.sequence > staleToken.sequence,
@@ -274,10 +342,15 @@ try {
     throw new Error('Stale-write protection or idempotent retry failed');
   }
 
-  const viewport = await evaluate(`(() => {
+  const viewport = await evaluate(`(async () => {
     const before = window.sabura.agent.read();
-    const focus = window.sabura.agent.focusObjects(['agent_a', 'agent_b', 'agent_c'], { padding: 90 });
-    const fit = window.sabura.agent.fitBoard();
+    const tools = await document.modelContext.getTools();
+    const focusTool = tools.find(tool => tool.name === 'sabura_focus_objects');
+    const fitTool = tools.find(tool => tool.name === 'sabura_fit_board');
+    const focus = JSON.parse(await document.modelContext.executeTool(focusTool, {
+      ids: ['agent_a', 'agent_b', 'agent_c'], padding: 90
+    }));
+    const fit = JSON.parse(await document.modelContext.executeTool(fitTool, {}));
     const after = window.sabura.agent.read();
     return {
       focus,
@@ -296,7 +369,8 @@ try {
       window.__agentSavedBlob = blob;
       return originalCreateObjectURL.call(URL, blob);
     };
-    const result = window.sabura.agent.saveCopy();
+    const saveTool = (await document.modelContext.getTools()).find(tool => tool.name === 'sabura_save_copy');
+    const result = JSON.parse(await document.modelContext.executeTool(saveTool, {}));
     const html = window.__agentSavedBlob ? await window.__agentSavedBlob.text() : null;
     return { result, html, liveDocument: window.sabura.agent.read().document };
   })()`);
@@ -336,6 +410,7 @@ try {
   console.log(JSON.stringify({
     success: true,
     apiVersion: initial.apiVersion,
+    webMcpShimContract: webMcpContract,
     existingHumanObjects: initial.initialObjectCount,
     atomicCreateHistoryEntries: created.historyLength,
     atomicRefineHistoryEntries: refined.historyLength - created.historyLength,

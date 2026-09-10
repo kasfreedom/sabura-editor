@@ -16,9 +16,11 @@ test('sabura.html build integrity and self-contained verification', () => {
   const content = fs.readFileSync(htmlPath, 'utf8');
   assert.ok(content.startsWith('<!DOCTYPE html>'));
   assert.ok(content.includes('<script type="application/json" id="sabura-document">'));
+  assert.ok(content.includes('<style id="sabura-runtime-style">'));
+  assert.ok(content.includes('<script id="sabura-runtime-script">'));
   assert.ok(content.includes('SaburaApp'));
   assert.ok(content.includes('id="sabura-vs-sprite"'), 'visual-system sprite must be embedded exactly once');
-  assert.equal((content.match(/id="sabura-vs-sprite"/g) || []).length, 1);
+  assert.equal((content.match(/<svg id="sabura-vs-sprite"/g) || []).length, 1);
   assert.ok(content.includes('id="sabura-vs-icon-edit"'));
   assert.ok(content.includes('id="sabura-vs-app-icon"'));
   assert.doesNotMatch(content, /id="icon-(?:edit|view|wheel)"/, 'generic package icon IDs must be namespaced');

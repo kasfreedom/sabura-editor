@@ -38,6 +38,404 @@ export const AGENT_PUBLIC_COMMAND_TYPES = Object.freeze([
 const PUBLIC_COMMAND_SET = new Set(AGENT_PUBLIC_COMMAND_TYPES);
 const REQUEST_CACHE_LIMIT = 64;
 
+const AGENT_EDIT_TOKEN_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    sessionId: { type: 'string', minLength: 1 },
+    sequence: { type: 'integer', minimum: 0 }
+  },
+  required: ['sessionId', 'sequence'],
+  additionalProperties: false
+});
+
+const ID_SCHEMA = Object.freeze({ type: 'string', minLength: 1 });
+const IDS_SCHEMA = Object.freeze({
+  type: 'array',
+  minItems: 1,
+  uniqueItems: true,
+  items: ID_SCHEMA
+});
+const NUMBER_SCHEMA = Object.freeze({ type: 'number' });
+const NON_NEGATIVE_NUMBER_SCHEMA = Object.freeze({ type: 'number', minimum: 0 });
+const UNIT_NUMBER_SCHEMA = Object.freeze({ type: 'number', minimum: 0, maximum: 1 });
+const EXTENSION_PATTERN = Object.freeze({ '^ext:': {} });
+
+const POINT_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: { x: NUMBER_SCHEMA, y: NUMBER_SCHEMA },
+  required: ['x', 'y'],
+  patternProperties: EXTENSION_PATTERN,
+  additionalProperties: false
+});
+
+const PATH_POINT_SCHEMA = Object.freeze({
+  oneOf: [
+    POINT_SCHEMA,
+    {
+      type: 'array',
+      prefixItems: [NUMBER_SCHEMA, NUMBER_SCHEMA],
+      minItems: 2,
+      maxItems: 2
+    }
+  ]
+});
+
+const PATH_POINTS_SCHEMA = Object.freeze({
+  type: 'array',
+  minItems: 2,
+  items: PATH_POINT_SCHEMA
+});
+
+const BOUNDS_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    x: NUMBER_SCHEMA,
+    y: NUMBER_SCHEMA,
+    width: NON_NEGATIVE_NUMBER_SCHEMA,
+    height: NON_NEGATIVE_NUMBER_SCHEMA
+  },
+  required: ['x', 'y', 'width', 'height'],
+  additionalProperties: false
+});
+
+const TEXT_STYLE_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    size: { type: 'string', enum: ['s', 'm', 'l', 'xl'] },
+    resolvedSize: { type: 'number', exclusiveMinimum: 0 },
+    fontFamily: { type: 'string', enum: ['hand', 'sans', 'serif', 'mono'] },
+    bold: { type: 'boolean' },
+    align: { type: 'string', enum: ['left', 'center', 'right'] },
+    color: { type: 'string' }
+  },
+  patternProperties: EXTENSION_PATTERN,
+  additionalProperties: false
+});
+
+const TYPOGRAPHY_UPDATES_SCHEMA = Object.freeze({
+  ...TEXT_STYLE_SCHEMA,
+  minProperties: 1
+});
+
+const STYLE_UPDATES_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    fill: { type: 'string' },
+    stroke: { type: 'string' },
+    strokeWidth: NON_NEGATIVE_NUMBER_SCHEMA,
+    strokeStyle: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+    opacity: UNIT_NUMBER_SCHEMA,
+    roughness: NON_NEGATIVE_NUMBER_SCHEMA,
+    curveStyle: { type: 'string', enum: ['sharp', 'curved'] },
+    closed: { type: 'boolean' },
+    startArrow: { type: 'boolean' },
+    endArrow: { type: 'boolean' }
+  },
+  minProperties: 1,
+  additionalProperties: false
+});
+
+const ANCHOR_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: { x: UNIT_NUMBER_SCHEMA, y: UNIT_NUMBER_SCHEMA },
+  required: ['x', 'y'],
+  patternProperties: EXTENSION_PATTERN,
+  additionalProperties: false
+});
+
+const ENDPOINT_SCHEMA = Object.freeze({
+  oneOf: [
+    {
+      type: 'object',
+      properties: { id: ID_SCHEMA, anchor: ANCHOR_SCHEMA },
+      required: ['id'],
+      patternProperties: EXTENSION_PATTERN,
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: { point: POINT_SCHEMA },
+      required: ['point'],
+      patternProperties: EXTENSION_PATTERN,
+      additionalProperties: false
+    }
+  ]
+});
+
+const COMMON_OBJECT_PROPERTIES = Object.freeze({
+  id: ID_SCHEMA,
+  rotation: NUMBER_SCHEMA,
+  fill: { type: 'string' },
+  stroke: { type: 'string' },
+  strokeWidth: NON_NEGATIVE_NUMBER_SCHEMA,
+  strokeStyle: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+  opacity: UNIT_NUMBER_SCHEMA,
+  roughness: NON_NEGATIVE_NUMBER_SCHEMA,
+  seed: { type: 'integer', minimum: 1, maximum: 2147483647 },
+  locked: { type: 'boolean' },
+  groupId: { type: ['string', 'null'] },
+  text: { type: 'string' },
+  textStyle: TEXT_STYLE_SCHEMA
+});
+
+function persistentObjectSchema(type, extraProperties, required = []) {
+  return {
+    type: 'object',
+    properties: {
+      ...COMMON_OBJECT_PROPERTIES,
+      type: Array.isArray(type) ? { type: 'string', enum: type } : { const: type },
+      ...extraProperties
+    },
+    required: ['id', 'type', ...required],
+    patternProperties: EXTENSION_PATTERN,
+    additionalProperties: false
+  };
+}
+
+const SPATIAL_PROPERTIES = Object.freeze({
+  x: NUMBER_SCHEMA,
+  y: NUMBER_SCHEMA,
+  width: { type: 'number', exclusiveMinimum: 0 },
+  height: { type: 'number', exclusiveMinimum: 0 }
+});
+
+const CREATE_OBJECT_SCHEMA = Object.freeze({
+  oneOf: [
+    persistentObjectSchema(
+      ['rectangle', 'ellipse', 'diamond', 'triangle'],
+      SPATIAL_PROPERTIES,
+      ['x', 'y', 'width', 'height']
+    ),
+    persistentObjectSchema('text', {
+      ...SPATIAL_PROPERTIES,
+      autoWidth: { type: 'boolean' },
+      autoHeight: { type: 'boolean' }
+    }, ['x', 'y', 'width', 'height']),
+    persistentObjectSchema('path', {
+      ...SPATIAL_PROPERTIES,
+      points: PATH_POINTS_SCHEMA,
+      closed: { type: 'boolean' },
+      curveStyle: { type: 'string', enum: ['sharp', 'curved'] },
+      startArrow: { type: 'boolean' },
+      endArrow: { type: 'boolean' }
+    }, ['x', 'y', 'width', 'height', 'points']),
+    persistentObjectSchema('connector', {
+      from: ENDPOINT_SCHEMA,
+      to: ENDPOINT_SCHEMA,
+      routing: { type: 'string', enum: ['straight', 'elbow', 'curved'] },
+      curveSide: { type: 'integer', enum: [-1, 1] },
+      curveDistance: { type: ['number', 'null'], minimum: 0 },
+      elbowOffset: { type: ['number', 'null'] },
+      startArrow: { type: 'boolean' },
+      endArrow: { type: 'boolean' },
+      stacking: { type: 'string', enum: ['front', 'back'] }
+    }, ['from', 'to'])
+  ]
+});
+
+const IMAGE_OBJECT_SCHEMA = Object.freeze(persistentObjectSchema('image', {
+  ...SPATIAL_PROPERTIES,
+  assetId: ID_SCHEMA,
+  fit: { type: 'string', enum: ['contain', 'cover'] }
+}, ['x', 'y', 'width', 'height', 'assetId']));
+
+const RASTER_ASSET_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    id: ID_SCHEMA,
+    type: { const: 'raster' },
+    data: { type: 'string', minLength: 1 },
+    mimeType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'] },
+    width: { type: 'number', exclusiveMinimum: 0, maximum: 16384 },
+    height: { type: 'number', exclusiveMinimum: 0, maximum: 16384 }
+  },
+  required: ['id', 'type', 'data', 'mimeType', 'width', 'height'],
+  patternProperties: EXTENSION_PATTERN,
+  additionalProperties: false
+});
+
+const THEME_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    name: { type: 'string' },
+    background: { type: 'string', minLength: 1 },
+    gridColor: { type: 'string' },
+    palette: { type: 'array', minItems: 1, items: { type: 'string' } },
+    defaultFill: { type: 'string' },
+    defaultStroke: { type: 'string' },
+    defaultStrokeWidth: NON_NEGATIVE_NUMBER_SCHEMA,
+    defaultOpacity: UNIT_NUMBER_SCHEMA,
+    defaultRoughness: NON_NEGATIVE_NUMBER_SCHEMA,
+    defaultFontFamily: { type: 'string', enum: ['hand', 'sans', 'serif', 'mono'] },
+    defaultFontSize: { type: 'string', enum: ['s', 'm', 'l', 'xl'] }
+  },
+  minProperties: 1,
+  patternProperties: EXTENSION_PATTERN,
+  additionalProperties: false
+});
+
+const CONNECTOR_CONFIG_PROPERTIES = Object.freeze({
+  routing: { type: 'string', enum: ['straight', 'elbow', 'curved'] },
+  curveSide: { type: 'integer', enum: [-1, 1] },
+  curveDistance: { type: ['number', 'null'], minimum: 0 },
+  elbowOffset: { type: ['number', 'null'] },
+  startArrow: { type: 'boolean' },
+  endArrow: { type: 'boolean' },
+  stacking: { type: 'string', enum: ['front', 'back'] }
+});
+
+const CONNECTOR_CREATION_PROPERTIES = Object.freeze({
+  ...CONNECTOR_CONFIG_PROPERTIES,
+  stroke: { type: 'string' },
+  strokeWidth: NON_NEGATIVE_NUMBER_SCHEMA,
+  strokeStyle: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+  opacity: UNIT_NUMBER_SCHEMA,
+  roughness: NON_NEGATIVE_NUMBER_SCHEMA
+});
+
+const ROTATION_ENTRY_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: { rotation: NUMBER_SCHEMA, x: NUMBER_SCHEMA, y: NUMBER_SCHEMA },
+  required: ['rotation'],
+  additionalProperties: false
+});
+
+const FREE_ENDPOINT_ENTRY_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: { from: POINT_SCHEMA, to: POINT_SCHEMA },
+  minProperties: 1,
+  additionalProperties: false
+});
+
+function commandSchema(type, properties, required, extra = {}) {
+  return {
+    type: 'object',
+    description: `A validated Sabura ${type} command.`,
+    properties: { type: { const: type }, ...properties },
+    required: ['type', ...required],
+    additionalProperties: false,
+    ...extra
+  };
+}
+
+export const AGENT_PUBLIC_COMMAND_SCHEMAS = Object.freeze({
+  create_object: commandSchema('create_object', {
+    object: CREATE_OBJECT_SCHEMA,
+    atIndex: { type: 'integer', minimum: 0 }
+  }, ['object']),
+  create_image: commandSchema('create_image', {
+    object: IMAGE_OBJECT_SCHEMA,
+    asset: RASTER_ASSET_SCHEMA,
+    atIndex: { type: 'integer', minimum: 0 }
+  }, ['object', 'asset']),
+  delete_objects: commandSchema('delete_objects', { ids: IDS_SCHEMA }, ['ids']),
+  move_objects: commandSchema('move_objects', { ids: IDS_SCHEMA, dx: NUMBER_SCHEMA, dy: NUMBER_SCHEMA }, ['ids', 'dx', 'dy']),
+  resize_object: commandSchema('resize_object', {
+    id: ID_SCHEMA,
+    bounds: BOUNDS_SCHEMA,
+    points: PATH_POINTS_SCHEMA,
+    scaleText: { type: 'boolean' },
+    textStyle: TEXT_STYLE_SCHEMA
+  }, ['id', 'bounds']),
+  set_style: commandSchema('set_style', { ids: IDS_SCHEMA, updates: STYLE_UPDATES_SCHEMA }, ['ids', 'updates']),
+  set_image_fit: commandSchema('set_image_fit', { id: ID_SCHEMA, fit: { type: 'string', enum: ['contain', 'cover'] } }, ['id', 'fit']),
+  set_image_opacity: commandSchema('set_image_opacity', { id: ID_SCHEMA, opacity: UNIT_NUMBER_SCHEMA }, ['id', 'opacity']),
+  set_typography: commandSchema('set_typography', { ids: IDS_SCHEMA, updates: TYPOGRAPHY_UPDATES_SCHEMA }, ['ids', 'updates']),
+  set_text: commandSchema('set_text', { id: ID_SCHEMA, text: { type: 'string' } }, ['id', 'text']),
+  change_shape: commandSchema('change_shape', {
+    id: ID_SCHEMA,
+    newType: { type: 'string', enum: ['rectangle', 'ellipse', 'diamond', 'triangle', 'text'] }
+  }, ['id', 'newType']),
+  group_objects: commandSchema('group_objects', { ids: IDS_SCHEMA, groupId: ID_SCHEMA, name: { type: 'string' } }, ['ids', 'groupId']),
+  ungroup_objects: commandSchema('ungroup_objects', { groupIds: IDS_SCHEMA }, ['groupIds']),
+  lock_objects: commandSchema('lock_objects', { ids: IDS_SCHEMA, locked: { type: 'boolean' } }, ['ids', 'locked']),
+  reorder_objects: commandSchema('reorder_objects', {
+    ids: IDS_SCHEMA,
+    action: { type: 'string', enum: ['front', 'back', 'forward', 'backward'] }
+  }, ['ids', 'action']),
+  align_objects: commandSchema('align_objects', {
+    ids: IDS_SCHEMA,
+    alignment: { type: 'string', enum: ['left', 'center', 'right', 'top', 'middle', 'bottom'] }
+  }, ['ids', 'alignment']),
+  distribute_objects: commandSchema('distribute_objects', {
+    ids: IDS_SCHEMA,
+    direction: { type: 'string', enum: ['horizontal', 'vertical'] }
+  }, ['ids', 'direction']),
+  connect_objects: commandSchema('connect_objects', {
+    connectorId: ID_SCHEMA,
+    fromId: ID_SCHEMA,
+    toId: ID_SCHEMA,
+    fromAnchor: ANCHOR_SCHEMA,
+    toAnchor: ANCHOR_SCHEMA,
+    ...CONNECTOR_CREATION_PROPERTIES
+  }, ['connectorId', 'fromId', 'toId']),
+  reconnect_connector: commandSchema('reconnect_connector', {
+    id: ID_SCHEMA,
+    endpoint: { type: 'string', enum: ['from', 'to'] },
+    target: ENDPOINT_SCHEMA
+  }, ['id', 'endpoint', 'target']),
+  configure_connector: commandSchema('configure_connector', {
+    id: ID_SCHEMA,
+    ...CONNECTOR_CONFIG_PROPERTIES
+  }, ['id']),
+  set_board_theme: commandSchema('set_board_theme', {
+    themeId: { type: 'string', enum: ['paper', 'blueprint', 'night', 'high-contrast'] },
+    theme: THEME_SCHEMA
+  }, [], { anyOf: [{ required: ['themeId'] }, { required: ['theme'] }] }),
+  set_title: commandSchema('set_title', { title: { type: 'string' } }, ['title']),
+  update_path_points: commandSchema('update_path_points', {
+    id: ID_SCHEMA,
+    points: PATH_POINTS_SCHEMA,
+    bounds: BOUNDS_SCHEMA
+  }, ['id', 'points']),
+  rotate_objects: commandSchema('rotate_objects', {
+    objects: {
+      type: 'object',
+      minProperties: 1,
+      additionalProperties: ROTATION_ENTRY_SCHEMA
+    },
+    freeEndpoints: {
+      type: 'object',
+      additionalProperties: FREE_ENDPOINT_ENTRY_SCHEMA
+    }
+  }, ['objects'])
+});
+
+/**
+ * Public JSON Schemas shared by live-agent discovery and the optional WebMCP
+ * adapter. The core command validator remains the authority for command fields
+ * and document-aware invariants.
+ */
+export const AGENT_COMMAND_INPUT_SCHEMA = Object.freeze({
+  oneOf: AGENT_PUBLIC_COMMAND_TYPES.map(type => AGENT_PUBLIC_COMMAND_SCHEMAS[type])
+});
+
+export const AGENT_EDIT_REQUEST_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    requestId: { type: 'string', minLength: 1, maxLength: 200 },
+    expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA,
+    commands: {
+      type: 'array',
+      minItems: 1,
+      items: AGENT_COMMAND_INPUT_SCHEMA
+    }
+  },
+  required: ['requestId', 'expectedEditToken', 'commands'],
+  additionalProperties: false
+});
+
+export const AGENT_HISTORY_REQUEST_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    requestId: { type: 'string', minLength: 1, maxLength: 200 },
+    expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA
+  },
+  required: ['requestId', 'expectedEditToken'],
+  additionalProperties: false
+});
+
 const COMMAND_SCHEMAS = Object.freeze({
   create_object: { required: ['object.id', 'object.type'] },
   create_image: { required: ['object.id', 'object.type=image', 'object.assetId', 'asset.id', 'asset.type=raster'] },
@@ -164,6 +562,8 @@ export class AgentApi {
       operations: ['describe', 'read', 'apply', 'undo', 'redo', 'fitBoard', 'focusObjects', 'saveCopy', 'subscribe'],
       supportedCommands: AGENT_PUBLIC_COMMAND_TYPES,
       commandSchemas: COMMAND_SCHEMAS,
+      editRequestSchema: AGENT_EDIT_REQUEST_SCHEMA,
+      historyRequestSchema: AGENT_HISTORY_REQUEST_SCHEMA,
       capabilities: {
         atomicBatches: true,
         optimisticConcurrency: true,

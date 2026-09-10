@@ -36,7 +36,7 @@ const html = fs.readFileSync(artifactPath, 'utf8');
 
 /** Extract CSS text from inside the real <style>...</style> element. */
 function extractCss(src) {
-  const m = src.match(/<style>([\s\S]*?)<\/style>/i);
+  const m = src.match(/<style\b[^>]*id=["']sabura-runtime-style["'][^>]*>([\s\S]*?)<\/style>/i);
   assert.ok(m, 'Could not extract CSS from HTML');
   return m[1];
 }
@@ -46,7 +46,7 @@ function extractCss(src) {
  * The seam script has type="application/json" so it will not match.
  */
 function extractJs(src) {
-  const m = src.match(/<script\s*>([\s\S]*?)<\/script>/i);
+  const m = src.match(/<script\b[^>]*id=["']sabura-runtime-script["'][^>]*>([\s\S]*?)<\/script>/i);
   assert.ok(m, 'Could not extract JS bundle from HTML');
   return m[1];
 }
@@ -59,7 +59,7 @@ function sha256(str) {
 
 test('1. AI contract appears before <style>', () => {
   const contractPos = html.indexOf('SABURA AI CONTRACT');
-  const stylePos = html.indexOf('<style>');
+  const stylePos = html.search(/<style\b/);
   assert.ok(contractPos >= 0, 'AI contract not found in sabura.html');
   assert.ok(stylePos >= 0, '<style> element not found in sabura.html');
   assert.ok(
@@ -73,7 +73,7 @@ test('1. AI contract appears before <style>', () => {
 test('2. Document seam appears after the contract and before <style>', () => {
   const contractPos = html.indexOf('SABURA AI CONTRACT');
   const seamPos = html.indexOf('<script type="application/json" id="sabura-document">');
-  const stylePos = html.indexOf('<style>');
+  const stylePos = html.search(/<style\b/);
   assert.ok(seamPos >= 0, 'Document seam not found in sabura.html');
   assert.ok(contractPos < seamPos, 'Contract must precede the document seam');
   assert.ok(seamPos < stylePos, 'Document seam must precede <style>');
@@ -561,6 +561,73 @@ test('19. Regression: synchronous repeated generateBoardFile calls produce ident
     assert.equal(extracted2.valid, true, 'Second generated document must be valid');
     assert.equal(extracted2.document.id, 'board_repeat');
     assert.equal(extracted2.document.objects['r1'].text, 'Repeat Object');
+  } finally {
+    globalThis.window = origWindow;
+    globalThis.document = origDocument;
+    globalThis.URL = origURL;
+    globalThis.Blob = origBlob;
+  }
+});
+
+test('20. Save Copy serializes the immutable canonical shell, never contaminated live DOM', () => {
+  const app = Object.create(SaburaApp.prototype);
+  app.doc = createDefaultDocument({ title: 'Canonical Save Boundary', id: 'board_canonical_save' });
+  app.loadErrors = [];
+  app.isCorrupted = false;
+  app.isSaving = false;
+  app.originalHtml = html;
+  app.exportBaseline = null;
+  app.status = 'Clean';
+  app.imageImportToken = 0;
+  app.pendingImageReader = null;
+  app.pendingImageDecode = null;
+  app.textEditor = null;
+  app.workspace = { cancelGesture: () => {} };
+  app.updateUI = () => {};
+
+  const capturedBlobs = [];
+  const origWindow = globalThis.window;
+  const origDocument = globalThis.document;
+  const origURL = globalThis.URL;
+  const origBlob = globalThis.Blob;
+
+  try {
+    globalThis.window = {};
+    const liveBody = {
+      innerHTML: '<aside id="foreign-save-copy-probe">must-not-be-saved</aside>',
+      appendChild(node) { node.parentNode = this; },
+      removeChild(node) { node.parentNode = null; }
+    };
+    globalThis.document = {
+      body: liveBody,
+      createElement: () => ({ click: () => {}, parentNode: liveBody })
+    };
+    Object.defineProperty(globalThis.document, 'documentElement', {
+      get() {
+        throw new Error('Save Copy must not read or clone the live document root');
+      }
+    });
+    globalThis.URL = {
+      createObjectURL(blob) {
+        capturedBlobs.push(blob.content);
+        return 'blob:canonical-save';
+      },
+      revokeObjectURL() {}
+    };
+    globalThis.Blob = class {
+      constructor(parts) {
+        this.content = parts.join('');
+        this.size = Buffer.byteLength(this.content, 'utf8');
+      }
+    };
+
+    const result = app.saveCopy();
+    assert.equal(result.success, true);
+    assert.equal(capturedBlobs.length, 1);
+    assert.doesNotMatch(capturedBlobs[0], /foreign-save-copy-probe|must-not-be-saved/);
+    assert.match(capturedBlobs[0], /id="sabura-runtime-style"/);
+    assert.match(capturedBlobs[0], /id="sabura-runtime-script"/);
+    assert.equal(extractDocumentFromHtml(capturedBlobs[0]).valid, true);
   } finally {
     globalThis.window = origWindow;
     globalThis.document = origDocument;

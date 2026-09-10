@@ -41,6 +41,8 @@ versioned [`window.sabura.agent` API](docs/agent-api.md). It exposes copied
 snapshots, atomic command batches, stale-edit detection, idempotent retries,
 undo/redo, viewport focus, and Save Copy through the editor's normal validation
 and history machinery. It does not introduce a server or network dependency.
+Browsers with native WebMCP support additionally discover the same capabilities
+as seven feature-detected tools; unsupported browsers continue unchanged.
 
 The persistent document format is documented in
 [`docs/canvas-v1-format.md`](docs/canvas-v1-format.md).

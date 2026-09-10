@@ -5,7 +5,69 @@
 import { canonicalJson, validateDocument, normalizeDocument, cloneDocument } from '../core/document.js';
 
 export const DOCUMENT_SEAM_ID = 'sabura-document';
+export const RUNTIME_STYLE_ID = 'sabura-runtime-style';
+export const RUNTIME_SCRIPT_ID = 'sabura-runtime-script';
+export const VISUAL_SPRITE_ID = 'sabura-vs-sprite';
 export const DOCUMENT_SCRIPT_REGEX = /<script\s+(?:type=["']application\/json["']\s+id=["']sabura-document["']|id=["']sabura-document["']\s+type=["']application\/json["'])>([\s\S]*?)<\/script>/i;
+
+/**
+ * Constructs the canonical self-contained Sabura shell from explicitly owned
+ * build/runtime fragments. Runtime UI DOM is deliberately not an input.
+ *
+ * @param {{
+ *   documentJson: string,
+ *   aiContractComment: string,
+ *   runtimeCss: string,
+ *   visualSystemSprite: string,
+ *   runtimeJs: string
+ * }} fragments
+ * @returns {string}
+ */
+export function createCanonicalHtmlShell(fragments) {
+  const {
+    documentJson,
+    aiContractComment,
+    runtimeCss,
+    visualSystemSprite,
+    runtimeJs
+  } = fragments || {};
+
+  const required = { documentJson, aiContractComment, runtimeCss, visualSystemSprite, runtimeJs };
+  for (const [name, value] of Object.entries(required)) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error(`Cannot construct canonical Sabura shell: missing ${name}`);
+    }
+  }
+  if (!aiContractComment.includes('SABURA AI CONTRACT')) {
+    throw new Error('Cannot construct canonical Sabura shell: invalid AI contract');
+  }
+  if (!visualSystemSprite.includes(`id="${VISUAL_SPRITE_ID}"`)) {
+    throw new Error('Cannot construct canonical Sabura shell: invalid visual-system sprite');
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en" data-ui-theme="system">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sabura - AI-First Offline Whiteboard</title>
+
+${aiContractComment}
+
+  <script type="application/json" id="${DOCUMENT_SEAM_ID}">
+${documentJson}
+  </script>
+
+  <!-- Opaque application runtime begins here. Do not read or modify. -->
+  <style id="${RUNTIME_STYLE_ID}">${runtimeCss}</style>
+</head>
+<body>
+  ${visualSystemSprite}
+  <div id="app"></div>
+  <script id="${RUNTIME_SCRIPT_ID}">${runtimeJs}</script>
+</body>
+</html>`;
+}
 
 /**
  * Extracts and validates the embedded Sabura document from an HTML string.

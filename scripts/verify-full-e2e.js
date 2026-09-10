@@ -3479,13 +3479,13 @@ console.log('\n--- Flow 31: AI Generator Interface ---');
 
 // Helper: extract CSS text from <style>...</style>
 function extractCssContent(htmlStr) {
-  const m = htmlStr.match(/<style>([\s\S]*?)<\/style>/i);
+  const m = htmlStr.match(/<style\b[^>]*id=["']sabura-runtime-style["'][^>]*>([\s\S]*?)<\/style>/i);
   if (!m) throw new Error('Flow 31: Could not extract CSS from HTML');
   return m[1];
 }
 // Helper: extract JS bundle from bare <script>...</script> (no type= attribute)
 function extractJsContent(htmlStr) {
-  const m = htmlStr.match(/<script\s*>([\s\S]*?)<\/script>/i);
+  const m = htmlStr.match(/<script\b[^>]*id=["']sabura-runtime-script["'][^>]*>([\s\S]*?)<\/script>/i);
   if (!m) throw new Error('Flow 31: Could not extract JS from HTML');
   return m[1];
 }
@@ -3625,6 +3625,47 @@ try {
     `,
     awaitPromise: false
   });
+
+  // Contaminate the live page, then exercise the actual Save Copy path. None of
+  // this runtime DOM may appear in the packaged file.
+  const saveCopyProbeResult = await evalInChrome(`(() => {
+    document.documentElement.setAttribute('data-foreign-save-copy-probe', 'html-probe');
+    document.body.classList.add('foreign-save-copy-body');
+    const probe = document.createElement('aside');
+    probe.id = 'foreign-save-copy-probe';
+    probe.setAttribute('data-secret', 'must-not-be-saved');
+    probe.innerHTML = '<style data-foreign-style>foreign-style-probe</style><span>foreign-body-probe</span>';
+    document.body.appendChild(probe);
+    window._lastSaburaBlob = null;
+    return window.sabura.saveCopy();
+  })()`);
+  if (!saveCopyProbeResult.success)
+    throw new Error('Flow 31: Save Copy failed during live-DOM contamination test: ' + saveCopyProbeResult.error);
+
+  let saveCopyProbeDataUrl = null;
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    saveCopyProbeDataUrl = await evalInChrome('window._lastSaburaBlob');
+    if (saveCopyProbeDataUrl) break;
+  }
+  if (!saveCopyProbeDataUrl)
+    throw new Error('Flow 31: Save Copy contamination Blob was not captured within 3 seconds');
+  const saveCopyProbeHtml = Buffer.from(saveCopyProbeDataUrl.split(',')[1], 'base64').toString('utf8');
+  for (const marker of ['foreign-save-copy-probe', 'foreign-save-copy-body', 'must-not-be-saved', 'foreign-style-probe', 'foreign-body-probe']) {
+    if (saveCopyProbeHtml.includes(marker)) {
+      throw new Error(`Flow 31: live DOM marker leaked into Save Copy output: ${marker}`);
+    }
+  }
+  const saveCopyProbeDoc = extractDocumentFromHtml(saveCopyProbeHtml);
+  if (!saveCopyProbeDoc.valid)
+    throw new Error('Flow 31: Save Copy contamination artifact contains an invalid document');
+  await evalInChrome(`(() => {
+    document.getElementById('foreign-save-copy-probe')?.remove();
+    document.documentElement.removeAttribute('data-foreign-save-copy-probe');
+    document.body.classList.remove('foreign-save-copy-body');
+    window._lastSaburaBlob = null;
+  })()`);
+  console.log('  ✓ 31h0. Save Copy excludes arbitrary live DOM, attributes, styles, and UI content');
 
   // (Re-run generateBoardFile synchronously with identical doc)
   const captureResult = await evalInChrome(`window.sabura.generateBoardFile({

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { minify } from 'terser';
 import { createDefaultDocument, createDefaultObject, canonicalJson, validateDocument } from '../src/core/document.js';
-import { extractDocumentFromHtml } from '../src/storage/file-packer.js';
+import { createCanonicalHtmlShell, extractDocumentFromHtml } from '../src/storage/file-packer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +38,7 @@ const moduleFiles = [
   'src/ui/help-modal.js',
   'src/ui/workspace.js',
   'src/agent-api.js',
+  'src/webmcp.js',
   'src/main.js'
 ];
 
@@ -273,32 +274,13 @@ function buildVisualSystemSprite() {
 }
 
 function generateHtml(css, bundledJs, serializedDoc, visualSystemSprite) {
-  return `<!DOCTYPE html>
-<html lang="en" data-ui-theme="system">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sabura - AI-First Offline Whiteboard</title>
-
-${AI_CONTRACT}
-
-  <script type="application/json" id="sabura-document">
-${serializedDoc}
-  </script>
-
-  <!-- Opaque application runtime begins here. Do not read or modify. -->
-  <style>
-${css}
-  </style>
-</head>
-<body>
-  ${visualSystemSprite}
-  <div id="app"></div>
-  <script>
-${bundledJs}
-  </script>
-</body>
-</html>`;
+  return createCanonicalHtmlShell({
+    documentJson: serializedDoc,
+    aiContractComment: AI_CONTRACT,
+    runtimeCss: `\n${css}\n  `,
+    visualSystemSprite,
+    runtimeJs: `\n${bundledJs}\n  `
+  });
 }
 
 async function build() {

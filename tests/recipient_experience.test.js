@@ -161,6 +161,15 @@ getOrCreateMockElement('app', 'div');
 getOrCreateMockElement('canvas-container', 'div');
 getOrCreateMockElement('laser-canvas', 'canvas');
 getOrCreateMockElement('btn-wheel-fab', 'button');
+const runtimeStyle = getOrCreateMockElement('sabura-runtime-style', 'style');
+runtimeStyle.textContent = 'body { margin: 0; }';
+const runtimeScript = getOrCreateMockElement('sabura-runtime-script', 'script');
+runtimeScript.textContent = 'window.__saburaTestRuntime = true;';
+const visualSprite = getOrCreateMockElement('sabura-vs-sprite', 'svg');
+visualSprite.outerHTML = '<svg id="sabura-vs-sprite"><defs></defs></svg>';
+const mockHead = {
+  childNodes: [{ nodeType: 8, textContent: ' SABURA AI CONTRACT\nTest contract.\n' }]
+};
 
 if (typeof window === 'undefined') {
   globalThis.window = {
@@ -177,6 +186,7 @@ if (typeof requestAnimationFrame === 'undefined') {
 if (typeof document === 'undefined') {
   globalThis.document = {
     activeElement: null,
+    head: mockHead,
     documentElement: createMockElement('html'),
     body: createMockElement('body'),
     createElement: (tag) => createMockElement(tag),

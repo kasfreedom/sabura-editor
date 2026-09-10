@@ -23,7 +23,16 @@ import {
 import { applyCommand, applyCommandBatch, validateCommand } from './core/commands.js';
 import { THEME_PRESETS, FONT_SIZES, RASTER_MIME_TYPES, MAX_IMAGE_SOURCE_BYTES, MAX_IMAGE_AXIS, MAX_IMAGE_PIXELS } from './core/types.js';
 import { resolveConnectorGeometry } from './core/geometry.js';
-import { packageHtmlWithDocument, triggerFileDownload, extractDocumentFromHtml, sanitizeFilenameTitle } from './storage/file-packer.js';
+import {
+  packageHtmlWithDocument,
+  triggerFileDownload,
+  extractDocumentFromHtml,
+  sanitizeFilenameTitle,
+  createCanonicalHtmlShell,
+  RUNTIME_STYLE_ID,
+  RUNTIME_SCRIPT_ID,
+  VISUAL_SPRITE_ID
+} from './storage/file-packer.js';
 import { Workspace } from './ui/workspace.js';
 import { ToolWheel } from './ui/wheel.js';
 import { TopBar } from './ui/topbar.js';
@@ -34,6 +43,7 @@ import { renderSaburaIcon } from './ui/wheel-icon-map.js';
 import { HelpModal } from './ui/help-modal.js';
 import { LaserPointer } from './renderer/laser.js';
 import { AgentApi } from './agent-api.js';
+import { registerSaburaWebMcp } from './webmcp.js';
 
 export class SaburaApp {
   constructor() {
@@ -72,7 +82,6 @@ export class SaburaApp {
   }
 
   initDocument() {
-    this.originalHtml = (typeof document !== 'undefined' && document.documentElement) ? document.documentElement.outerHTML : '';
     const seamScript = (typeof document !== 'undefined') ? document.getElementById('sabura-document') : null;
     if (!seamScript) {
       this.isCorrupted = true;
@@ -94,6 +103,14 @@ export class SaburaApp {
       const val = validateDocument(parsed, { verifyDigest: true });
       if (val.valid) {
         this.doc = normalizeDocument(parsed);
+        try {
+          this.originalHtml = this.captureCanonicalHtmlShell();
+        } catch (err) {
+          this.isCorrupted = true;
+          this.loadErrors = [err?.message || 'Canonical Sabura shell is unavailable'];
+          console.error('Fatal shell error:', err);
+          return;
+        }
         if (this.doc[REVISION_EXTENSION_KEY]) {
           this.exportBaseline = { ...this.doc[REVISION_EXTENSION_KEY] };
         } else {
@@ -113,6 +130,27 @@ export class SaburaApp {
       console.error('Failed to parse embedded document seam:', err);
       return;
     }
+  }
+
+  captureCanonicalHtmlShell() {
+    if (typeof document === 'undefined') {
+      throw new Error('Cannot construct canonical Sabura shell outside a browser document');
+    }
+
+    const contractNode = Array.from(document.head?.childNodes || []).find(node =>
+      node.nodeType === 8 && typeof node.textContent === 'string' && node.textContent.includes('SABURA AI CONTRACT')
+    );
+    const runtimeStyle = document.getElementById(RUNTIME_STYLE_ID);
+    const runtimeScript = document.getElementById(RUNTIME_SCRIPT_ID);
+    const visualSprite = document.getElementById(VISUAL_SPRITE_ID);
+
+    return createCanonicalHtmlShell({
+      documentJson: canonicalJson(this.doc),
+      aiContractComment: contractNode ? `<!--${contractNode.textContent}-->` : '',
+      runtimeCss: runtimeStyle?.textContent || '',
+      visualSystemSprite: visualSprite?.outerHTML || '',
+      runtimeJs: runtimeScript?.textContent || ''
+    });
   }
 
   renderCorruptedState() {
@@ -1243,19 +1281,10 @@ export class SaburaApp {
   }
 
   getCleanHtmlShell() {
-    const clone = document.documentElement.cloneNode(true);
-    clone.removeAttribute('class');
-    const body = clone.querySelector('body');
-    if (body) {
-      body.removeAttribute('class');
-      const appEl = body.querySelector('#app');
-      if (appEl) appEl.innerHTML = '';
-      const strayAnchors = body.querySelectorAll('a[download]');
-      for (const anchor of strayAnchors) {
-        anchor.remove();
-      }
+    if (!this.originalHtml) {
+      throw new Error('Canonical Sabura shell is unavailable');
     }
-    return '<!DOCTYPE html>\n' + clone.outerHTML;
+    return this.originalHtml;
   }
 
   saveCopy() {
@@ -1343,6 +1372,7 @@ export class SaburaApp {
 
   exposeApi() {
     if (!this.agentApi) this.agentApi = new AgentApi(this);
+    const agent = this.agentApi.publicApi();
     window.sabura = {
       isCorrupted: () => this.isCorrupted,
       getLoadErrors: () => [...this.loadErrors],
@@ -1399,7 +1429,8 @@ export class SaburaApp {
             return { success: false, errors: [...validation.errors] };
           }
 
-          // 2. Build clean shell — DOM clone excludes canvas SVG, selection, wheel, modal state
+          // 2. Use the immutable canonical shell captured from Sabura-owned fragments at boot.
+          //    The live runtime DOM is never a serialization input.
           const shell = this.getCleanHtmlShell();
 
           // 3. Ensure valid revision snapshot for the board file
@@ -1471,8 +1502,10 @@ export class SaburaApp {
         this.subscribers.add(listener);
         return () => this.subscribers.delete(listener);
       },
-      agent: this.agentApi.publicApi()
+      agent
     };
+    this.webMcpBridge?.dispose();
+    this.webMcpBridge = registerSaburaWebMcp(agent);
   }
 }
 
