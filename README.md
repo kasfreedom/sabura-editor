@@ -9,10 +9,11 @@ network connection is required.
 
 ## Try it
 
-1. Download [`sabura.html`](sabura.html).
-2. Open the file in Google Chrome.
-3. Choose **Edit**, or press `Q` to open the circular ToolWheel.
-4. Use **Save Copy** when you want a new portable revision.
+Use the [hosted editor](https://kasfreedom.github.io/sabura-editor/), or download
+[`sabura.html`](sabura.html) and open it in Google Chrome for fully offline use.
+
+Choose **Edit**, or press `Q` to open the circular ToolWheel. Use **Save Copy**
+when you want a new portable revision.
 
 Every saved copy contains its document, images, revision lineage, and the editor
 runtime. Your board stays local unless you choose to share the file.
