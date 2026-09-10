@@ -30,7 +30,7 @@ import {
   sanitizeFilenameTitle
 } from '../src/storage/file-packer.js';
 import { Workspace } from '../src/ui/workspace.js';
-import { ShortcutsCoordinator } from '../src/ui/shortcuts.js';
+import { getPlatform, ShortcutsCoordinator } from '../src/ui/shortcuts.js';
 import { TopBar } from '../src/ui/topbar.js';
 import { TextEditor } from '../src/ui/text-editor.js';
 import { SaburaApp } from '../src/main.js';
@@ -463,6 +463,7 @@ test('7. F-01: Presentation mode blocks editing routes and undo, restores UI and
     onUndo: () => app.undo(),
     onRedo: () => app.redo()
   });
+  const { isMac } = getPlatform();
 
   // 1. Enter Presentation
   app.enterPresentation();
@@ -474,8 +475,8 @@ test('7. F-01: Presentation mode blocks editing routes and undo, restores UI and
   // Attempt Undo via shortcut during presentation -> MUST BE BLOCKED
   shortcuts.onKeyDown({
     key: 'z',
-    metaKey: true,
-    ctrlKey: false,
+    metaKey: isMac,
+    ctrlKey: !isMac,
     shiftKey: false,
     preventDefault: () => {}
   });
@@ -496,8 +497,8 @@ test('7. F-01: Presentation mode blocks editing routes and undo, restores UI and
   // Now in editing mode, undo shortcut works
   shortcuts.onKeyDown({
     key: 'z',
-    metaKey: true,
-    ctrlKey: false,
+    metaKey: isMac,
+    ctrlKey: !isMac,
     shiftKey: false,
     preventDefault: () => {}
   });
