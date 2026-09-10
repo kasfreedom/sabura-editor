@@ -86,7 +86,7 @@ export async function bundleModules() {
 }
 
 function createSampleBoard() {
-  const doc = createDefaultDocument({ title: 'Welcome to Sabura' });
+  const doc = createDefaultDocument({ id: 'board_welcome', title: 'Welcome to Sabura' });
 
   // Add welcome shapes
   const titleBox = createDefaultObject('rectangle', {
@@ -99,6 +99,7 @@ function createSampleBoard() {
     stroke: '#1e1e1e',
     strokeWidth: 2,
     roughness: 1,
+    seed: 101,
     text: 'Sabura Whiteboard\nExcalidraw sketch feel + Concepts precision dial',
     textStyle: { size: 'm', resolvedSize: 18, fontFamily: 'hand', align: 'center', bold: true }
   }, doc.theme);
@@ -113,6 +114,7 @@ function createSampleBoard() {
     stroke: '#1971c2',
     strokeWidth: 2,
     roughness: 1,
+    seed: 102,
     text: 'Press Q for\nConcepts Wheel',
     textStyle: { size: 's', resolvedSize: 16, fontFamily: 'hand', align: 'center', bold: false }
   }, doc.theme);
@@ -127,6 +129,7 @@ function createSampleBoard() {
     stroke: '#2f9e44',
     strokeWidth: 2,
     roughness: 1,
+    seed: 103,
     text: '100% Offline\nSingle-File HTML',
     textStyle: { size: 's', resolvedSize: 15, fontFamily: 'hand', align: 'center', bold: false }
   }, doc.theme);
@@ -138,6 +141,7 @@ function createSampleBoard() {
     routing: 'curved',
     stroke: '#1e1e1e',
     strokeWidth: 2,
+    seed: 104,
     endArrow: true
   }, doc.theme);
 

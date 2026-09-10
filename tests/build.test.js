@@ -32,5 +32,11 @@ test('sabura.html build integrity and self-contained verification', () => {
   const extracted = extractDocumentFromHtml(content);
   assert.equal(extracted.valid, true, `Document seam validation errors: ${extracted.errors.join(', ')}`);
   assert.equal(extracted.document.schemaVersion, 'sabura/canvas/v1');
+  assert.equal(extracted.document.id, 'board_welcome', 'bundled sample board ID must be reproducible');
+  assert.deepEqual(
+    extracted.document.order.map(id => extracted.document.objects[id].seed),
+    [101, 102, 103, 104],
+    'bundled sample sketch seeds must be reproducible'
+  );
   assert.ok(Object.keys(extracted.document.objects).length > 0);
 });
