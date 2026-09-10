@@ -1,35 +1,70 @@
-# Sabura editor
+# Sabura
 
-This repository contains the offline Sabura visual-document editor and the
-self-contained `sabura.html` artifact.
+Sabura is a portable visual whiteboard that runs entirely from one HTML file.
+Open it, draw and connect ideas, present the board, then use **Save Copy** to
+create another self-contained document. No account, installation, server, or
+network connection is required.
 
-A Sabura HTML file is both the editable document and the runtime required to
-open it. Viewing, editing, presenting, and saving a local document must not
-depend on the CLI or collaboration service.
+![Sabura editor](docs/images/sabura-editor.png)
+
+## Try it
+
+1. Download [`sabura.html`](sabura.html).
+2. Open the file in Google Chrome.
+3. Choose **Edit**, or press `Q` to open the circular ToolWheel.
+4. Use **Save Copy** when you want a new portable revision.
+
+Every saved copy contains its document, images, revision lineage, and the editor
+runtime. Your board stays local unless you choose to share the file.
+
+## Highlights
+
+- One self-contained HTML document with no runtime dependencies or telemetry.
+- Reading, editing, presentation, fullscreen, undo, and redo modes.
+- Shapes, text, paths, connectors, groups, images, resize, and rotation.
+- Paper, blueprint, night, and high-contrast themes.
+- Deterministic document serialization and revision lineage.
+- Optional, versioned live-agent API for structured browser automation.
+- Runtime-size budget below 512 KiB, excluding embedded document content and assets.
+
+## Browser support
+
+Google Chrome is the primary release target and the browser used by the complete
+release verification suite. Sabura may work in other modern desktop browsers,
+but they are not currently part of the release gate.
+
+## Agent authoring
+
+Browser agents that can execute JavaScript in the loaded page can use the
+versioned [`window.sabura.agent` API](docs/agent-api.md). It exposes copied
+snapshots, atomic command batches, stale-edit detection, idempotent retries,
+undo/redo, viewport focus, and Save Copy through the editor's normal validation
+and history machinery. It does not introduce a server or network dependency.
+
+The persistent document format is documented in
+[`docs/canvas-v1-format.md`](docs/canvas-v1-format.md).
 
 ## Development
 
+Requirements: Node.js 22 or later and npm.
+
 ```sh
-npm install
+npm ci
 npm test
 npm run build
 ```
 
-The build writes `sabura.html` in the repository root. The implemented document
-format is described in `docs/canvas-v1-format.md`.
+The build produces `sabura.html` in the repository root and fails if the
+payload-free runtime reaches the 512 KiB limit. Before a release, maintainers
+also run the Chrome browser verification on macOS:
 
-Agents that can execute JavaScript in the loaded page can use the versioned
-[`window.sabura.agent` live-authoring API](docs/agent-api.md). It is an offline
-façade over the same command, validation, history, rendering, and Save Copy
-machinery used by the editor.
+```sh
+npm run test:e2e:chrome
+```
 
-Cross-product vision, strategy, and architecture live in the sibling
-`../product` repository.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution expectations and
+[`SECURITY.md`](SECURITY.md) for reporting security issues.
 
-## Design implementation handoff
+## License
 
-[011 — Graphite interface layout](docs/handoffs/011-graphite-interface/brief.md)
-records the approved visual direction, bundled reference previews, implementation
-boundaries, implementation status and verification checklist. The approved
-visual implementation is ready for independent review; read the brief and its
-latest implementation report before acting.
+Sabura is released under the [MIT License](LICENSE).

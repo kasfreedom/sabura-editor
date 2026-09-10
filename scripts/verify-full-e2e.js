@@ -10,7 +10,7 @@ const rootDir = path.resolve('.');
 const port = 8092;
 const chromeOnly = process.argv.includes('--chrome-only');
 const captureReviewEvidence = process.argv.includes('--capture-review-evidence');
-const reviewEvidenceDir = path.join(rootDir, 'docs/handoffs/011-graphite-interface/evidence');
+const reviewEvidenceDir = path.join(rootDir, 'artifacts/review-evidence');
 if (captureReviewEvidence) fs.mkdirSync(reviewEvidenceDir, { recursive: true });
 
 // 1. Build sabura.html before running tests

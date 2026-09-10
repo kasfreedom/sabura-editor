@@ -1,6 +1,6 @@
 /**
  * ai_interface.test.js
- * Tests for the AI-first whiteboard generator interface.
+ * Tests for the whiteboard's structured agent-authoring interface.
  *
  * Tests actual public behavior: build artifact structure, file-packer helpers,
  * validator, and CSS/JS content hash invariants.

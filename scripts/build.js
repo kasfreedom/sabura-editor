@@ -152,7 +152,7 @@ function createSampleBoard() {
 
 const AI_CONTRACT = `<!-- SABURA AI CONTRACT
 OVERVIEW
-  Sabura is an AI-first offline whiteboard. This file has two sections:
+  Sabura is a portable offline whiteboard with structured agent authoring. This file has two sections:
     1. A small, editable board document (sabura/canvas/v1 JSON) — readable and replaceable.
     2. An opaque application runtime (CSS + JS) — treat as a sealed black box.
   Stop reading at &lt;style&gt;. Do not read, reproduce, or modify anything from &lt;style&gt; onward.

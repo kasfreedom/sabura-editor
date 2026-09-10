@@ -1,12 +1,17 @@
 {
   "name": "sabura",
   "version": "1.0.0",
-  "description": "AI-first, offline whiteboard self-contained in a single HTML file",
+  "description": "Portable, offline visual whiteboard in one self-contained HTML file",
+  "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test tests/*.test.js",
     "build": "node scripts/build.js",
-    "test:agent-browser": "node scripts/verify-agent-api-e2e.js"
+    "test:agent-browser": "node scripts/verify-agent-api-e2e.js",
+    "test:e2e:chrome": "node scripts/verify-full-e2e.js --chrome-only"
   },
   "keywords": [
     "whiteboard",
@@ -14,10 +19,19 @@
     "offline",
     "single-file",
     "canvas",
-    "ai-first"
+    "agent-api",
+    "portable"
   ],
-  "author": "",
+  "author": "Kassem Abdallah",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kasfreedom/sabura-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kasfreedom/sabura-editor/issues"
+  },
+  "homepage": "https://github.com/kasfreedom/sabura-editor#readme",
   "devDependencies": {
     "terser": "^5.51.2"
   }
