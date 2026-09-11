@@ -18,6 +18,13 @@ when you want a new portable revision.
 Every saved copy contains its document, images, revision lineage, and the editor
 runtime. Your board stays local unless you choose to share the file.
 
+## Example board
+
+Explore the [Knowledge Graphs example](https://kasfreedom.github.io/sabura-editor/examples/knowledge-graphs.html)
+to see a larger connected visual story made with Sabura. You can also
+[download the self-contained HTML file](examples/knowledge-graphs.html) and open
+it fully offline.
+
 ## Highlights
 
 - One self-contained HTML document with no runtime dependencies or telemetry.
