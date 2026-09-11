@@ -6,6 +6,8 @@
 import { THEME_PRESETS } from '../core/types.js';
 import { renderSaburaIcon } from './wheel-icon-map.js';
 
+const SABURA_PROJECT_URL = 'https://kasfreedom.github.io/sabura-editor/';
+
 function escapeXml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -67,7 +69,9 @@ export class TopBar {
       this.barEl.innerHTML = `
         <div class="topbar-left">
           <div class="brand-title">
-            <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
+            <a class="sabura-vs-app-link" href="${SABURA_PROJECT_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open Sabura website" title="Open Sabura website">
+              <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
+            </a>
             <span class="brand-name">Sabura</span>
             <span class="doc-title" title="Board Title">${safeTitle}</span>
           </div>
@@ -122,7 +126,9 @@ export class TopBar {
     this.barEl.innerHTML = `
       <div class="topbar-left">
         <div class="brand-title">
-          <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
+          <a class="sabura-vs-app-link" href="${SABURA_PROJECT_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open Sabura website" title="Open Sabura website">
+            <svg class="sabura-vs-app-mark" viewBox="0 0 1024 1024" role="img" aria-label="${safeAppIdentity}" title="${safeAppIdentity}" focusable="false"><use href="#sabura-vs-app-icon"></use></svg>
+          </a>
           <span class="brand-name">Sabura</span>
           <span class="doc-title" title="Board Title">${safeTitle}</span>
         </div>

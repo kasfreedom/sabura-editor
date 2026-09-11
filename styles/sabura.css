@@ -924,6 +924,18 @@ body.in-presentation {
   overflow: visible;
 }
 
+.sabura-vs-app-link {
+  display: flex;
+  flex: 0 0 auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sabura-vs-app-link:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
 .sabura-topbar,
 .wheel-trigger-fab,
 .zoom-help-toolbar {

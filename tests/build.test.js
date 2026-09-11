@@ -26,9 +26,14 @@ test('sabura.html build integrity and self-contained verification', () => {
   assert.doesNotMatch(content, /id="icon-(?:edit|view|wheel)"/, 'generic package icon IDs must be namespaced');
   assert.doesNotMatch(content, /class="(?:line|ghost)"/, 'generic package SVG classes must be namespaced');
 
-  // Ensure zero external network URLs or CDNs
+  // Informational links are allowed, but the offline runtime must not acquire
+  // any other external URL or network-loaded script, style, font, or image.
   const matches = content.match(/https?:\/\/[^"'\s]+/g) || [];
-  assert.deepEqual(matches, [], `Expected 0 external URLs in offline bundle, found: ${matches.join(', ')}`);
+  const allowedLinks = new Set(['https://kasfreedom.github.io/sabura-editor/']);
+  const unexpectedUrls = matches.filter(url => !allowedLinks.has(url));
+  assert.deepEqual(unexpectedUrls, [], `Unexpected external URLs in offline bundle: ${unexpectedUrls.join(', ')}`);
+  assert.doesNotMatch(content, /<(?:script|img)[^>]+src=["']https?:\/\//i);
+  assert.doesNotMatch(content, /<link[^>]+href=["']https?:\/\//i);
 
   // Extract embedded document
   const extracted = extractDocumentFromHtml(content);

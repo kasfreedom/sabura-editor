@@ -110,6 +110,7 @@ test('topbar preserves complete controls while using local icons and pressed sem
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
   assert.match(html, /href="#sabura-vs-app-icon"/);
+  assert.match(html, /class="sabura-vs-app-link"[^>]*href="https:\/\/kasfreedom\.github\.io\/sabura-editor\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*aria-label="Open Sabura website"/);
   assert.match(html, /class="sabura-vs-app-mark"[^>]*role="img"[^>]*aria-label="Sabura — Visual &amp; system"[^>]*title="Sabura — Visual &amp; system"/);
   assert.match(html, /id="btn-grid-visible"[^>]*aria-pressed="true"/);
   assert.match(html, /id="btn-grid-snap"[^>]*aria-pressed="false"/);
@@ -122,6 +123,7 @@ test('topbar preserves complete controls while using local icons and pressed sem
   assert.doesNotMatch(html, /id="btn-present" class="[^"]*primary/);
 
   topbar.update(doc, 'Changed', 'light', false, true, 'reading');
+  assert.match(container.child.innerHTML, /class="sabura-vs-app-link"[^>]*href="https:\/\/kasfreedom\.github\.io\/sabura-editor\/"/);
   assert.match(container.child.innerHTML, /class="sabura-vs-app-mark"[^>]*aria-label="Sabura — Visual &amp; system"[^>]*title="Sabura — Visual &amp; system"/);
   assert.match(container.child.innerHTML, /class="status-region status-badge"[^>]*data-status="Changed"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(container.child.innerHTML, /id="btn-present" class="topbar-btn"/);
