@@ -4,6 +4,20 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- Color fields in documents and commands are validated against a strict color allowlist, and the
+  renderer and ToolWheel escape every document value they place in markup. This closes a script
+  injection path through crafted colors, palette entries, and object IDs.
+- IDs that name `Object.prototype` members (such as `__proto__` and `constructor`) are rejected in
+  documents and commands, so they can no longer pollute the global prototype or pass reference checks.
+
+### Fixed
+
+- Save Copy no longer corrupts boards whose text contains `$'`, `` $` ``, `$&`, or `$$`.
+
 ## [1.0.0] - 2026-09-10
 
 ### Added

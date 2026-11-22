@@ -50,3 +50,20 @@ test('file-packer handles special characters and quotes safely', () => {
   assert.equal(extractResult.valid, true);
   assert.equal(extractResult.document.objects['r1'].text, '</script><div class="danger">alert</div>');
 });
+
+test('file-packer preserves $-replacement patterns in document text (regression)', () => {
+  const baseHtml = `<html><head></head><body><script type="application/json" id="sabura-document">{}</script><script>app()</script></body></html>`;
+  const doc = createDefaultDocument({ title: "Price $& $' $` $$ $1" });
+  const text = "costs $' and $` and $& and $$";
+  doc.objects.r1 = createDefaultObject('rectangle', { id: 'r1', text });
+  doc.order = ['r1'];
+
+  const packed = packageHtmlWithDocument(baseHtml, doc);
+  assert.equal(packed.success, true);
+  assert.ok(packed.html.endsWith('<script>app()</script></body></html>'));
+
+  const extracted = extractDocumentFromHtml(packed.html);
+  assert.equal(extracted.valid, true, JSON.stringify(extracted.errors));
+  assert.equal(extracted.document.objects.r1.text, text);
+  assert.equal(extracted.document.title, "Price $& $' $` $$ $1");
+});

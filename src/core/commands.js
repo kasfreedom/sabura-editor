@@ -8,6 +8,7 @@ import {
   createDefaultObject,
   generateId,
   generateSeed,
+  isReservedId,
   validateDocument,
   CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS,
   CONNECTOR_ENDPOINT_POINT_ALLOWED_FIELDS,
@@ -18,6 +19,41 @@ import {
 } from './document.js';
 import { alignObjects, distributeObjects, measureText, resolveConnectorGeometry } from './geometry.js';
 import { mapPresetThemeColor } from './theme-colors.js';
+import { isSafeColor } from './color.js';
+
+const ID_FIELD = /^(?:id|ids|order|[A-Za-z]+Ids?)$/;
+const COLOR_FIELDS = new Set(['fill', 'stroke', 'color', 'background', 'gridColor', 'defaultFill', 'defaultStroke', 'palette']);
+
+/**
+ * Walks a command payload and reports values that must never reach the document:
+ * IDs or record keys naming Object.prototype members, and color fields that are not
+ * plain color strings. Applies uniformly to every command type, including history
+ * restore commands and nested batches, so new command types are covered by default.
+ */
+function collectPayloadSafetyErrors(value, path, errors, fieldName = '') {
+  if (typeof value === 'string') {
+    if (ID_FIELD.test(fieldName) && isReservedId(value)) {
+      errors.push(`${path} uses reserved ID "${value}"`);
+    }
+    if (COLOR_FIELDS.has(fieldName) && !isSafeColor(value)) {
+      errors.push(`${path} must be a valid color`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => collectPayloadSafetyErrors(item, `${path}[${i}]`, errors, fieldName));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const key of Object.keys(value)) {
+      if (isReservedId(key)) {
+        errors.push(`${path} contains reserved key "${key}"`);
+        continue;
+      }
+      collectPayloadSafetyErrors(value[key], `${path}.${key}`, errors, key);
+    }
+  }
+}
 
 export const SUPPORTED_COMMAND_TYPES = new Set([
   'create_object',
@@ -412,6 +448,10 @@ export function validateCommand(cmd, doc = null) {
         }
       }
     }
+  }
+
+  if (cmd.type !== 'batch') {
+    collectPayloadSafetyErrors(cmd, cmd.type, errors);
   }
 
   return { valid: errors.length === 0, errors };

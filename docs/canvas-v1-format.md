@@ -431,6 +431,22 @@ Objects associate with a group by matching `object.groupId` with an entry in the
 | `closed` | Path | No | `false` |
 | `curveStyle` | Path | No | `"sharp"` |
 
+### Color values
+
+Every color field (`fill`, `stroke`, `textStyle.color`, and the theme's `background`, `gridColor`,
+`defaultFill`, `defaultStroke`, and `palette` entries) must be one of the following, at most 64 characters long:
+
+- hex: `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa`;
+- a bare keyword of letters only: `none`, `transparent`, `currentColor`, or a CSS named color such as `red`;
+- `rgb()`, `rgba()`, `hsl()`, or `hsla()` with numeric arguments only.
+
+Other values, including `url(...)`, `var(...)`, and anything containing quotes, `<`, `>`, or `;`, are rejected.
+
+### Reserved identifiers
+
+Object, group, and asset IDs must not be the name of an `Object.prototype` member
+(for example `__proto__`, `constructor`, `toString`, `hasOwnProperty`). Documents and commands that use one are rejected.
+
 ---
 
 ## 5. Extension Rules (`ext:*`)

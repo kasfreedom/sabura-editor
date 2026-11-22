@@ -19,6 +19,7 @@ const rootDir = path.resolve(__dirname, '..');
 // Source files in dependency order
 const moduleFiles = [
   'src/core/types.js',
+  'src/core/markup.js',
   'src/core/color.js',
   'src/core/theme-colors.js',
   'src/core/geometry.js',

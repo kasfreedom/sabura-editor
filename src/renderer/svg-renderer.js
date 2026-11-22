@@ -3,22 +3,12 @@
  * and runtime interaction overlays (selection, handles, guides).
  */
 
+import { escapeXml } from '../core/markup.js';
 import { generateSketchPath, sketchLine, generateClosedFillPath } from '../core/sketch.js';
 import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox } from '../core/geometry.js';
 import { FONT_FAMILIES } from '../core/types.js';
 import { resolveContrastColor } from '../core/color.js';
 
-/**
- * Escapes XML/HTML text.
- */
-function escapeXml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
 function safeSvgId(value) {
   // Encode every code point, rather than replacing characters, so distinct
@@ -53,11 +43,11 @@ function stablePigmentOffset(obj, layerIndex, amplitude) {
 export function renderPigmentFill(obj, fillPath, fill, themeId) {
   const profile = getVisualThemeProfile(themeId);
   if (!profile?.pigment) {
-    return `<path d="${fillPath}" fill="${fill}" fill-opacity="1.0" stroke="none" />`;
+    return `<path d="${fillPath}" fill="${escapeXml(fill)}" fill-opacity="1.0" stroke="none" />`;
   }
   return profile.layerOpacity.map((layerOpacity, layerIndex) => {
     const offset = stablePigmentOffset(obj, layerIndex, profile.amplitude);
-    return `<path d="${fillPath}" fill="${fill}" fill-opacity="${layerOpacity}" stroke="none" transform="translate(${offset.x} ${offset.y})" data-sabura-vs-pigment-layer="${layerIndex + 1}" />`;
+    return `<path d="${fillPath}" fill="${escapeXml(fill)}" fill-opacity="${layerOpacity}" stroke="none" transform="translate(${offset.x} ${offset.y})" data-sabura-vs-pigment-layer="${layerIndex + 1}" />`;
   }).join('');
 }
 
@@ -75,7 +65,7 @@ function renderArrowhead(tipX, tipY, fromX, fromY, size = 14, stroke = '#1e1e1e'
   const ry = tipY + Math.sin(rightAngle) * size;
 
   if (!isSketch) {
-    return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} L ${tipX.toFixed(1)} ${tipY.toFixed(1)} L ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+    return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} L ${tipX.toFixed(1)} ${tipY.toFixed(1)} L ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
   }
 
   // Hand-drawn sketchy arrowhead wings with subtle curve
@@ -84,7 +74,7 @@ function renderArrowhead(tipX, tipY, fromX, fromY, size = 14, stroke = '#1e1e1e'
   const mxR = (rx + tipX) / 2 - Math.sin(angle) * 1.5;
   const myR = (ry + tipY) / 2 + Math.cos(angle) * 1.5;
 
-  return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} Q ${mxL.toFixed(1)} ${myL.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)} Q ${mxR.toFixed(1)} ${myR.toFixed(1)} ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+  return `<path d="M ${lx.toFixed(1)} ${ly.toFixed(1)} Q ${mxL.toFixed(1)} ${myL.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)} Q ${mxR.toFixed(1)} ${myR.toFixed(1)} ${rx.toFixed(1)} ${ry.toFixed(1)}" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
 }
 
 /**
@@ -141,14 +131,14 @@ export function renderSvgScene(doc, runtime) {
     out.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
-        <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${theme.gridColor || 'rgba(56, 189, 248, 0.15)'}" stroke-width="0.8" />
+        <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${escapeXml(theme.gridColor || 'rgba(56, 189, 248, 0.15)')}" stroke-width="0.8" />
       </pattern>
     `);
   } else if (theme.id === 'paper') {
     out.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
-        <circle cx="${1.35 * camera.zoom}" cy="${1.05 * camera.zoom}" r="${1.05 * Math.min(1.35, Math.max(0.65, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
+        <circle cx="${1.35 * camera.zoom}" cy="${1.05 * camera.zoom}" r="${1.05 * Math.min(1.35, Math.max(0.65, camera.zoom))}" fill="${escapeXml(theme.gridColor || 'rgba(0,0,0,0.08)')}" />
       </pattern>
       <pattern id="sabura-vs-paper-grain" width="37" height="31" patternUnits="userSpaceOnUse">
         <path d="M2 8h7M21 25h5M31 5h3" stroke="#7c7264" stroke-opacity="0.025" stroke-width="0.55" />
@@ -160,14 +150,14 @@ export function renderSvgScene(doc, runtime) {
     out.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
-        <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${theme.gridColor || 'rgba(0,0,0,0.08)'}" />
+        <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${escapeXml(theme.gridColor || 'rgba(0,0,0,0.08)')}" />
       </pattern>
     `);
   }
   out.push('</defs>');
 
   // Background rect with grid pattern
-  out.push(`<rect width="100%" height="100%" fill="${theme.background}" />`);
+  out.push(`<rect width="100%" height="100%" fill="${escapeXml(theme.background)}" />`);
   if (visualProfile?.paperTexture) {
     out.push('<rect width="100%" height="100%" fill="url(#sabura-vs-paper-grain)" pointer-events="none" />');
   }
@@ -219,7 +209,7 @@ export function renderSvgScene(doc, runtime) {
 
   // Render connector draft if in progress
   if (connectorDraft) {
-    out.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${theme.defaultStroke}" stroke-width="2" stroke-dasharray="4,4" />`);
+    out.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${escapeXml(theme.defaultStroke)}" stroke-width="2" stroke-dasharray="4,4" />`);
   }
 
   // Render runtime snap guides
@@ -281,13 +271,13 @@ export function renderObject(doc, obj, isSelected = false) {
   const rotAttr = rot !== 0 ? ` transform="rotate(${rot} ${cx} ${cy})"` : '';
 
   let markup = [];
-  markup.push(`<g id="elem-${obj.id}" data-id="${obj.id}" opacity="${opacity}"${rotAttr}>`);
+  markup.push(`<g id="elem-${escapeXml(obj.id)}" data-id="${escapeXml(obj.id)}" opacity="${opacity}"${rotAttr}>`);
 
   if (obj.type === 'connector') {
     const geom = resolveConnectorGeometry(doc, obj);
     let pathD = geom.path;
 
-    markup.push(`<path d="${pathD}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+    markup.push(`<path d="${pathD}" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
 
     // Arrowheads
     if (obj.endArrow && geom.points.length >= 2) {
@@ -342,7 +332,7 @@ export function renderObject(doc, obj, isSelected = false) {
       const totalHeight = (lines.length - 1) * lineHeight + fontSize;
       const startY = obj.y + Math.max(0, (obj.height - totalHeight) / 2) + fontSize * 0.85;
 
-      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${fillCol}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${escapeXml(fillCol)}" text-anchor="${textAnchor}" style="user-select: none;">`);
       for (let i = 0; i < lines.length; i++) {
         markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
       }
@@ -368,7 +358,7 @@ export function renderObject(doc, obj, isSelected = false) {
         : obj;
       const strokePath = generateSketchPath(strokeObject);
       if (strokePath) {
-        markup.push(`<path d="${strokePath}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
+        markup.push(`<path d="${strokePath}" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`);
       }
     }
 
@@ -424,7 +414,7 @@ export function renderObject(doc, obj, isSelected = false) {
         textX = obj.x + obj.width - 12;
       }
 
-      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}" style="user-select: none;">`);
+      markup.push(`<text x="${textX}" y="${startY}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${fontWeight}" fill="${escapeXml(textColor)}" text-anchor="${textAnchor}" style="user-select: none;">`);
       for (let i = 0; i < lines.length; i++) {
         markup.push(`<tspan x="${textX}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
       }

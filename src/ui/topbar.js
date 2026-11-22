@@ -3,19 +3,12 @@
  * Supports distinct Reading mode (clean reading chrome) and Editing mode.
  */
 
+import { escapeXml } from '../core/markup.js';
 import { THEME_PRESETS } from '../core/types.js';
 import { renderSaburaIcon } from './wheel-icon-map.js';
 
 const SABURA_PROJECT_URL = 'https://kasfreedom.github.io/sabura-editor/';
 
-function escapeXml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 export class TopBar {
   constructor(containerElement, callbacks) {

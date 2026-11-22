@@ -133,7 +133,9 @@ export function packageHtmlWithDocument(htmlShell, doc) {
     };
   }
 
-  const updatedHtml = htmlShell.replace(DOCUMENT_SCRIPT_REGEX, seamReplacement);
+  // A replacer function keeps `$&`, `$'`, `` $` `` and `$$` in document text literal;
+  // a replacement string would expand them as substitution patterns.
+  const updatedHtml = htmlShell.replace(DOCUMENT_SCRIPT_REGEX, () => seamReplacement);
   return {
     success: true,
     html: updatedHtml

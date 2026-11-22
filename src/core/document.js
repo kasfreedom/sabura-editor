@@ -18,6 +18,7 @@ import {
   STROKE_STYLES
 } from './types.js';
 import { measureText } from './geometry.js';
+import { isSafeColor } from './color.js';
 import {
   REVISION_EXTENSION_KEY,
   REVISION_ALLOWED_FIELDS,
@@ -40,6 +41,26 @@ export {
   validateRevisionMetadata,
   transitionRevision
 };
+
+/**
+ * Names inherited from Object.prototype. Objects, groups and assets live in plain-object maps,
+ * so an ID such as "__proto__" or "constructor" would resolve to an inherited member instead of
+ * a record and could mutate the global prototype. Such IDs are therefore never valid.
+ */
+const RESERVED_IDS = new Set(Object.getOwnPropertyNames(Object.prototype));
+
+/**
+ * @param {unknown} id
+ * @returns {boolean} true when `id` is a string that names an Object.prototype member.
+ */
+export function isReservedId(id) {
+  return typeof id === 'string' && RESERVED_IDS.has(id);
+}
+
+/** Own-property record lookup that never falls through to the prototype chain. */
+function hasRecord(map, id) {
+  return Boolean(map) && typeof id === 'string' && Object.hasOwn(map, id) && Boolean(map[id]);
+}
 
 /**
  * Generate a random stable alphanumeric ID.
@@ -549,7 +570,7 @@ function validateConnectorEndpoint(endpoint, endpointName, objId, doc, errors) {
     checkUnknownProperties(endpoint, CONNECTOR_ENDPOINT_ID_ALLOWED_FIELDS, `connector "${objId}" ${endpointName}`, errors);
     if (typeof endpoint.id !== 'string' || !endpoint.id.trim()) {
       errors.push(`Connector "${objId}" ${endpointName}.id must be a non-empty string`);
-    } else if (!doc.objects || !doc.objects[endpoint.id]) {
+    } else if (!hasRecord(doc.objects, endpoint.id)) {
       errors.push(`Connector "${objId}" ${endpointName} references non-existent object ID: "${endpoint.id}"`);
     }
 
@@ -626,15 +647,23 @@ export function validateDocument(doc, options = {}) {
     }
     if (typeof doc.theme.background !== 'string' || !doc.theme.background.trim()) {
       errors.push('Theme background must be a valid non-empty string');
+    } else if (!isSafeColor(doc.theme.background)) {
+      errors.push('Theme background must be a valid color');
     }
     if (doc.theme.gridColor !== undefined && typeof doc.theme.gridColor !== 'string') {
       errors.push('Theme gridColor must be a string');
+    } else if (doc.theme.gridColor !== undefined && !isSafeColor(doc.theme.gridColor)) {
+      errors.push('Theme gridColor must be a valid color');
     }
     if (doc.theme.defaultFill !== undefined && typeof doc.theme.defaultFill !== 'string') {
       errors.push('Theme defaultFill must be a string');
+    } else if (doc.theme.defaultFill !== undefined && !isSafeColor(doc.theme.defaultFill)) {
+      errors.push('Theme defaultFill must be a valid color');
     }
     if (doc.theme.defaultStroke !== undefined && typeof doc.theme.defaultStroke !== 'string') {
       errors.push('Theme defaultStroke must be a string');
+    } else if (doc.theme.defaultStroke !== undefined && !isSafeColor(doc.theme.defaultStroke)) {
+      errors.push('Theme defaultStroke must be a valid color');
     }
     if (!Array.isArray(doc.theme.palette) || doc.theme.palette.length === 0) {
       errors.push('Theme palette must be a non-empty array of strings');
@@ -642,6 +671,8 @@ export function validateDocument(doc, options = {}) {
       for (let i = 0; i < doc.theme.palette.length; i++) {
         if (typeof doc.theme.palette[i] !== 'string') {
           errors.push(`Theme palette entry at index ${i} must be a string`);
+        } else if (!isSafeColor(doc.theme.palette[i])) {
+          errors.push(`Theme palette entry at index ${i} must be a valid color`);
         }
       }
     }
@@ -667,6 +698,10 @@ export function validateDocument(doc, options = {}) {
     errors.push('Document groups must be a key-value record');
   } else {
     for (const [groupId, group] of Object.entries(doc.groups)) {
+      if (isReservedId(groupId)) {
+        errors.push(`Group ID "${groupId}" is reserved and cannot be used`);
+        continue;
+      }
       if (!group || typeof group !== 'object' || Array.isArray(group)) {
         errors.push(`Group "${groupId}" must be an object`);
         continue;
@@ -689,6 +724,10 @@ export function validateDocument(doc, options = {}) {
     errors.push('Document assets must be a key-value record');
   } else {
     for (const [assetId, asset] of Object.entries(doc.assets)) {
+      if (isReservedId(assetId)) {
+        errors.push(`Asset ID "${assetId}" is reserved and cannot be used`);
+        continue;
+      }
       if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
         errors.push(`Asset "${assetId}" must be an object`);
         continue;
@@ -726,6 +765,10 @@ export function validateDocument(doc, options = {}) {
     errors.push('Document objects must be a key-value record');
   } else {
     for (const [objId, obj] of Object.entries(doc.objects)) {
+      if (isReservedId(objId)) {
+        errors.push(`Object ID "${objId}" is reserved and cannot be used`);
+        continue;
+      }
       if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
         errors.push(`Object "${objId}" must be an object`);
         continue;
@@ -744,9 +787,13 @@ export function validateDocument(doc, options = {}) {
       // Common style/property validations
       if (obj.fill !== undefined && typeof obj.fill !== 'string') {
         errors.push(`Object "${objId}" fill must be a string`);
+      } else if (obj.fill !== undefined && !isSafeColor(obj.fill)) {
+        errors.push(`Object "${objId}" fill must be a valid color`);
       }
       if (obj.stroke !== undefined && typeof obj.stroke !== 'string') {
         errors.push(`Object "${objId}" stroke must be a string`);
+      } else if (obj.stroke !== undefined && !isSafeColor(obj.stroke)) {
+        errors.push(`Object "${objId}" stroke must be a valid color`);
       }
       if (obj.strokeWidth !== undefined && (typeof obj.strokeWidth !== 'number' || !Number.isFinite(obj.strokeWidth) || obj.strokeWidth < 0)) {
         errors.push(`Object "${objId}" strokeWidth must be a finite non-negative number`);
@@ -776,7 +823,7 @@ export function validateDocument(doc, options = {}) {
         errors.push(`Object "${objId}" autoHeight must be a boolean`);
       }
       if (obj.groupId !== undefined && obj.groupId !== null) {
-        if (typeof obj.groupId !== 'string' || !doc.groups || !doc.groups[obj.groupId]) {
+        if (!hasRecord(doc.groups, obj.groupId)) {
           errors.push(`Object "${objId}" references non-existent groupId: "${obj.groupId}"`);
         }
       }
@@ -805,6 +852,8 @@ export function validateDocument(doc, options = {}) {
           }
           if (obj.textStyle.color !== undefined && typeof obj.textStyle.color !== 'string') {
             errors.push(`Object "${objId}" textStyle.color must be a string`);
+          } else if (obj.textStyle.color !== undefined && !isSafeColor(obj.textStyle.color)) {
+            errors.push(`Object "${objId}" textStyle.color must be a valid color`);
           }
         }
       }
@@ -888,7 +937,7 @@ export function validateDocument(doc, options = {}) {
       if (obj.type === IMAGE_OBJECT_TYPE) {
         if (typeof obj.assetId !== 'string' || !obj.assetId.trim()) {
           errors.push(`Image "${objId}" must reference a non-empty assetId`);
-        } else if (!doc.assets || !doc.assets[obj.assetId]) {
+        } else if (!hasRecord(doc.assets, obj.assetId)) {
           errors.push(`Image "${objId}" references non-existent assetId: "${obj.assetId}"`);
         } else if (doc.assets[obj.assetId].type !== 'raster') {
           errors.push(`Image "${objId}" assetId "${obj.assetId}" must reference a raster asset`);
@@ -910,7 +959,7 @@ export function validateDocument(doc, options = {}) {
         errors.push(`Duplicate ID in order list: "${id}"`);
       }
       seen.add(id);
-      if (doc.objects && !doc.objects[id]) {
+      if (doc.objects && !hasRecord(doc.objects, id)) {
         errors.push(`Order contains non-existent object ID: "${id}"`);
       }
     }
