@@ -92,6 +92,9 @@ export class TextEditor {
   }
 
   onKeyDown(e) {
+    // Enter and Escape during an IME composition confirm or cancel the candidate,
+    // not the edit.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') {
       e.stopPropagation();
       this.close(false); // Cancel without saving

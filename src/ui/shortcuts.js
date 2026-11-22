@@ -22,16 +22,35 @@ export class ShortcutsCoordinator {
     this.onKeyDown = this.onKeyDown.bind(this);
     this.onKeyUp = this.onKeyUp.bind(this);
     this.onPointerMove = this.onPointerMove.bind(this);
+    this.releaseHeldKeys = this.releaseHeldKeys.bind(this);
+    this.onVisibilityChange = this.onVisibilityChange.bind(this);
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('pointermove', this.onPointerMove);
+    // A key released while the window is unfocused never sends keyup.
+    window.addEventListener('blur', this.releaseHeldKeys);
+    document.addEventListener?.('visibilitychange', this.onVisibilityChange);
   }
 
   destroy() {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('blur', this.releaseHeldKeys);
+    document.removeEventListener?.('visibilitychange', this.onVisibilityChange);
+  }
+
+  releaseHeldKeys() {
+    if (this.isSpacePressed) {
+      this.isSpacePressed = false;
+      this.handlers.onSpaceHold?.(false);
+    }
+    this.handlers.onDHold?.(false);
+  }
+
+  onVisibilityChange() {
+    if (document.hidden) this.releaseHeldKeys();
   }
 
   onPointerMove(e) {
@@ -39,6 +58,10 @@ export class ShortcutsCoordinator {
   }
 
   onKeyDown(e) {
+    // Keys that belong to an IME composition (CJK input) are never shortcuts.
+    if (e.isComposing || e.keyCode === 229) return;
+    if (typeof e.key !== 'string') return;
+
     // Check if user is typing in input, textarea, contenteditable, or in-place text editor
     const activeEl = document.activeElement;
     const isTyping = ['INPUT', 'TEXTAREA'].includes(activeEl?.tagName) ||
@@ -52,6 +75,35 @@ export class ShortcutsCoordinator {
       }
       return;
     }
+
+    // While a modal or the wheel is open, or a pointer gesture is in progress, only
+    // Escape (close / cancel) acts. Everything else stays with the overlay or the
+    // gesture, so nothing edits the board behind it.
+    if (this.handlers.isOverlayOpen?.() || this.handlers.isInteracting?.()) {
+      const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+      if (e.key === 'Escape') {
+        this.handlers.onEscape?.();
+      } else if (plain && !this.handlers.isInteracting?.()) {
+        // The keys that open the wheel and help also close them.
+        if (e.key.toLowerCase() === 'q') {
+          e.preventDefault();
+          this.handlers.onTriggerWheel?.(this.lastPointerPos.x, this.lastPointerPos.y);
+        } else if (e.key === '?') {
+          e.preventDefault();
+          this.handlers.onToggleHelp?.();
+        }
+      }
+      return;
+    }
+
+    // Focused native controls keep their own keyboard behaviour: a select uses
+    // every key, and buttons and links activate on Enter and Space.
+    if (activeEl?.tagName === 'SELECT') {
+      if (e.key === 'Escape') this.handlers.onEscape?.();
+      return;
+    }
+    const onActivatable = Boolean(activeEl?.closest?.('button, a[href], [role="button"], [role="menuitem"]'));
+    if (onActivatable && (e.key === 'Enter' || e.key === ' ')) return;
 
     const { isMac } = getPlatform();
     const mod = isMac ? e.metaKey : e.ctrlKey;
@@ -319,6 +371,7 @@ export class ShortcutsCoordinator {
   }
 
   onKeyUp(e) {
+    if (typeof e.key !== 'string') return;
     if (e.key === ' ' && this.isSpacePressed) {
       this.isSpacePressed = false;
       this.handlers.onSpaceHold?.(false);

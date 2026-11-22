@@ -60,6 +60,8 @@ export class SaburaApp {
     this.inPresentation = false;
     this.clipboard = null;
     this.clipboardAssets = {};
+    this.clipboardGroups = {};
+    this.clipboardConnectorEnds = {};
     this.pasteCount = 0;
     this.imageImportToken = 0;
     this.pendingImageReader = null;
@@ -277,8 +279,8 @@ export class SaburaApp {
       onToggleGridSnap: () => this.toggleGridSnap(),
       onToggleFullscreen: () => this.toggleFullscreen(),
       onPresent: () => this.enterPresentation(),
-      onUndo: () => this.undo(),
-      onRedo: () => this.redo(),
+      onUndo: () => this.runUserAction('Undo', () => this.undo()),
+      onRedo: () => this.runUserAction('Redo', () => this.redo()),
       onSaveCopy: () => this.saveCopy()
     });
 
@@ -298,6 +300,8 @@ export class SaburaApp {
     this.shortcuts = new ShortcutsCoordinator({
       isReadingMode: () => this.mode === 'reading' || Boolean(this.inPresentation),
       isTextEditing: () => Boolean(this.textEditor?.targetObject !== null || this.textEditor?.textarea?.style.display === 'block'),
+      isOverlayOpen: () => Boolean(this.helpModal?.isOpen || this.wheel?.isOpen),
+      isInteracting: () => Boolean(this.workspace?.hasActiveInteraction?.()),
       onTriggerWheel: (x, y) => {
         if (this.wheel.isOpen) {
           this.wheel.close();
@@ -343,8 +347,8 @@ export class SaburaApp {
       onDHold: (held) => {
         this.workspace.setDHold(held);
       },
-      onUndo: () => this.undo(),
-      onRedo: () => this.redo(),
+      onUndo: () => this.runUserAction('Undo', () => this.undo()),
+      onRedo: () => this.runUserAction('Redo', () => this.redo()),
       onDuplicate: () => {
         if (this.workspace.selectedIds.length > 0) {
           this.dispatchCommand({
@@ -364,7 +368,7 @@ export class SaburaApp {
       },
       onCopy: () => this.copy(),
       onCut: () => this.cut(),
-      onPaste: () => this.paste(),
+      onPaste: () => this.runUserAction('Paste', () => this.paste()),
       onFlipCurve: () => {
         for (const id of this.workspace.selectedIds) {
           const conn = this.doc.objects[id];
@@ -618,9 +622,11 @@ export class SaburaApp {
 
   undo() {
     if (this.undoStack.length === 0) return false;
-    const inv = this.undoStack.pop();
+    const inv = this.undoStack[this.undoStack.length - 1];
     const previousDoc = this.doc;
+    // Apply before popping: if the inverse throws, the entry stays on the stack.
     const { doc: newDoc, inverseCmd: redoCmd } = applyCommand(previousDoc, inv);
+    this.undoStack.pop();
     if (!this.documentStateChanged(previousDoc, newDoc)) {
       this.updateDocumentStatus();
       return false;
@@ -636,9 +642,11 @@ export class SaburaApp {
 
   redo() {
     if (this.redoStack.length === 0) return false;
-    const redoCmd = this.redoStack.pop();
+    const redoCmd = this.redoStack[this.redoStack.length - 1];
     const previousDoc = this.doc;
+    // Apply before popping: if the command throws, the entry stays on the stack.
     const { doc: newDoc, inverseCmd: undoCmd } = applyCommand(previousDoc, redoCmd);
+    this.redoStack.pop();
     if (!this.documentStateChanged(previousDoc, newDoc)) {
       this.updateDocumentStatus();
       return false;
@@ -650,6 +658,29 @@ export class SaburaApp {
     this.updateUI();
     this.notifySubscribers();
     return true;
+  }
+
+  /**
+   * Runs a user-initiated action (keyboard, wheel, toolbar) and reports a failure
+   * instead of letting it vanish into the console. The document status is left
+   * alone, so the unsaved-changes warning keeps working.
+   * @returns {*} the action's result, or false when it failed
+   */
+  runUserAction(label, action) {
+    try {
+      return action();
+    } catch (error) {
+      console.error(`Sabura: ${label} failed`, error);
+      this.reportActionError(label, error);
+      return false;
+    }
+  }
+
+  reportActionError(label, error) {
+    const detail = String(error?.message || error || 'Unknown error').replace(/[\r\n]+/g, ' ').slice(0, 180);
+    if (typeof alert === 'function') {
+      try { alert(`${label} failed: ${detail}`); } catch (_) {}
+    }
   }
 
   reportImageImportError(message) {
@@ -811,9 +842,9 @@ export class SaburaApp {
       this.workspace.setConnectorRouting('curved');
       this.workspace.setTool('connector');
     } else if (actionId === 'action_undo') {
-      this.undo();
+      this.runUserAction('Undo', () => this.undo());
     } else if (actionId === 'action_redo') {
-      this.redo();
+      this.runUserAction('Redo', () => this.redo());
     } else if (actionId === 'action_delete') {
       if (selectedIds.length > 0) {
         this.dispatchCommand({ type: 'delete_objects', ids: selectedIds });
@@ -1077,6 +1108,24 @@ export class SaburaApp {
       .filter(o => o && !o.locked);
     if (selected.length === 0) return;
     this.clipboard = cloneDocument(selected);
+    // Capture what paste needs from the live board now: the board may change
+    // (cut, delete, rename) before paste runs.
+    this.clipboardGroups = {};
+    this.clipboardConnectorEnds = {};
+    for (const object of selected) {
+      if (object.groupId && this.doc.groups?.[object.groupId]) {
+        this.clipboardGroups[object.groupId] = cloneDocument(this.doc.groups[object.groupId]);
+      }
+      if (object.type === 'connector') {
+        const resolved = resolveConnectorGeometry(this.doc, object);
+        if (resolved?.start && resolved?.end) {
+          this.clipboardConnectorEnds[object.id] = {
+            start: { x: resolved.start.x, y: resolved.start.y },
+            end: { x: resolved.end.x, y: resolved.end.y }
+          };
+        }
+      }
+    }
     this.clipboardAssets = {};
     for (const object of selected) {
       if (object.type === 'image' && object.assetId && this.doc.assets?.[object.assetId]) {
@@ -1114,14 +1163,16 @@ export class SaburaApp {
     }
 
     // 1. Pass 1: Clone objects, generate new IDs, map groups
+    const newGroups = {};
     for (const source of this.clipboard) {
       const newId = generateId(source.type || 'obj');
       idMap[source.id] = newId;
 
       const dup = cloneDocument(source);
       dup.id = newId;
-      dup.x += offset.x;
-      dup.y += offset.y;
+      // Connectors have no x/y of their own; their endpoints are offset below.
+      if (typeof dup.x === 'number') dup.x += offset.x;
+      if (typeof dup.y === 'number') dup.y += offset.y;
       dup.seed = generateSeed();
       dup.locked = false;
 
@@ -1129,8 +1180,8 @@ export class SaburaApp {
         if (!groupMap[dup.groupId]) {
           const newGid = generateId('grp');
           groupMap[dup.groupId] = newGid;
-          const origGroup = this.doc.groups[dup.groupId];
-          this.doc.groups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
+          const origGroup = this.clipboardGroups?.[dup.groupId] || this.doc.groups?.[dup.groupId];
+          newGroups[newGid] = { id: newGid, name: origGroup?.name || 'Group' };
         }
         dup.groupId = groupMap[dup.groupId];
       }
@@ -1138,36 +1189,35 @@ export class SaburaApp {
       newObjects.push(dup);
     }
 
-    // 2. Pass 2: Rebind connectors
+    // New groups are created by a command in the same batch, so the paste is one
+    // undoable step and a failed paste leaves the board untouched.
+    if (Object.keys(newGroups).length > 0) {
+      cmds.push({ type: 'restore_ungroup', groups: newGroups, members: {} });
+    }
+
+    // 2. Pass 2: Rebind connectors. An endpoint whose object was not copied becomes
+    // a free point at the position it had when copied.
+    const freeEnd = (dup, which) => {
+      const sourceId = this.clipboard.find(c => idMap[c.id] === dup.id)?.id;
+      const ends = this.clipboardConnectorEnds?.[sourceId];
+      const point = ends ? (which === 'from' ? ends.start : ends.end) : null;
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+        throw new Error(`Cannot paste connector "${sourceId}": its ${which} endpoint position is unknown`);
+      }
+      return { point: { x: point.x + offset.x, y: point.y + offset.y } };
+    };
     for (const dup of newObjects) {
       if (dup.type === 'connector') {
-        if (dup.from) {
-          if (dup.from.id && idMap[dup.from.id]) {
-            dup.from.id = idMap[dup.from.id];
-          } else if (dup.from.id) {
-            const extObj = this.doc.objects[dup.from.id];
-            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
-            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
-            const pt = resolved ? resolved.start : (dup.from.point || { x: dup.x, y: dup.y });
-            dup.from = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
-          } else if (dup.from.point) {
-            dup.from.point.x += offset.x;
-            dup.from.point.y += offset.y;
-          }
-        }
-
-        if (dup.to) {
-          if (dup.to.id && idMap[dup.to.id]) {
-            dup.to.id = idMap[dup.to.id];
-          } else if (dup.to.id) {
-            const extObj = this.doc.objects[dup.to.id];
-            const origConn = this.clipboard.find(c => idMap[c.id] === dup.id) || dup;
-            const resolved = extObj ? resolveConnectorGeometry(this.doc, origConn) : null;
-            const pt = resolved ? resolved.end : (dup.to.point || { x: dup.x + dup.width, y: dup.y + dup.height });
-            dup.to = { point: { x: pt.x + offset.x, y: pt.y + offset.y } };
-          } else if (dup.to.point) {
-            dup.to.point.x += offset.x;
-            dup.to.point.y += offset.y;
+        for (const which of ['from', 'to']) {
+          const end = dup[which];
+          if (!end) continue;
+          if (end.id && idMap[end.id]) {
+            end.id = idMap[end.id];
+          } else if (end.id) {
+            dup[which] = freeEnd(dup, which);
+          } else if (end.point) {
+            end.point.x += offset.x;
+            end.point.y += offset.y;
           }
         }
       }

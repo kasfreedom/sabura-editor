@@ -22,7 +22,28 @@ import { mapPresetThemeColor } from './theme-colors.js';
 import { isSafeColor } from './color.js';
 
 const ID_FIELD = /^(?:id|ids|order|[A-Za-z]+Ids?)$/;
-const COLOR_FIELDS = new Set(['fill', 'stroke', 'color', 'background', 'gridColor', 'defaultFill', 'defaultStroke', 'palette']);
+const COLOR_FIELDS = new Set(['fill', 'stroke', 'color', 'textColor', 'background', 'gridColor', 'defaultFill', 'defaultStroke', 'palette']);
+
+/**
+ * Group membership in history steps has three states: a group id, `null`
+ * (explicitly ungrouped), or no `groupId` key at all. JSON history cannot carry
+ * `undefined`, so "no key" travels in a separate `clearGroupIds` list.
+ */
+function captureMembership(object, id, members, clearIds) {
+  if (Object.hasOwn(object, 'groupId') && object.groupId !== undefined) members[id] = object.groupId;
+  else clearIds.push(id);
+}
+
+function applyMembership(newDoc, members, clearIds) {
+  for (const [id, gId] of Object.entries(members)) {
+    const object = newDoc.objects[id];
+    if (object) object.groupId = gId === undefined ? null : gId;
+  }
+  for (const id of clearIds) {
+    const object = newDoc.objects[id];
+    if (object) delete object.groupId;
+  }
+}
 
 /**
  * Walks a command payload and reports values that must never reach the document:
@@ -617,8 +638,11 @@ export function applyCommand(doc, cmd) {
         }
       }
 
+      const savedGroups = {};
       if (Array.isArray(cmd.removeGroups)) {
         for (const gId of cmd.removeGroups) {
+          if (!Object.hasOwn(newDoc.groups, gId)) continue;
+          savedGroups[gId] = cloneDocument(newDoc.groups[gId]);
           delete newDoc.groups[gId];
         }
       }
@@ -635,6 +659,10 @@ export function applyCommand(doc, cmd) {
       const inverseCmd = {
         type: 'batch',
         commands: [
+          // Groups first, so restored objects never reference a missing group.
+          ...(Object.keys(savedGroups).length > 0
+            ? [{ type: 'restore_ungroup', groups: savedGroups, members: {} }]
+            : []),
           ...savedAssets.map(item => ({
             type: 'create_asset',
             asset: item.asset
@@ -1196,9 +1224,10 @@ export function applyCommand(doc, cmd) {
 
       const groupId = cmd.groupId || generateId('grp');
       const prevGroupIds = {};
+      const prevClearIds = [];
 
       for (const id of ids) {
-        prevGroupIds[id] = newDoc.objects[id].groupId;
+        captureMembership(newDoc.objects[id], id, prevGroupIds, prevClearIds);
         newDoc.objects[id].groupId = groupId;
       }
       newDoc.groups[groupId] = { id: groupId, name: cmd.name || 'Group' };
@@ -1206,6 +1235,7 @@ export function applyCommand(doc, cmd) {
       const inverseCmd = {
         type: 'restore_groups',
         groupIds: prevGroupIds,
+        clearGroupIds: prevClearIds,
         removeGroup: groupId
       };
       return { doc: newDoc, inverseCmd };
@@ -1243,7 +1273,13 @@ export function applyCommand(doc, cmd) {
     }
 
     case 'restore_groups': {
+      // Inverse of group_objects / restore_ungroup: set members back to their prior
+      // group and remove the groups that the forward step created.
       const groupIds = cmd.groupIds || {};
+      const removeGroups = [
+        ...(cmd.removeGroup ? [cmd.removeGroup] : []),
+        ...(Array.isArray(cmd.removeGroups) ? cmd.removeGroups : [])
+      ];
       const lockedImageGroupIds = new Set(Object.values(newDoc.objects)
         .filter(object => object?.type === IMAGE_OBJECT_TYPE && object.locked && object.groupId)
         .map(object => object.groupId));
@@ -1252,18 +1288,29 @@ export function applyCommand(doc, cmd) {
         if (!object || object.groupId === gId) return false;
         return (object.type === IMAGE_OBJECT_TYPE && object.locked) ||
           lockedImageGroupIds.has(object.groupId) || lockedImageGroupIds.has(gId);
-      }) || (cmd.removeGroup && lockedImageGroupIds.has(cmd.removeGroup));
+      }) || removeGroups.some(gId => lockedImageGroupIds.has(gId));
       if (affectsLockedImage) return { doc: newDoc, inverseCmd: { type: 'noop' } };
-      for (const [id, gId] of Object.entries(groupIds)) {
-        if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
+
+      const clearIds = Array.isArray(cmd.clearGroupIds) ? cmd.clearGroupIds : [];
+      const redoMembers = {};
+      const redoClearIds = [];
+      for (const id of [...Object.keys(groupIds), ...clearIds]) {
+        if (newDoc.objects[id]) captureMembership(newDoc.objects[id], id, redoMembers, redoClearIds);
       }
-      if (cmd.removeGroup) {
-        delete newDoc.groups[cmd.removeGroup];
+      applyMembership(newDoc, groupIds, clearIds);
+      const redoGroups = {};
+      for (const gId of removeGroups) {
+        if (Object.hasOwn(newDoc.groups, gId)) {
+          redoGroups[gId] = cloneDocument(newDoc.groups[gId]);
+          delete newDoc.groups[gId];
+        }
       }
-      return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      return { doc: newDoc, inverseCmd: { type: 'restore_ungroup', groups: redoGroups, members: redoMembers, clearGroupIds: redoClearIds } };
     }
 
     case 'restore_ungroup': {
+      // Inverse of ungroup_objects / restore_groups: recreate groups and set members
+      // back to them. Its own inverse removes exactly the groups it recreated.
       const groups = cmd.groups || {};
       const members = cmd.members || {};
       const lockedImageGroupIds = new Set(Object.values(newDoc.objects)
@@ -1277,13 +1324,20 @@ export function applyCommand(doc, cmd) {
             lockedImageGroupIds.has(object.groupId) || lockedImageGroupIds.has(groupId);
         });
       if (affectsLockedImage) return { doc: newDoc, inverseCmd: { type: 'noop' } };
+
+      const createdGroups = [];
       for (const [gId, gData] of Object.entries(groups)) {
-        newDoc.groups[gId] = gData;
+        if (!Object.hasOwn(newDoc.groups, gId)) createdGroups.push(gId);
+        newDoc.groups[gId] = cloneDocument(gData);
       }
-      for (const [id, gId] of Object.entries(members)) {
-        if (newDoc.objects[id]) newDoc.objects[id].groupId = gId;
+      const clearIds = Array.isArray(cmd.clearGroupIds) ? cmd.clearGroupIds : [];
+      const undoMembers = {};
+      const undoClearIds = [];
+      for (const id of [...Object.keys(members), ...clearIds]) {
+        if (newDoc.objects[id]) captureMembership(newDoc.objects[id], id, undoMembers, undoClearIds);
       }
-      return { doc: newDoc, inverseCmd: { type: 'noop' } };
+      applyMembership(newDoc, members, clearIds);
+      return { doc: newDoc, inverseCmd: { type: 'restore_groups', groupIds: undoMembers, clearGroupIds: undoClearIds, removeGroups: createdGroups } };
     }
 
     case 'connect_objects': {
@@ -1363,29 +1417,16 @@ export function applyCommand(doc, cmd) {
       if (conn.locked) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
-      const prevConfig = {
-        routing: conn.routing,
-        curveSide: conn.curveSide !== undefined ? conn.curveSide : 1,
-        curveDistance: conn.curveDistance !== undefined ? conn.curveDistance : null,
-        elbowOffset: conn.elbowOffset !== undefined ? conn.elbowOffset : null,
-        startArrow: conn.startArrow,
-        endArrow: conn.endArrow,
-        stacking: conn.stacking
-      };
-
-      if (cmd.routing !== undefined) conn.routing = cmd.routing;
-      if (cmd.curveSide !== undefined) conn.curveSide = cmd.curveSide;
-      if (cmd.curveDistance !== undefined) {
-        if (cmd.curveDistance === null) delete conn.curveDistance;
-        else conn.curveDistance = cmd.curveDistance;
+      // Each field the command may change. `null` in a command means "remove the
+      // field", which lets the inverse restore a field that was previously unset.
+      const CONFIG_FIELDS = ['routing', 'curveSide', 'curveDistance', 'elbowOffset', 'startArrow', 'endArrow', 'stacking'];
+      const prevConfig = {};
+      for (const field of CONFIG_FIELDS) {
+        if (cmd[field] === undefined) continue;
+        prevConfig[field] = Object.hasOwn(conn, field) ? conn[field] : null;
+        if (cmd[field] === null) delete conn[field];
+        else conn[field] = cmd[field];
       }
-      if (cmd.elbowOffset !== undefined) {
-        if (cmd.elbowOffset === null) delete conn.elbowOffset;
-        else conn.elbowOffset = cmd.elbowOffset;
-      }
-      if (cmd.startArrow !== undefined) conn.startArrow = cmd.startArrow;
-      if (cmd.endArrow !== undefined) conn.endArrow = cmd.endArrow;
-      if (cmd.stacking !== undefined) conn.stacking = cmd.stacking;
 
       const inverseCmd = {
         type: 'configure_connector',
@@ -1535,19 +1576,39 @@ export function applyCommand(doc, cmd) {
       if (!targetTheme) {
         return { doc: newDoc, inverseCmd: { type: 'noop' } };
       }
-      newDoc.theme = { ...newDoc.theme, ...targetTheme };
+      // A history step (restoreObjects present) carries the complete prior theme and
+      // replaces it exactly; a user change merges a preset or partial theme.
+      newDoc.theme = cmd.restoreObjects
+        ? cloneDocument(targetTheme)
+        : { ...newDoc.theme, ...targetTheme };
 
       const prevObjectStyles = {};
 
       if (cmd.restoreObjects) {
+        // Record what each restored field holds now, so this step's inverse (redo)
+        // re-applies the original restyle exactly. `null` means "field absent".
         for (const [id, st] of Object.entries(cmd.restoreObjects)) {
-          if (newDoc.objects[id]) {
-            if (st.stroke !== undefined) newDoc.objects[id].stroke = st.stroke;
-            if (st.fill !== undefined) newDoc.objects[id].fill = st.fill;
-            if (st.textColor !== undefined && newDoc.objects[id].textStyle) {
-              newDoc.objects[id].textStyle.color = st.textColor;
+          const obj = newDoc.objects[id];
+          if (!obj) continue;
+          const current = {};
+          if (st.stroke !== undefined) {
+            current.stroke = obj.stroke ?? null;
+            if (st.stroke === null) delete obj.stroke; else obj.stroke = st.stroke;
+          }
+          if (st.fill !== undefined) {
+            current.fill = obj.fill ?? null;
+            if (st.fill === null) delete obj.fill; else obj.fill = st.fill;
+          }
+          if (st.textColor !== undefined) {
+            current.textColor = obj.textStyle?.color ?? null;
+            if (st.textColor === null) {
+              if (obj.textStyle) delete obj.textStyle.color;
+            } else {
+              if (!obj.textStyle) obj.textStyle = {};
+              obj.textStyle.color = st.textColor;
             }
           }
+          prevObjectStyles[id] = current;
         }
       } else {
         // Restyle complete existing board coherently across shapes, text, and connectors
@@ -1602,11 +1663,11 @@ export function applyCommand(doc, cmd) {
           const textLightOnLight = effBgLum > 0.75 && textLum > 0.85;
           const mappedTextColor = mapPresetThemeColor(obj.textStyle?.color, prevTheme, newDoc.theme, 'stroke');
           if (mappedTextColor !== obj.textStyle?.color) {
-            styleBackup.textColor = obj.textStyle?.color;
+            styleBackup.textColor = obj.textStyle?.color ?? null;
             if (!obj.textStyle) obj.textStyle = {};
             obj.textStyle.color = mappedTextColor;
           } else if (obj.textStyle?.color === oldStroke || textDarkOnDark || textLightOnLight) {
-            styleBackup.textColor = obj.textStyle?.color;
+            styleBackup.textColor = obj.textStyle?.color ?? null;
             if (!obj.textStyle) obj.textStyle = {};
             obj.textStyle.color = newStroke;
           }

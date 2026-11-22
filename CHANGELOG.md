@@ -17,6 +17,18 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Save Copy no longer corrupts boards whose text contains `$'`, `` $` ``, `$&`, or `$$`.
+- Undo and redo are now exact for grouping, ungrouping, board theme changes, duplicating
+  grouped objects, and connector settings. Previously, redo silently did nothing after
+  undoing a group, restored a theme without restyling objects, or failed after undoing a
+  duplicate.
+- A failing undo or redo keeps its history entry and tells the user, instead of
+  dropping the entry silently.
+- Pasting connectors works. Paste is a single undoable step that also removes the
+  groups it created, and copied group names and free endpoints survive cut and delete.
+- Keyboard shortcuts no longer act on the board behind the help dialog, the ToolWheel,
+  or an in-progress drag. Enter and Space activate focused buttons again, menus keep
+  their keys, IME composition (Chinese, Japanese, Korean input) no longer commits text
+  early, and held Space or D is released when the window loses focus.
 
 ## [1.0.0] - 2026-09-10
 
