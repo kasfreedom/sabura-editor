@@ -14,6 +14,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 - IDs that name `Object.prototype` members (such as `__proto__` and `constructor`) are rejected in
   documents and commands, so they can no longer pollute the global prototype or pass reference checks.
 
+### Changed
+
+- The agent API (`window.sabura.agent` and the WebMCP tools) now checks each command
+  against the JSON Schema it publishes. Unknown or misspelled fields, missing required
+  fields and wrong value types are refused with `INVALID_COMMAND` and the path to the
+  field. Previously they were ignored, so a command could report success and do nothing:
+  in a claude.ai test, `group_objects` sent with `objectIds` instead of `ids` reported
+  success and created no group. Missing and colliding IDs keep their existing codes.
+- Agent `group_objects` with fewer than two existing, unlocked objects is refused instead
+  of silently doing nothing. Grouping from the editor's own UI is unchanged.
+
 ### Fixed
 
 - The editor starts where browser storage is blocked: sandboxed embeds (such as MCP Apps

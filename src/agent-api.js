@@ -4,6 +4,7 @@ import {
   REVISION_EXTENSION_KEY
 } from './core/document.js';
 import { validateCommand } from './core/commands.js';
+import { checkJsonSchema } from './core/json-schema.js';
 import { CANVAS_SCHEMA_VERSION, COMMANDS_SCHEMA_VERSION } from './core/types.js';
 
 export const AGENT_API_VERSION = 'sabura/agent/v1';
@@ -713,6 +714,11 @@ export class AgentApi {
     const createdIds = new Set();
     const createdAssetIds = new Set();
     const createdGroupIds = new Set();
+    // Which objects exist and which are locked at each point in the batch, so
+    // group_objects can be checked against the board as it will be then.
+    const docObjects = this.app.doc?.objects || {};
+    const lockedAt = new Map();
+    const lockState = (id) => (lockedAt.has(id) ? lockedAt.get(id) : (Object.hasOwn(docObjects, id) ? Boolean(docObjects[id].locked) : undefined));
     for (let index = 0; index < commands.length; index++) {
       const command = commands[index];
       if (!command || typeof command !== 'object' || !PUBLIC_COMMAND_SET.has(command.type)) {
@@ -721,14 +727,6 @@ export class AgentApi {
           errorDetails: { commandIndex: index, path: `commands[${index}].type` }
         });
       }
-      const validation = validateCommand(command);
-      if (!validation.valid) {
-        return failure('INVALID_COMMAND', validation.errors.join(', '), {
-          requestId,
-          errorDetails: { commandIndex: index, path: `commands[${index}]` }
-        });
-      }
-
       const requireNewId = (id, kind, existing, seen, path) => {
         if (typeof id !== 'string' || !id.trim()) {
           return failure('EXPLICIT_ID_REQUIRED', `Agent-created ${kind} requires an explicit ID`, {
@@ -757,7 +755,53 @@ export class AgentApi {
       } else if (command.type === 'group_objects') {
         idFailure = requireNewId(command.groupId, 'group', this.app.doc?.groups, createdGroupIds, `commands[${index}].groupId`);
       }
+      // ID problems keep their specific codes (EXPLICIT_ID_REQUIRED, ID_COLLISION),
+      // so they are checked before the general schema check.
       if (idFailure) return idFailure;
+
+      // The published schema is the contract: required fields, value types and
+      // no unknown fields. A misspelled field used to be ignored silently, so a
+      // command could report success and do nothing.
+      const schemaErrors = checkJsonSchema(command, AGENT_PUBLIC_COMMAND_SCHEMAS[command.type], `commands[${index}]`);
+      if (schemaErrors.length > 0) {
+        return failure('INVALID_COMMAND', schemaErrors[0].message, {
+          requestId,
+          errorDetails: { commandIndex: index, path: schemaErrors[0].path }
+        });
+      }
+      const validation = validateCommand(command);
+      if (!validation.valid) {
+        return failure('INVALID_COMMAND', validation.errors.join(', '), {
+          requestId,
+          errorDetails: { commandIndex: index, path: `commands[${index}]` }
+        });
+      }
+
+      if (command.type === 'group_objects') {
+        // The editor ignores missing and locked members and does nothing with
+        // fewer than two, which would report success for a group never made.
+        const missing = command.ids.filter((id) => lockState(id) === undefined);
+        const usable = command.ids.filter((id) => lockState(id) === false);
+        if (missing.length > 0 || usable.length < 2) {
+          const reason = missing.length > 0
+            ? `objects not found: ${missing.join(', ')}`
+            : `only ${usable.length} of them can be grouped (locked objects are skipped)`;
+          return failure('INVALID_COMMAND', `group_objects needs at least two existing, unlocked objects; ${reason}`, {
+            requestId,
+            errorDetails: { commandIndex: index, path: `commands[${index}].ids` }
+          });
+        }
+      }
+
+      if (command.type === 'create_object' || command.type === 'create_image') {
+        lockedAt.set(command.object.id, Boolean(command.object.locked));
+      } else if (command.type === 'connect_objects') {
+        lockedAt.set(command.connectorId, false);
+      } else if (command.type === 'delete_objects') {
+        for (const id of command.ids) lockedAt.set(id, undefined);
+      } else if (command.type === 'lock_objects') {
+        for (const id of command.ids) if (lockState(id) !== undefined) lockedAt.set(id, command.locked);
+      }
     }
     return null;
   }

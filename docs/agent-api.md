@@ -79,6 +79,18 @@ command fails, neither the document nor history changes. A successful response
 reports `changed`, tokens before and after, and created, updated, deleted, and
 render-affected IDs.
 
+Every command must match its published JSON Schema (`agent.describe()` and the
+WebMCP tool schemas): required fields present, values of the right type, and no
+fields the schema does not list, apart from `ext:` extension fields. A
+misspelled field such as `objectIds` for `ids` is refused with
+`INVALID_COMMAND`, and `errors[0].path` points at it (for example
+`commands[2].objectIds`). Missing or colliding agent IDs keep their own codes,
+`EXPLICIT_ID_REQUIRED` and `ID_COLLISION`.
+
+`group_objects` needs at least two existing, unlocked objects, counting the
+board as it stands at that point in the batch. Otherwise it is refused instead
+of doing nothing.
+
 ## Stale edits and safe retries
 
 ```js

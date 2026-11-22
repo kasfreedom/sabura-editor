@@ -26,6 +26,7 @@ const moduleFiles = [
   'src/core/revision.js',
   'src/core/document.js',
   'src/core/commands.js',
+  'src/core/json-schema.js',
   'src/core/sketch.js',
   'src/storage/file-packer.js',
   'src/storage/ui-preferences.js',
