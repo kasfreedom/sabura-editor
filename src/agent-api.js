@@ -798,7 +798,8 @@ export class AgentApi {
       } else if (command.type === 'connect_objects') {
         lockedAt.set(command.connectorId, false);
       } else if (command.type === 'delete_objects') {
-        for (const id of command.ids) lockedAt.set(id, undefined);
+        // The editor does not delete locked objects.
+        for (const id of command.ids) if (lockState(id) === false) lockedAt.set(id, undefined);
       } else if (command.type === 'lock_objects') {
         for (const id of command.ids) if (lockState(id) !== undefined) lockedAt.set(id, command.locked);
       }

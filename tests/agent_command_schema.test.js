@@ -70,6 +70,8 @@ test('group_objects needs at least two existing, unlocked objects (regression: w
   // Earlier commands in the same batch count: a member deleted or locked first is not usable.
   assertRejected([rect('a'), rect('b'), { type: 'delete_objects', ids: ['b'] }, { type: 'group_objects', ids: ['a', 'b'], groupId: 'g' }], { index: 3, message: /not found: b/ });
   assertRejected([rect('a'), rect('b'), { type: 'lock_objects', ids: ['b'], locked: true }, { type: 'group_objects', ids: ['a', 'b'], groupId: 'g' }], { index: 3, message: /only 1/ });
+  // delete_objects skips locked objects, so a locked member is reported as locked, not missing.
+  assertRejected([rect('a'), rect('b', { locked: true }), { type: 'delete_objects', ids: ['b'] }, { type: 'group_objects', ids: ['a', 'b'], groupId: 'g' }], { index: 3, message: /only 1.*locked/ });
   assertRejected([rect('a'), { type: 'group_objects', ids: ['a'], groupId: 'g' }], { index: 1, message: /two/ });
   assertRejected([rect('a'), { type: 'group_objects', ids: ['a', 'missing'], groupId: 'g' }], { index: 1, message: /missing|two/ });
   assertRejected([rect('a'), rect('b', { locked: true }), { type: 'group_objects', ids: ['a', 'b'], groupId: 'g' }], { index: 2, message: /two|locked/ });
