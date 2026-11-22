@@ -279,11 +279,20 @@ try {
   await main();
 } finally {
   socket?.close();
-  if (chrome && chrome.exitCode === null) {
+  if (chrome && chrome.exitCode === null && chrome.signalCode === null) {
     const exited = new Promise((resolve) => chrome.once('exit', resolve));
     chrome.kill('SIGTERM');
-    await Promise.race([exited, sleep(3000)]);
+    if (await Promise.race([exited.then(() => true), sleep(5000).then(() => false)]) === false) {
+      chrome.kill('SIGKILL');
+      await Promise.race([exited, sleep(2000)]);
+    }
   }
   server.close();
-  fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  // Chrome's helper processes can still be flushing the profile. Leaving a temp
+  // folder behind is not a test failure, so report it instead of failing.
+  try {
+    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  } catch (error) {
+    console.warn(`warning: could not remove the temporary Chrome profile ${profile}: ${error.message}`);
+  }
 }
