@@ -29,12 +29,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kasfreedom/sabura-editor.git"
+    "url": "git+https://github.com/sabura-app/sabura-editor.git"
   },
   "bugs": {
-    "url": "https://github.com/kasfreedom/sabura-editor/issues"
+    "url": "https://github.com/sabura-app/sabura-editor/issues"
   },
-  "homepage": "https://github.com/kasfreedom/sabura-editor#readme",
+  "homepage": "https://github.com/sabura-app/sabura-editor#readme",
   "devDependencies": {
     "terser": "^5.51.2"
   }

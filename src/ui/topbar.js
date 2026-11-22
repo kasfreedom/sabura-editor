@@ -7,7 +7,9 @@ import { escapeXml } from '../core/markup.js';
 import { THEME_PRESETS } from '../core/types.js';
 import { renderSaburaIcon } from './wheel-icon-map.js';
 
-const SABURA_PROJECT_URL = 'https://kasfreedom.github.io/sabura-editor/';
+// The Sabura website. Saved boards carry this link, so it must stay valid: GitHub
+// redirects sabura-app.github.io to any custom domain added later.
+const SABURA_PROJECT_URL = 'https://sabura-app.github.io/';
 
 
 export class TopBar {

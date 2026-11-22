@@ -16,6 +16,10 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The editor moved to the `sabura-app` GitHub organization. The hosted editor is now at
+  https://sabura-app.github.io/sabura-editor/, and the Sabura icon in the top bar opens the
+  Sabura website, https://sabura-app.github.io/. Boards saved before this change still
+  link to the old address.
 - The agent API (`window.sabura.agent` and the WebMCP tools) now checks each command
   against the JSON Schema it publishes. Unknown or misspelled fields, missing required
   fields and wrong value types are refused with `INVALID_COMMAND` and the path to the
@@ -76,4 +80,4 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
-[1.0.0]: https://github.com/kasfreedom/sabura-editor/releases/tag/v1.0.0
+[1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0

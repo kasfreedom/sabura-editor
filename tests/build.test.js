@@ -29,7 +29,7 @@ test('sabura.html build integrity and self-contained verification', () => {
   // Informational links are allowed, but the offline runtime must not acquire
   // any other external URL or network-loaded script, style, font, or image.
   const matches = content.match(/https?:\/\/[^"'\s]+/g) || [];
-  const allowedLinks = new Set(['https://kasfreedom.github.io/sabura-editor/']);
+  const allowedLinks = new Set(['https://sabura-app.github.io/']);
   const unexpectedUrls = matches.filter(url => !allowedLinks.has(url));
   assert.deepEqual(unexpectedUrls, [], `Unexpected external URLs in offline bundle: ${unexpectedUrls.join(', ')}`);
   assert.doesNotMatch(content, /<(?:script|img)[^>]+src=["']https?:\/\//i);
