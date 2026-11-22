@@ -45,7 +45,7 @@ test('group_objects with a misspelled ids field is refused, not silently ignored
   assertRejected([
     rect('queue'), rect('worker'),
     { type: 'group_objects', objectIds: ['queue', 'worker'], groupId: 'backend', name: 'Backend' }
-  ], { index: 2, message: /ids.*required|objectIds.*not allowed/ });
+  ], { index: 2, message: /ids is required \(unknown field: objectIds\)/, path: 'commands[2].ids' });
 });
 
 test('unknown fields are refused at every level, with the path to the field', () => {

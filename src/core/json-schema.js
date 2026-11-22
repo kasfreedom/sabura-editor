@@ -74,7 +74,14 @@ export function checkJsonSchema(value, schema, path = '') {
 
   if (isSchemaObject(value)) {
     for (const key of schema.required || []) {
-      if (!Object.hasOwn(value, key)) return fail(`${at}.${key} is required`, `${at}.${key}`);
+      if (!Object.hasOwn(value, key)) {
+        // Name any fields the schema does not know: usually the misspelling.
+        const unknown = schema.additionalProperties === false
+          ? Object.keys(value).filter((k) => !Object.hasOwn(schema.properties || {}, k)
+            && !Object.keys(schema.patternProperties || {}).some((pattern) => new RegExp(pattern, 'u').test(k)))
+          : [];
+        return fail(`${at}.${key} is required${unknown.length ? ` (unknown field: ${unknown.join(', ')})` : ''}`, `${at}.${key}`);
+      }
     }
     const keys = Object.keys(value);
     if (schema.minProperties !== undefined && keys.length < schema.minProperties) return fail(`${at} must not be empty`);
