@@ -1099,8 +1099,10 @@ export function applyCommand(doc, cmd) {
 
       for (const id of ids) {
         const obj = newDoc.objects[id];
-        if (!obj.textStyle) continue;
-        prevTypography[id] = cloneDocument(obj.textStyle);
+        // Shapes created with plain `text` have no textStyle yet. Create one so
+        // the change applies; null records that undo must remove it again.
+        prevTypography[id] = obj.textStyle ? cloneDocument(obj.textStyle) : null;
+        if (!obj.textStyle) obj.textStyle = {};
 
         if (cmd.updates.size !== undefined) {
           obj.textStyle.size = cmd.updates.size;
@@ -1126,8 +1128,9 @@ export function applyCommand(doc, cmd) {
       for (const [id, style] of Object.entries(cmd.typography || {})) {
         const obj = newDoc.objects[id];
         if (!obj || obj.locked || obj.type === IMAGE_OBJECT_TYPE) continue;
-        prev[id] = cloneDocument(obj.textStyle);
-        obj.textStyle = cloneDocument(style);
+        prev[id] = obj.textStyle ? cloneDocument(obj.textStyle) : null;
+        if (style === null) delete obj.textStyle;
+        else obj.textStyle = cloneDocument(style);
       }
       return { doc: newDoc, inverseCmd: Object.keys(prev).length > 0
         ? { type: 'restore_typography', typography: prev }

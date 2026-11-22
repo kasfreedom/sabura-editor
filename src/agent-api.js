@@ -479,6 +479,23 @@ function safeMessage(value) {
   return (message || 'Operation failed').slice(0, 400);
 }
 
+// At most this many problems are listed for one batch.
+const MAX_REPORTED_ERRORS = 10;
+
+/** Existing objects a command acts on, with the path to each reference. */
+function referencedObjectIds(command, at) {
+  const refs = [];
+  if (typeof command.id === 'string') refs.push({ id: command.id, path: `${at}.id` });
+  if (Array.isArray(command.ids)) command.ids.forEach((id, i) => refs.push({ id, path: `${at}.ids[${i}]` }));
+  if (command.type === 'connect_objects') {
+    refs.push({ id: command.fromId, path: `${at}.fromId` }, { id: command.toId, path: `${at}.toId` });
+  }
+  if (command.type === 'rotate_objects' && command.objects && typeof command.objects === 'object') {
+    for (const id of Object.keys(command.objects)) refs.push({ id, path: `${at}.objects.${id}` });
+  }
+  return refs;
+}
+
 function failure(code, message, details = {}) {
   const { errorDetails = {}, ...resultDetails } = details;
   return {
@@ -715,66 +732,65 @@ export class AgentApi {
     const createdAssetIds = new Set();
     const createdGroupIds = new Set();
     // Which objects exist and which are locked at each point in the batch, so
-    // group_objects can be checked against the board as it will be then.
+    // references are checked against the board as it will be then.
     const docObjects = this.app.doc?.objects || {};
     const lockedAt = new Map();
     const lockState = (id) => (lockedAt.has(id) ? lockedAt.get(id) : (Object.hasOwn(docObjects, id) ? Boolean(docObjects[id].locked) : undefined));
-    for (let index = 0; index < commands.length; index++) {
+
+    // Every problem in the batch is reported at once (one per command, at most
+    // MAX_REPORTED_ERRORS), so a caller can fix them all in a single retry.
+    const errors = [];
+    const report = (code, message, index, path) => {
+      errors.push({ code, message: safeMessage(message), commandIndex: index, path });
+    };
+
+    for (let index = 0; index < commands.length && errors.length < MAX_REPORTED_ERRORS; index++) {
       const command = commands[index];
+      const at = `commands[${index}]`;
       if (!command || typeof command !== 'object' || !PUBLIC_COMMAND_SET.has(command.type)) {
-        return failure('UNSUPPORTED_COMMAND', `Command type "${command?.type || 'unknown'}" is not public`, {
-          requestId,
-          errorDetails: { commandIndex: index, path: `commands[${index}].type` }
-        });
+        report('UNSUPPORTED_COMMAND', `Command type "${command?.type || 'unknown'}" is not public`, index, `${at}.type`);
+        continue;
       }
       const requireNewId = (id, kind, existing, seen, path) => {
         if (typeof id !== 'string' || !id.trim()) {
-          return failure('EXPLICIT_ID_REQUIRED', `Agent-created ${kind} requires an explicit ID`, {
-            requestId,
-            errorDetails: { commandIndex: index, path }
-          });
+          report('EXPLICIT_ID_REQUIRED', `Agent-created ${kind} requires an explicit ID`, index, path);
+          return false;
         }
         if (existing?.[id] || seen.has(id)) {
-          return failure('ID_COLLISION', `${kind} ID "${id}" already exists`, {
-            requestId,
-            errorDetails: { commandIndex: index, path }
-          });
+          report('ID_COLLISION', `${kind} ID "${id}" already exists`, index, path);
+          return false;
         }
         seen.add(id);
-        return null;
+        return true;
       };
 
-      let idFailure = null;
-      if (command.type === 'create_object') {
-        idFailure = requireNewId(command.object?.id, 'object', this.app.doc?.objects, createdIds, `commands[${index}].object.id`);
-      } else if (command.type === 'create_image') {
-        idFailure = requireNewId(command.object?.id, 'object', this.app.doc?.objects, createdIds, `commands[${index}].object.id`) ||
-          requireNewId(command.asset?.id, 'asset', this.app.doc?.assets, createdAssetIds, `commands[${index}].asset.id`);
-      } else if (command.type === 'connect_objects') {
-        idFailure = requireNewId(command.connectorId, 'connector', this.app.doc?.objects, createdIds, `commands[${index}].connectorId`);
-      } else if (command.type === 'group_objects') {
-        idFailure = requireNewId(command.groupId, 'group', this.app.doc?.groups, createdGroupIds, `commands[${index}].groupId`);
-      }
       // ID problems keep their specific codes (EXPLICIT_ID_REQUIRED, ID_COLLISION),
       // so they are checked before the general schema check.
-      if (idFailure) return idFailure;
+      let idsOk = true;
+      if (command.type === 'create_object') {
+        idsOk = requireNewId(command.object?.id, 'object', this.app.doc?.objects, createdIds, `${at}.object.id`);
+      } else if (command.type === 'create_image') {
+        idsOk = requireNewId(command.object?.id, 'object', this.app.doc?.objects, createdIds, `${at}.object.id`) &&
+          requireNewId(command.asset?.id, 'asset', this.app.doc?.assets, createdAssetIds, `${at}.asset.id`);
+      } else if (command.type === 'connect_objects') {
+        idsOk = requireNewId(command.connectorId, 'connector', this.app.doc?.objects, createdIds, `${at}.connectorId`);
+      } else if (command.type === 'group_objects') {
+        idsOk = requireNewId(command.groupId, 'group', this.app.doc?.groups, createdGroupIds, `${at}.groupId`);
+      }
+      if (!idsOk) continue;
 
       // The published schema is the contract: required fields, value types and
       // no unknown fields. A misspelled field used to be ignored silently, so a
       // command could report success and do nothing.
-      const schemaErrors = checkJsonSchema(command, AGENT_PUBLIC_COMMAND_SCHEMAS[command.type], `commands[${index}]`);
+      const schemaErrors = checkJsonSchema(command, AGENT_PUBLIC_COMMAND_SCHEMAS[command.type], at);
       if (schemaErrors.length > 0) {
-        return failure('INVALID_COMMAND', schemaErrors[0].message, {
-          requestId,
-          errorDetails: { commandIndex: index, path: schemaErrors[0].path }
-        });
+        report('INVALID_COMMAND', schemaErrors[0].message, index, schemaErrors[0].path);
+        continue;
       }
       const validation = validateCommand(command);
       if (!validation.valid) {
-        return failure('INVALID_COMMAND', validation.errors.join(', '), {
-          requestId,
-          errorDetails: { commandIndex: index, path: `commands[${index}]` }
-        });
+        report('INVALID_COMMAND', validation.errors.join(', '), index, at);
+        continue;
       }
 
       if (command.type === 'group_objects') {
@@ -786,10 +802,17 @@ export class AgentApi {
           const reason = missing.length > 0
             ? `objects not found: ${missing.join(', ')}`
             : `only ${usable.length} of them can be grouped (locked objects are skipped)`;
-          return failure('INVALID_COMMAND', `group_objects needs at least two existing, unlocked objects; ${reason}`, {
-            requestId,
-            errorDetails: { commandIndex: index, path: `commands[${index}].ids` }
-          });
+          report('INVALID_COMMAND', `group_objects needs at least two existing, unlocked objects; ${reason}`, index, `${at}.ids`);
+          continue;
+        }
+      } else {
+        // Commands on an object that does not exist would change nothing and
+        // still report success.
+        const missing = referencedObjectIds(command, at).filter(({ id }) => lockState(id) === undefined);
+        if (missing.length > 0) {
+          const names = missing.map(({ id }) => `"${id}"`).join(', ');
+          report('INVALID_COMMAND', `${command.type}: no object with ID ${names} on the board at this point in the batch`, index, missing[0].path);
+          continue;
         }
       }
 
@@ -804,7 +827,8 @@ export class AgentApi {
         for (const id of command.ids) if (lockState(id) !== undefined) lockedAt.set(id, command.locked);
       }
     }
-    return null;
+    if (errors.length === 0) return null;
+    return { success: false, requestId, errors };
   }
 
   apply(request) {

@@ -31,6 +31,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Text size, bold and other typography set through the agent API now apply to shapes that were
+  created with plain `text`. Before, `set_typography` skipped them while reporting success, so
+  "xl" text stayed at the default size.
+- Agent commands that name an object that doesn't exist (`set_text`, `move_objects`,
+  `set_style`, `delete_objects`, `lock_objects` and others) are refused instead of reporting
+  success and changing nothing.
+- A refused agent batch lists every invalid command (up to 10) instead of only the first.
 - The editor starts where browser storage is blocked: sandboxed embeds (such as MCP Apps
   hosts), boards opened from a `data:` URL, and browsers with site data turned off.
   Previously it stopped before drawing the board. The interface theme is then simply
