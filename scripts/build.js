@@ -30,6 +30,7 @@ const moduleFiles = [
   'src/storage/file-packer.js',
   'src/renderer/laser.js',
   'src/renderer/svg-renderer.js',
+  'src/renderer/scene-patch.js',
   'src/ui/wheel-icon-map.js',
   'src/ui/wheel.js',
   'src/ui/text-editor.js',

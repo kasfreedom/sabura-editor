@@ -110,32 +110,59 @@ function wrapText(text, maxWidth, fontSize) {
 }
 
 /**
- * Renders the entire SVG scene string.
- *
- * @param {Object} doc - Sabura document
- * @param {Object} runtime - Ephemeral runtime state (camera, selection, marquee, snapLines, hoverHandle)
- * @returns {string} Inner SVG content
+ * Renders the full scene as one SVG string. Equivalent to joining the parts that
+ * `renderSceneParts` returns; kept as the simple, complete form for callers that
+ * replace the whole canvas.
  */
 export function renderSvgScene(doc, runtime) {
+  return joinSceneParts(renderSceneParts(doc, runtime));
+}
+
+/**
+ * Joins scene parts into the complete SVG document string.
+ * @param {ReturnType<typeof renderSceneParts>} parts
+ * @param {string} [extraOverlay] markup appended after the renderer's own overlay
+ */
+export function joinSceneParts(parts, extraOverlay = '') {
+  return [
+    '<svg id="canvas-svg" width="100%" height="100%" style="display: block; width: 100%; height: 100%;">',
+    `<defs id="canvas-defs">${parts.defs}</defs>`,
+    parts.backdrop,
+    `<g id="world-layer" transform="${parts.worldTransform}">`,
+    `<g id="objects-layer">${parts.objects.map((o) => o.markup).join('\n')}</g>`,
+    `<g id="overlay-layer">${parts.overlay}${extraOverlay}</g>`,
+    '</g>',
+    '</svg>'
+  ].join('\n');
+}
+
+/**
+ * Renders the scene as separate parts so the workspace can update only what
+ * changed between frames:
+ * - `shellKey`: identifies the backdrop; when it changes the canvas is rebuilt
+ * - `defs`: camera-dependent grid patterns
+ * - `backdrop`: background, paper texture and grid rectangles
+ * - `worldTransform`: the camera transform of the world layer
+ * - `objects`: one `{id, markup}` per object, in paint order; each markup is one element
+ * - `overlay`: drafts, guides, selection and marquee drawn above the objects
+ */
+export function renderSceneParts(doc, runtime) {
   const { camera, selectedIds = [], marquee = null, snapGuides = [], connectorDraft = null } = runtime;
   const theme = doc.theme;
-
-  let out = [];
-  out.push('<svg id="canvas-svg" width="100%" height="100%" style="display: block; width: 100%; height: 100%;">');
-
   const visualProfile = getVisualThemeProfile(theme.id);
+  const showGrid = runtime.showGrid !== false;
 
   // Defs for deterministic board patterns. Document content never references these IDs.
-  out.push('<defs>');
+  const defs = [];
   if (theme.id === 'blueprint') {
-    out.push(`
+    defs.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
         <path d="M ${20 * camera.zoom} 0 L 0 0 0 ${20 * camera.zoom}" fill="none" stroke="${escapeXml(theme.gridColor || 'rgba(56, 189, 248, 0.15)')}" stroke-width="0.8" />
       </pattern>
     `);
   } else if (theme.id === 'paper') {
-    out.push(`
+    defs.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
         <circle cx="${1.35 * camera.zoom}" cy="${1.05 * camera.zoom}" r="${1.05 * Math.min(1.35, Math.max(0.65, camera.zoom))}" fill="${escapeXml(theme.gridColor || 'rgba(0,0,0,0.08)')}" />
@@ -147,26 +174,23 @@ export function renderSvgScene(doc, runtime) {
       </pattern>
     `);
   } else {
-    out.push(`
+    defs.push(`
       <pattern id="sabura-vs-canvas-grid" width="${20 * camera.zoom}" height="${20 * camera.zoom}" patternUnits="userSpaceOnUse"
         patternTransform="translate(${camera.x % (20 * camera.zoom)}, ${camera.y % (20 * camera.zoom)})">
         <circle cx="${1.2 * camera.zoom}" cy="${1.2 * camera.zoom}" r="${1.2 * Math.min(1.4, Math.max(0.7, camera.zoom))}" fill="${escapeXml(theme.gridColor || 'rgba(0,0,0,0.08)')}" />
       </pattern>
     `);
   }
-  out.push('</defs>');
 
   // Background rect with grid pattern
-  out.push(`<rect width="100%" height="100%" fill="${escapeXml(theme.background)}" />`);
+  const backdrop = [`<rect width="100%" height="100%" fill="${escapeXml(theme.background)}" />`];
   if (visualProfile?.paperTexture) {
-    out.push('<rect width="100%" height="100%" fill="url(#sabura-vs-paper-grain)" pointer-events="none" />');
+    backdrop.push('<rect width="100%" height="100%" fill="url(#sabura-vs-paper-grain)" pointer-events="none" />');
   }
-  if (runtime.showGrid !== false) {
-    out.push('<rect width="100%" height="100%" fill="url(#sabura-vs-canvas-grid)" pointer-events="none" />');
+  if (showGrid) {
+    backdrop.push('<rect width="100%" height="100%" fill="url(#sabura-vs-canvas-grid)" pointer-events="none" />');
   }
-
-  // World transform group
-  out.push(`<g id="world-layer" transform="translate(${camera.x}, ${camera.y}) scale(${camera.zoom})">`);
+  const backdropMarkup = backdrop.join('\n');
 
   // Determine effective rendering order:
   // Non-connectors follow doc.order.
@@ -200,24 +224,26 @@ export function renderSvgScene(doc, runtime) {
   });
 
   // Render objects according to sorted order
+  const selected = new Set(selectedIds);
+  const objects = [];
   for (const objId of sortedOrder) {
     const obj = doc.objects[objId];
     if (!obj) continue;
-
-    out.push(renderObject(doc, obj, selectedIds.includes(objId)));
+    objects.push({ id: objId, markup: renderObject(doc, obj, selected.has(objId)) });
   }
 
+  const overlay = [];
   // Render connector draft if in progress
   if (connectorDraft) {
-    out.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${escapeXml(theme.defaultStroke)}" stroke-width="2" stroke-dasharray="4,4" />`);
+    overlay.push(`<line x1="${connectorDraft.start.x}" y1="${connectorDraft.start.y}" x2="${connectorDraft.end.x}" y2="${connectorDraft.end.y}" stroke="${escapeXml(theme.defaultStroke)}" stroke-width="2" stroke-dasharray="4,4" />`);
   }
 
   // Render runtime snap guides
   for (const guide of snapGuides) {
     if (guide.orientation === 'v') {
-      out.push(`<line x1="${guide.pos}" y1="${guide.from}" x2="${guide.pos}" y2="${guide.to}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+      overlay.push(`<line x1="${guide.pos}" y1="${guide.from}" x2="${guide.pos}" y2="${guide.to}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
     } else {
-      out.push(`<line x1="${guide.from}" y1="${guide.pos}" x2="${guide.to}" y2="${guide.pos}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
+      overlay.push(`<line x1="${guide.from}" y1="${guide.pos}" x2="${guide.to}" y2="${guide.pos}" stroke="#e03131" stroke-width="1" stroke-dasharray="3,3" pointer-events="none" />`);
     }
   }
 
@@ -225,7 +251,7 @@ export function renderSvgScene(doc, runtime) {
   if (runtime.reconnectSnapIndicator && runtime.reconnectSnapIndicator.point) {
     const snap = runtime.reconnectSnapIndicator;
     const snapColor = doc.theme?.id === 'night' ? '#7aa2f7' : (doc.theme?.id === 'blueprint' ? '#38bdf8' : '#1971c2');
-    out.push(`
+    overlay.push(`
       <g class="reconnect-snap-guide" pointer-events="none">
         <circle cx="${snap.point.x}" cy="${snap.point.y}" r="8" fill="none" stroke="${snapColor}" stroke-width="2.5" opacity="0.9" />
         <circle cx="${snap.point.x}" cy="${snap.point.y}" r="3.5" fill="${snapColor}" />
@@ -235,7 +261,7 @@ export function renderSvgScene(doc, runtime) {
 
   // Render selection boxes and handles
   if (selectedIds.length > 0) {
-    out.push(renderSelectionOverlay(doc, selectedIds));
+    overlay.push(renderSelectionOverlay(doc, selectedIds));
   }
 
   // Render marquee selection box
@@ -244,12 +270,17 @@ export function renderSvgScene(doc, runtime) {
     const my = Math.min(marquee.startY, marquee.currentY);
     const mw = Math.abs(marquee.currentX - marquee.startX);
     const mh = Math.abs(marquee.currentY - marquee.startY);
-    out.push(`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="rgba(25, 113, 194, 0.1)" stroke="#1971c2" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" />`);
+    overlay.push(`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="rgba(25, 113, 194, 0.1)" stroke="#1971c2" stroke-width="1" stroke-dasharray="4,4" pointer-events="none" />`);
   }
 
-  out.push('</g>'); // end world-layer
-  out.push('</svg>');
-  return out.join('\n');
+  return {
+    shellKey: JSON.stringify([theme.id, theme.background, Boolean(visualProfile?.paperTexture), showGrid]),
+    defs: defs.join('\n'),
+    backdrop: backdropMarkup,
+    worldTransform: `translate(${camera.x}, ${camera.y}) scale(${camera.zoom})`,
+    objects,
+    overlay: overlay.join('\n')
+  };
 }
 
 /**

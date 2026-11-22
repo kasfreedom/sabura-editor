@@ -30,6 +30,18 @@ This project follows [Semantic Versioning](https://semver.org/).
   their keys, IME composition (Chinese, Japanese, Korean input) no longer commits text
   early, and held Space or D is released when the window loses focus.
 
+### Performance
+
+- The canvas now updates only what changed instead of rebuilding every SVG node on each
+  pointer move. Panning and zooming change only the camera transform and grid; dragging
+  replaces only the moved objects and the connectors that follow them. Measured with `npm run perf:render` in
+  headless Chrome on one Apple M5 machine, on the 574-object example board with 4x CPU
+  throttling: frames longer than 20 ms while dragging fell from 122 of 129 to 0, and
+  main-thread time while panning fell from 736 to 339 ms per second. Results vary by
+  machine.
+- `npm run perf:render` measures frame times and main-thread load on a board, and
+  `npm run test:e2e:render` checks that incremental updates match a full render.
+
 ## [1.0.0] - 2026-09-10
 
 ### Added

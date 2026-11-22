@@ -3,7 +3,8 @@
  * snapping coordinator, and tool state machine.
  */
 
-import { renderSvgScene, renderObject } from '../renderer/svg-renderer.js';
+import { renderSceneParts, joinSceneParts, renderObject } from '../renderer/svg-renderer.js';
+import { planScenePatch, applyScenePatch } from '../renderer/scene-patch.js';
 import { createDefaultObject, cloneDocument } from '../core/document.js';
 import {
   calculateResize,
@@ -28,6 +29,7 @@ import {
 export class Workspace {
   constructor(svgContainer, callbacks) {
     this.container = svgContainer;
+    this.renderedParts = null; // scene parts currently in the DOM, for incremental updates
     this.callbacks = callbacks;
     // callbacks: { onCommand, onCommandBatch, onOpenWheel, onDoubleClickedObject }
 
@@ -1832,9 +1834,11 @@ export class Workspace {
       } : null
     };
 
-    let sceneSvg = renderSvgScene(doc, runtime);
+    const parts = renderSceneParts(doc, runtime);
+    // Workspace drafts draw above everything the renderer puts in the overlay.
+    const drafts = [];
 
-    // If D-drag is in progress, insert duplicate preview clones before world-layer closing
+    // If D-drag is in progress, draw duplicate preview clones in the overlay
     if (!isReading && this.isDDragging && this.dragAccumulatedDelta && this.selectedIds.length > 0) {
       const dx = this.dragAccumulatedDelta.dx;
       const dy = this.dragAccumulatedDelta.dy;
@@ -1852,23 +1856,15 @@ export class Workspace {
         return p;
       }).filter(Boolean);
 
-      const previewMarkup = previews.map(p => renderObject(doc, p, false)).join('\n');
-      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
-      if (worldCloseIndex !== -1) {
-        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + previewMarkup + '\n' + sceneSvg.slice(worldCloseIndex);
-      }
+      drafts.push(previews.map(p => renderObject(doc, p, false)).join('\n'));
     }
 
-    // If a creation draft is in progress, insert it before world-layer closing
+    // If a creation draft is in progress, draw it in the overlay
     if (!isReading && this.draftObject) {
-      const draftSvg = renderObject(doc, this.draftObject, false);
-      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
-      if (worldCloseIndex !== -1) {
-        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + draftSvg + '\n' + sceneSvg.slice(worldCloseIndex);
-      }
+      drafts.push(renderObject(doc, this.draftObject, false));
     }
 
-    // If line drafting is in progress, insert interactive preview before world-layer closing
+    // If line drafting is in progress, draw its interactive preview in the overlay
     if (!isReading && this.isDrawingLine && this.linePoints && this.linePoints.length > 0) {
       const stroke = doc.theme?.defaultStroke || '#1e1e1e';
       const p0 = this.linePoints[0];
@@ -1894,13 +1890,18 @@ export class Workspace {
           ${snapMarker}
         </g>
       `;
-      const worldCloseIndex = sceneSvg.lastIndexOf('</g>');
-      if (worldCloseIndex !== -1) {
-        sceneSvg = sceneSvg.slice(0, worldCloseIndex) + '\n' + lineMarkup + '\n' + sceneSvg.slice(worldCloseIndex);
-      }
+      drafts.push(lineMarkup);
     }
 
-    this.container.innerHTML = sceneSvg;
+    if (drafts.length > 0) parts.overlay = [parts.overlay, ...drafts].join('\n');
+
+    // Update only what changed since the last frame; the result matches a full render.
+    // If a patch throws partway, the next render must rebuild instead of diffing
+    // against parts that no longer match the DOM.
+    const plan = planScenePatch(this.renderedParts, parts);
+    this.renderedParts = null;
+    applyScenePatch(this.container, plan, parts, joinSceneParts);
+    this.renderedParts = parts;
     this.callbacks.onZoomChange?.(this.camera.zoom);
   }
 

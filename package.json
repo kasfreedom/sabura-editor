@@ -11,7 +11,9 @@
     "test": "node --test tests/*.test.js",
     "build": "node scripts/build.js",
     "test:agent-browser": "node scripts/verify-agent-api-e2e.js",
-    "test:e2e:chrome": "node scripts/verify-full-e2e.js --chrome-only"
+    "test:e2e:chrome": "node scripts/verify-full-e2e.js --chrome-only",
+    "test:e2e:render": "node scripts/verify-incremental-render-e2e.js",
+    "perf:render": "node scripts/measure-render.js"
   },
   "keywords": [
     "whiteboard",
