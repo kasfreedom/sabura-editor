@@ -369,6 +369,8 @@ export const AGENT_PUBLIC_COMMAND_SCHEMAS = Object.freeze({
     toId: ID_SCHEMA,
     fromAnchor: ANCHOR_SCHEMA,
     toAnchor: ANCHOR_SCHEMA,
+    text: { type: 'string', description: 'Arrow label, drawn at the middle of the arrow.' },
+    textStyle: TEXT_STYLE_SCHEMA,
     ...CONNECTOR_CREATION_PROPERTIES
   }, ['connectorId', 'fromId', 'toId']),
   reconnect_connector: commandSchema('reconnect_connector', {

@@ -322,6 +322,11 @@ Connectors can dynamically attach to objects with normalized anchor points (`0.0
 }
 ```
 
+A connector's optional `text` is drawn as an arrow label at the middle of the arrow (the
+curve's midpoint for curved arrows, the middle segment for elbow arrows), over a patch of the
+board's background colour. `textStyle` sets its size, font, weight and colour; the default size
+is 16.
+
 ### E. Free Endpoint Connector
 
 Connectors can terminate at free-floating world coordinates using the `point` definition.

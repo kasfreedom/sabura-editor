@@ -738,6 +738,17 @@ export function resolveConnectorGeometry(doc, connector) {
 }
 
 /**
+ * Where a connector's label sits: the curve's midpoint for curved arrows, the
+ * middle segment for elbow arrows, halfway along for straight ones.
+ * @param {object} geom result of resolveConnectorGeometry
+ */
+export function getConnectorLabelPoint(geom) {
+  if (geom.curveMidpoint) return { ...geom.curveMidpoint };
+  if (geom.elbowMidpoint) return { ...geom.elbowMidpoint };
+  return { x: (geom.start.x + geom.end.x) / 2, y: (geom.start.y + geom.end.y) / 2 };
+}
+
+/**
  * Computes shortest distance from point (px, py) to line segment (x1, y1)-(x2, y2).
  */
 export function distanceToSegment(px, py, x1, y1, x2, y2) {

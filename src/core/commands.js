@@ -1368,6 +1368,8 @@ export function applyCommand(doc, cmd) {
       if (cmd.curveDistance !== undefined) connectorOverrides.curveDistance = cmd.curveDistance;
       if (cmd.elbowOffset !== undefined) connectorOverrides.elbowOffset = cmd.elbowOffset;
       if (cmd.stacking !== undefined) connectorOverrides.stacking = cmd.stacking;
+      if (cmd.text !== undefined) connectorOverrides.text = String(cmd.text);
+      if (cmd.textStyle !== undefined) connectorOverrides.textStyle = cloneDocument(cmd.textStyle);
       const connectorObj = createDefaultObject('connector', connectorOverrides, newDoc.theme);
 
       newDoc.objects[cId] = connectorObj;

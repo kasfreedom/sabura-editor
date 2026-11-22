@@ -5,7 +5,7 @@
 
 import { escapeXml } from '../core/markup.js';
 import { generateSketchPath, sketchLine, generateClosedFillPath } from '../core/sketch.js';
-import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox } from '../core/geometry.js';
+import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox, getConnectorLabelPoint, measureText } from '../core/geometry.js';
 import { FONT_FAMILIES } from '../core/types.js';
 import { resolveContrastColor } from '../core/color.js';
 
@@ -320,6 +320,32 @@ export function renderObject(doc, obj, isSelected = false) {
       const tip = geom.points[0];
       const next = geom.points[1];
       markup.push(renderArrowhead(tip.x, tip.y, next.x, next.y, 14, stroke, strokeWidth, isSketch));
+    }
+
+    // Arrow label: the connector's text, centred on the path, over a patch of
+    // board colour so the line doesn't run through the words.
+    if (typeof obj.text === 'string' && obj.text.trim()) {
+      const textStyle = obj.textStyle || {};
+      const fontSize = textStyle.resolvedSize || 16;
+      const familyToken = textStyle.fontFamily || (isSketch ? 'hand' : (doc.theme?.defaultFontFamily || 'hand'));
+      const fontFamily = FONT_FAMILIES[familyToken] || FONT_FAMILIES.hand;
+      const background = doc.theme?.background || '#ffffff';
+      const color = resolveContrastColor(textStyle.color || stroke, background, '#ffffff', '#1e1e1e');
+      const lines = obj.text.split('\n');
+      const lineHeight = fontSize * 1.3;
+      const size = measureText(obj.text, fontSize, familyToken);
+      const at = getConnectorLabelPoint(geom);
+      const padX = 6;
+      const padY = 3;
+      const boxW = size.width + padX * 2;
+      const boxH = (lines.length - 1) * lineHeight + fontSize + padY * 2;
+      const firstBaseline = at.y - boxH / 2 + padY + fontSize * 0.85;
+      markup.push(`<rect class="connector-label-bg" x="${at.x - boxW / 2}" y="${at.y - boxH / 2}" width="${boxW}" height="${boxH}" rx="4" fill="${escapeXml(background)}" opacity="0.92" pointer-events="none" />`);
+      markup.push(`<text class="connector-label" x="${at.x}" y="${firstBaseline}" font-size="${fontSize}" font-family="${escapeXml(fontFamily)}" font-weight="${textStyle.bold ? 'bold' : 'normal'}" fill="${escapeXml(color)}" text-anchor="middle" pointer-events="none" style="user-select: none;">`);
+      for (let i = 0; i < lines.length; i++) {
+        markup.push(`<tspan x="${at.x}" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(lines[i])}</tspan>`);
+      }
+      markup.push('</text>');
     }
   } else if (obj.type === 'image') {
     const asset = doc.assets?.[obj.assetId];

@@ -6,6 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Arrow labels. A connector's `text` is drawn at the middle of the arrow, over a patch of board
+  colour so the line doesn't run through it. Agents can pass `text` to `connect_objects` or change
+  it with `set_text`. Before, connector text was stored and reported but never drawn.
+
 ### Security
 
 - Color fields in documents and commands are validated against a strict color allowlist, and the

@@ -94,6 +94,9 @@ objects (`set_text`, `move_objects`, `set_style`, `delete_objects` and the
 rest): naming an object that doesn't exist at that point in the batch is
 refused with `INVALID_COMMAND`, and the message names the missing ID.
 
+To label an arrow, pass `text` (and optionally `textStyle`) to `connect_objects`, or set it
+later with `set_text` on the connector's ID. The label is drawn at the middle of the arrow.
+
 A refused batch lists every problem at once, one entry per bad command (up to
 10), each with its `commandIndex` and `path`, so the whole batch can be fixed
 in one retry.
