@@ -44,6 +44,7 @@ import { HelpModal } from './ui/help-modal.js';
 import { LaserPointer } from './renderer/laser.js';
 import { AgentApi } from './agent-api.js';
 import { registerSaburaWebMcp } from './webmcp.js';
+import { browserStorage, readInterfaceTheme, writeInterfaceTheme } from './storage/ui-preferences.js';
 
 export class SaburaApp {
   constructor() {
@@ -53,7 +54,7 @@ export class SaburaApp {
     this.exportBaseline = null;
     this.isSaving = false;
     this.prePresentationMode = 'reading';
-    this.interfaceTheme = (typeof localStorage !== 'undefined' ? localStorage.getItem('sabura_ui_theme') : null) || 'system';
+    this.interfaceTheme = readInterfaceTheme();
     this.undoStack = [];
     this.redoStack = [];
     this.subscribers = new Set();
@@ -231,6 +232,9 @@ export class SaburaApp {
       },
       onZoomChange: (zoom) => {
         this.zoomToolbar?.setZoom(zoom);
+      },
+      onCameraRendered: (camera) => {
+        this.textEditor?.followCamera(camera);
       }
     });
     this.workspace.setMode(this.mode);
@@ -1234,7 +1238,8 @@ export class SaburaApp {
 
   setInterfaceTheme(theme) {
     this.interfaceTheme = theme;
-    localStorage.setItem('sabura_ui_theme', theme);
+    // Not remembered where storage is blocked; the theme still applies now.
+    writeInterfaceTheme(browserStorage, theme);
     this.applyInterfaceTheme(theme);
     this.updateUI();
   }

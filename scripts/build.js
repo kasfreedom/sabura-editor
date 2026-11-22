@@ -28,6 +28,7 @@ const moduleFiles = [
   'src/core/commands.js',
   'src/core/sketch.js',
   'src/storage/file-packer.js',
+  'src/storage/ui-preferences.js',
   'src/renderer/laser.js',
   'src/renderer/svg-renderer.js',
   'src/renderer/scene-patch.js',

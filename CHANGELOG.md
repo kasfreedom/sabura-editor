@@ -16,6 +16,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The editor starts where browser storage is blocked: sandboxed embeds (such as MCP Apps
+  hosts), boards opened from a `data:` URL, and browsers with site data turned off.
+  Previously it stopped before drawing the board. The interface theme is then simply
+  not remembered.
+- The inline text box stays over its shape when the canvas is panned or zoomed while
+  typing, instead of staying fixed on screen.
 - Save Copy no longer corrupts boards whose text contains `$'`, `` $` ``, `$&`, or `$$`.
 - Undo and redo are now exact for grouping, ungrouping, board theme changes, duplicating
   grouped objects, and connector settings. Previously, redo silently did nothing after

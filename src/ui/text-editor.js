@@ -36,7 +36,6 @@ export class TextEditor {
     this.initialText = object.text || '';
 
     const textStyle = object.textStyle || {};
-    const fontSize = (textStyle.resolvedSize || 20) * camera.zoom;
     const fontFamily = FONT_FAMILIES[textStyle.fontFamily] || FONT_FAMILIES.sans;
     const fontWeight = textStyle.bold ? 'bold' : 'normal';
     const align = textStyle.align || (object.type === 'text' ? 'left' : 'center');
@@ -46,23 +45,8 @@ export class TextEditor {
       : object.fill;
     const color = resolveContrastColor(rawColor, background, '#ffffff', '#1e1e1e');
 
-    const rot = object.rotation || 0;
-    const centerScreenX = (object.x + object.width / 2) * camera.zoom + camera.x;
-    const centerScreenY = (object.y + object.height / 2) * camera.zoom + camera.y;
-
-    const screenW = Math.max(120, object.width * camera.zoom);
-    const screenH = Math.max(40, object.height * camera.zoom);
-    const screenX = centerScreenX - screenW / 2;
-    const screenY = centerScreenY - screenH / 2;
-
     this.textarea.style.display = 'block';
-    this.textarea.style.left = `${screenX}px`;
-    this.textarea.style.top = `${screenY}px`;
-    this.textarea.style.width = `${screenW}px`;
-    this.textarea.style.height = `${screenH}px`;
-    this.textarea.style.transform = rot !== 0 ? `rotate(${rot}deg)` : 'none';
-    this.textarea.style.transformOrigin = '50% 50%';
-    this.textarea.style.fontSize = `${fontSize}px`;
+    this.followCamera(camera);
     this.textarea.style.fontFamily = fontFamily;
     this.textarea.style.fontWeight = fontWeight;
     this.textarea.style.textAlign = align;
@@ -72,6 +56,30 @@ export class TextEditor {
     this.textarea.value = this.initialText;
     this.textarea.focus();
     this.textarea.select();
+  }
+
+  /**
+   * Places the open text box over its object for `camera`. Called on open and
+   * after every canvas render, so the box tracks the shape while the user pans
+   * or zooms mid-edit. Leaves the text being typed untouched.
+   */
+  followCamera(camera) {
+    const object = this.targetObject;
+    if (!object || this.textarea.style.display !== 'block') return;
+    const zoom = camera.zoom;
+    const centerScreenX = (object.x + object.width / 2) * zoom + camera.x;
+    const centerScreenY = (object.y + object.height / 2) * zoom + camera.y;
+    const screenW = Math.max(120, object.width * zoom);
+    const screenH = Math.max(40, object.height * zoom);
+    const rot = object.rotation || 0;
+
+    this.textarea.style.left = `${centerScreenX - screenW / 2}px`;
+    this.textarea.style.top = `${centerScreenY - screenH / 2}px`;
+    this.textarea.style.width = `${screenW}px`;
+    this.textarea.style.height = `${screenH}px`;
+    this.textarea.style.transform = rot !== 0 ? `rotate(${rot}deg)` : 'none';
+    this.textarea.style.transformOrigin = '50% 50%';
+    this.textarea.style.fontSize = `${(object.textStyle?.resolvedSize || 20) * zoom}px`;
   }
 
   close(commit = true) {

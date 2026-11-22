@@ -1949,6 +1949,8 @@ export class Workspace {
     applyScenePatch(this.container, plan, parts, joinSceneParts);
     this.renderedParts = parts;
     this.callbacks.onZoomChange?.(this.camera.zoom);
+    // HTML laid over the canvas (the inline text box) tracks the camera too.
+    this.callbacks.onCameraRendered?.(this.camera);
   }
 
   setSnapGrid(enabled) {
