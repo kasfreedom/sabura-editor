@@ -34,7 +34,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 - The canvas now updates only what changed instead of rebuilding every SVG node on each
   pointer move. Panning and zooming change only the camera transform and grid; dragging
-  replaces only the moved objects and the connectors that follow them. Measured with `npm run perf:render` in
+  replaces only the moved objects and the connectors that follow them. Pointer-move and
+  wheel renders are coalesced to one per frame. Measured with `npm run perf:render` in
   headless Chrome on one Apple M5 machine, on the 574-object example board with 4x CPU
   throttling: frames longer than 20 ms while dragging fell from 122 of 129 to 0, and
   main-thread time while panning fell from 736 to 339 ms per second. Results vary by

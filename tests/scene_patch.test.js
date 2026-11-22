@@ -94,3 +94,56 @@ test('changing most objects at once rebuilds instead of patching one by one', ()
   assert.deepEqual(planScenePatch(parts(doc), parts(moved)).objects, { rebuild: true });
 });
 
+// --- Render coalescing ------------------------------------------------------
+
+test('renders during pointer moves and wheel coalesce to one per frame; other renders stay synchronous', async () => {
+  const { Workspace } = await import('../src/ui/workspace.js');
+  const frames = new Map();
+  let nextFrame = 1;
+  globalThis.requestAnimationFrame = (fn) => { const id = nextFrame++; frames.set(id, fn); return id; };
+  globalThis.cancelAnimationFrame = (id) => { frames.delete(id); };
+  try {
+    const ws = Object.create(Workspace.prototype);
+    ws.hotInputDepth = 0;
+    ws.pendingFrame = null;
+    let drawn = 0;
+    ws.renderNow = () => { drawn++; };
+
+    // Three events inside one frame: nothing drawn yet, one frame scheduled.
+    for (let i = 0; i < 3; i++) ws.runHotInput(function () { this.render(); this.render(); });
+    assert.equal(drawn, 0);
+    assert.equal(frames.size, 1);
+
+    // The frame draws once.
+    for (const [id, fn] of [...frames]) { frames.delete(id); fn(); }
+    assert.equal(drawn, 1);
+    assert.equal(ws.pendingFrame, null);
+
+    // A synchronous render (pointerup, command, mode switch) draws now and
+    // cancels the pending frame so it never draws stale state afterwards.
+    ws.runHotInput(function () { this.render(); });
+    assert.equal(frames.size, 1);
+    ws.render();
+    assert.equal(drawn, 2);
+    assert.equal(frames.size, 0);
+
+    // A throwing handler still leaves later renders synchronous.
+    assert.throws(() => ws.runHotInput(() => { throw new Error('boom'); }), /boom/);
+    ws.render();
+    assert.equal(drawn, 3);
+  } finally {
+    delete globalThis.requestAnimationFrame;
+    delete globalThis.cancelAnimationFrame;
+  }
+});
+
+test('without requestAnimationFrame (Node, tests) every render is synchronous', async () => {
+  const { Workspace } = await import('../src/ui/workspace.js');
+  const ws = Object.create(Workspace.prototype);
+  ws.hotInputDepth = 0;
+  ws.pendingFrame = null;
+  let drawn = 0;
+  ws.renderNow = () => { drawn++; };
+  ws.runHotInput(function () { this.render(); });
+  assert.equal(drawn, 1);
+});

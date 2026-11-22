@@ -30,6 +30,8 @@ export class Workspace {
   constructor(svgContainer, callbacks) {
     this.container = svgContainer;
     this.renderedParts = null; // scene parts currently in the DOM, for incremental updates
+    this.hotInputDepth = 0; // > 0 while a pointermove or wheel handler runs
+    this.pendingFrame = null; // requestAnimationFrame id of a coalesced render
     this.callbacks = callbacks;
     // callbacks: { onCommand, onCommandBatch, onOpenWheel, onDoubleClickedObject }
 
@@ -265,6 +267,10 @@ export class Workspace {
   }
 
   destroy() {
+    if (this.pendingFrame !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.pendingFrame);
+      this.pendingFrame = null;
+    }
     this.container.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
@@ -964,7 +970,25 @@ export class Workspace {
     }
   }
 
+  /**
+   * Pointer moves and wheel events can arrive several times per screen frame.
+   * While their handlers run, render() schedules one render for the next frame
+   * instead of drawing each event; every other render stays synchronous.
+   */
+  runHotInput(handler, e) {
+    this.hotInputDepth++;
+    try {
+      return handler.call(this, e);
+    } finally {
+      this.hotInputDepth--;
+    }
+  }
+
   onPointerMove(e) {
+    return this.runHotInput(this.handlePointerMove, e);
+  }
+
+  handlePointerMove(e) {
     // If pointer moved more than 5px, cancel long-press timer
     if (this.longPressTimer) {
       const dist = Math.hypot(e.clientX - this.pointerStartScreen.x, e.clientY - this.pointerStartScreen.y);
@@ -1802,6 +1826,10 @@ export class Workspace {
   }
 
   onWheel(e) {
+    return this.runHotInput(this.handleWheel, e);
+  }
+
+  handleWheel(e) {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
       // Pinch to zoom or ctrl-wheel
@@ -1816,6 +1844,24 @@ export class Workspace {
   }
 
   render() {
+    if (this.hotInputDepth > 0 && typeof requestAnimationFrame === 'function') {
+      if (this.pendingFrame === null) {
+        this.pendingFrame = requestAnimationFrame(() => {
+          this.pendingFrame = null;
+          this.render();
+        });
+      }
+      return;
+    }
+    // A synchronous render supersedes any coalesced one.
+    if (this.pendingFrame !== null) {
+      cancelAnimationFrame(this.pendingFrame);
+      this.pendingFrame = null;
+    }
+    this.renderNow();
+  }
+
+  renderNow() {
     const doc = this.callbacks.getDocument();
     const isReading = this.mode === 'reading';
     const draftGeometry = this.draftObject?.type === 'connector'
