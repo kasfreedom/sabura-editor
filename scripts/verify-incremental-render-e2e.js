@@ -91,18 +91,23 @@ async function main() {
   const probe = http.createServer();
   const chromePort = await listen(probe);
   await new Promise((resolve) => probe.close(resolve));
+  // CHROME_ARGS adds flags for the environment, e.g. --no-sandbox on CI runners
+  // whose kernel blocks Chrome's sandbox.
+  const extraArgs = (process.env.CHROME_ARGS || '').split(/\s+/).filter(Boolean);
   chrome = spawn(chromeExecutable, ['--headless=new', `--remote-debugging-port=${chromePort}`, `--user-data-dir=${profile}`,
-    '--no-first-run', '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
+    '--no-first-run', '--window-size=1280,800', ...extraArgs, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let chromeStderr = '';
+  chrome.stderr.on('data', (chunk) => { chromeStderr = (chromeStderr + chunk).slice(-4000); });
 
   let debuggerUrl = null;
-  for (let attempt = 0; attempt < 50 && !debuggerUrl; attempt++) {
+  for (let attempt = 0; attempt < 150 && !debuggerUrl && chrome.exitCode === null; attempt++) {
     await sleep(100);
     try {
       const targets = await (await fetch(`http://127.0.0.1:${chromePort}/json/list`)).json();
       debuggerUrl = targets.find((t) => t.type === 'page')?.webSocketDebuggerUrl || null;
     } catch (_) { /* Chrome still starting */ }
   }
-  if (!debuggerUrl) throw new Error('Could not connect to Chrome DevTools Protocol');
+  if (!debuggerUrl) throw new Error(`Could not connect to Chrome DevTools Protocol (Chrome exit code ${chrome.exitCode}).\nChrome stderr:\n${chromeStderr}`);
   socket = new WebSocket(debuggerUrl);
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
   socket.addEventListener('message', (event) => {

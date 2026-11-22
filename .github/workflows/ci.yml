@@ -40,4 +40,6 @@ jobs:
       - name: Browser checks (incremental render, text box, blocked storage)
         env:
           CHROME_PATH: /usr/bin/google-chrome
+          # Ubuntu runners block the unprivileged namespaces Chrome's sandbox needs.
+          CHROME_ARGS: --no-sandbox
         run: npm run test:e2e:render
