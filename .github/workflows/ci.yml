@@ -33,3 +33,11 @@ jobs:
 
       - name: Verify generated artifact is current
         run: git diff --exit-code -- sabura.html
+
+      - name: Verify example boards carry the current runtime
+        run: npm run examples:refresh && git diff --exit-code -- examples
+
+      - name: Browser checks (incremental render, text box, blocked storage)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run test:e2e:render
