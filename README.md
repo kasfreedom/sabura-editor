@@ -57,10 +57,11 @@ the editor's own checks, so refused commands come back with the field to fix.
 When Claude Code has a browser available, Claude can also open the board and
 edit it live.
 
-The same skill works in claude.ai, where skills need code execution turned on:
-zip the [`plugin/skills/sabura`](plugin/skills/sabura) folder (`zip -r
-sabura.zip sabura` from `plugin/skills`) and upload it under Customize, then
-Skills.
+The same skill works in claude.ai: download
+[`sabura-skill.zip`](https://github.com/sabura-app/sabura-editor/releases/latest/download/sabura-skill.zip)
+from the latest release, then in claude.ai open Plugins, choose Add, then
+Upload plugin, and pick the zip. Ask for a board in any chat and Claude shares
+the `.html` file, which opens in the chat's preview as a working editor.
 
 Without Claude, the bundled command-line tool does the same:
 
@@ -101,6 +102,10 @@ also run the Chrome browser verification on macOS:
 ```sh
 npm run test:e2e:chrome
 ```
+
+After changing `src/` or `bin/`, run `npm run plugin:build` so the plugin carries
+the current editor (CI fails otherwise). `npm run plugin:zip` builds
+`sabura-skill.zip` for the release.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution expectations and
 [`SECURITY.md`](SECURITY.md) for reporting security issues.

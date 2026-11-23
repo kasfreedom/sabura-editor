@@ -4,14 +4,15 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] - 2026-11-23
 
 ### Added
 
 - A Claude plugin and skill. The repository is a Claude Code plugin marketplace
   (`/plugin marketplace add sabura-app/sabura-editor`, then `/plugin install sabura@sabura`),
-  and `plugin/skills/sabura` can also be uploaded to claude.ai as a skill. Claude makes and
-  edits board files locally, with no server.
+  and `sabura-skill.zip`, attached to each release, uploads to claude.ai under Plugins.
+  Claude makes and edits board files itself, with no server. This replaces the Sabura MCP
+  connector, which is retired.
 - `sabura-board`, a command-line tool (`bin/sabura-board.js`) that creates, edits and reads
   board files from agent commands, with the same checks as `window.sabura.agent`. Refused
   batches list every problem and write nothing. Edits record the previous revision as parent.
@@ -103,4 +104,5 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
+[1.1.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0

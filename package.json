@@ -1,6 +1,6 @@
 {
   "name": "sabura",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Portable, offline visual whiteboard in one self-contained HTML file",
   "private": true,
   "type": "module",
@@ -16,7 +16,8 @@
     "test:e2e:render": "node scripts/verify-incremental-render-e2e.js",
     "perf:render": "node scripts/measure-render.js",
     "plugin:build": "node scripts/build-plugin.js",
-    "plugin:check": "node scripts/build-plugin.js --check"
+    "plugin:check": "node scripts/build-plugin.js --check",
+    "plugin:zip": "npm run plugin:check && rm -f sabura-skill.zip && cd plugin/skills && zip -qrX ../../sabura-skill.zip sabura -x \"*/.*\""
   },
   "keywords": [
     "whiteboard",
