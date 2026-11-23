@@ -107,6 +107,31 @@ export function getObjectCorners(obj) {
 }
 
 /**
+ * The order objects are painted in, bottom to top. Drawing and clicking both
+ * use it, so what is on top on screen is what a click selects. Objects follow
+ * doc.order, arrows included, so Send to back/front works on them like on any
+ * shape. A connector's explicit `stacking` still pins it under ("back") or
+ * over ("front") everything else, keeping doc.order among its kind.
+ *
+ * @param {{ order?: string[], objects?: Object }} doc
+ * @returns {string[]} ids of existing objects
+ */
+export function paintOrder(doc) {
+  const back = [];
+  const middle = [];
+  const front = [];
+  for (const id of doc.order || []) {
+    const obj = doc.objects?.[id];
+    if (!obj) continue;
+    const stacking = obj.type === 'connector' ? obj.stacking : undefined;
+    if (stacking === 'back') back.push(id);
+    else if (stacking === 'front') front.push(id);
+    else middle.push(id);
+  }
+  return [...back, ...middle, ...front];
+}
+
+/**
  * Gets axis-aligned bounding box of an object.
  * For connectors, calculates the true bounds from resolved/rendered geometry without phantom zero-origin.
  * For rotated objects, calculates enclosing world AABB containing all rotated visual corners.

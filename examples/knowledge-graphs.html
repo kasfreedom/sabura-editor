@@ -25739,6 +25739,16 @@ if ("number" != typeof angle || !Number.isFinite(angle)) return 0;
 let a = angle % 360;
 return a < 0 && (a += 360), Math.round(100 * a) / 100;
 }
+function paintOrder(doc) {
+const back = [], middle = [], front = [];
+for (const id of doc.order || []) {
+const obj = doc.objects?.[id];
+if (!obj) continue;
+const stacking = "connector" === obj.type ? obj.stacking : void 0;
+"back" === stacking ? back.push(id) : "front" === stacking ? front.push(id) : middle.push(id);
+}
+return [ ...back, ...middle, ...front ];
+}
 function getBoundingBox(obj, doc = null) {
 if (!obj) return null;
 if ("connector" === obj.type) {
@@ -28921,20 +28931,7 @@ const {camera: camera, selectedIds: selectedIds = [], marquee: marquee = null, s
 const backdrop = [ `<rect width="100%" height="100%" fill="${escapeXml(theme.background)}" />` ];
 visualProfile?.paperTexture && backdrop.push('<rect width="100%" height="100%" fill="url(#sabura-vs-paper-grain)" pointer-events="none" />'),
 showGrid && backdrop.push('<rect width="100%" height="100%" fill="url(#sabura-vs-canvas-grid)" pointer-events="none" />');
-const backdropMarkup = backdrop.join("\n"), baseOrder = [ ...doc.order ], orderIndices = new Map(baseOrder.map((id, idx) => [ id, idx ])), sortedOrder = [ ...baseOrder ].sort((aId, bId) => {
-const aObj = doc.objects[aId], bObj = doc.objects[bId], aBase = orderIndices.get(aId) ?? 0, bBase = orderIndices.get(bId) ?? 0, getEffectiveKey = (obj, baseIdx) => {
-if (!obj || "connector" !== obj.type) return 10 * baseIdx;
-if ("back" === obj.stacking) return -1e3 + baseIdx;
-if ("front" === obj.stacking) return 1e6 + baseIdx;
-const fromIdx = obj.from?.id ? orderIndices.get(obj.from.id) : void 0, toIdx = obj.to?.id ? orderIndices.get(obj.to.id) : void 0;
-if (void 0 !== fromIdx || void 0 !== toIdx) {
-const maxConnected = Math.max(fromIdx ?? -1, toIdx ?? -1);
-return 10 * Math.max(baseIdx, maxConnected) + 1;
-}
-return 10 * baseIdx;
-};
-return getEffectiveKey(aObj, aBase) - getEffectiveKey(bObj, bBase);
-}), selected = new Set(selectedIds), objects = [];
+const backdropMarkup = backdrop.join("\n"), sortedOrder = paintOrder(doc), selected = new Set(selectedIds), objects = [];
 for (const objId of sortedOrder) {
 const obj = doc.objects[objId];
 obj && objects.push({
@@ -31374,9 +31371,9 @@ this.isDrawingLine = !1, this.linePoints = null, this.lineRubberband = null, thi
 this.render();
 }
 findObjectAt(worldPoint) {
-const doc = this.callbacks.getDocument(), hitThreshold = Math.max(12, 14 / this.camera.zoom);
-for (let i = doc.order.length - 1; i >= 0; i--) {
-const objId = doc.order[i], obj = doc.objects[objId];
+const doc = this.callbacks.getDocument(), hitThreshold = Math.max(12, 14 / this.camera.zoom), order = paintOrder(doc);
+for (let i = order.length - 1; i >= 0; i--) {
+const objId = order[i], obj = doc.objects[objId];
 if (obj && isPointInsideObject(worldPoint, obj, doc, hitThreshold)) return obj;
 }
 return null;

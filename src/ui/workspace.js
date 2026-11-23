@@ -23,6 +23,7 @@ import {
   unrotatePoint,
   normalizeAngle,
   isPointInsideObject,
+  paintOrder,
   resolveConnectorGeometry
 } from '../core/geometry.js';
 
@@ -598,8 +599,10 @@ export class Workspace {
   findObjectAt(worldPoint) {
     const doc = this.callbacks.getDocument();
     const hitThreshold = Math.max(12, 14 / this.camera.zoom);
-    for (let i = doc.order.length - 1; i >= 0; i--) {
-      const objId = doc.order[i];
+    // Topmost first, in the same order the canvas is painted.
+    const order = paintOrder(doc);
+    for (let i = order.length - 1; i >= 0; i--) {
+      const objId = order[i];
       const obj = doc.objects[objId];
       if (!obj) continue;
       if (isPointInsideObject(worldPoint, obj, doc, hitThreshold)) {

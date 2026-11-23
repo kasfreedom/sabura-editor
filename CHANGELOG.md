@@ -4,6 +4,15 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Arrows follow the board's order like every other object. Before, an arrow was always drawn
+  above both shapes it connects, so Send to back on an arrow crossing another shape did nothing,
+  and a click on that spot could select the shape the arrow was drawn over. Drawing and clicking
+  now use the same order. A connector's explicit `stacking` (`front` or `back`) still applies.
+
 ## [1.1.0] - 2026-11-23
 
 ### Added

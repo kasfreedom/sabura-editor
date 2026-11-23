@@ -5,7 +5,7 @@
 
 import { escapeXml } from '../core/markup.js';
 import { generateSketchPath, sketchLine, generateClosedFillPath } from '../core/sketch.js';
-import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox, getConnectorLabelPoint, measureText } from '../core/geometry.js';
+import { resolveConnectorGeometry, getBoundingBox, getUnionBoundingBox, getConnectorLabelPoint, measureText, paintOrder } from '../core/geometry.js';
 import { FONT_FAMILIES } from '../core/types.js';
 import { resolveContrastColor } from '../core/color.js';
 
@@ -194,36 +194,8 @@ export function renderSceneParts(doc, runtime) {
   }
   const backdropMarkup = backdrop.join('\n');
 
-  // Determine effective rendering order:
-  // Non-connectors follow doc.order.
-  // Connectors follow explicit stacking ('front' or 'back') or naturally follow the visual level of connected objects.
-  const baseOrder = [...doc.order];
-  const orderIndices = new Map(baseOrder.map((id, idx) => [id, idx]));
-
-  const sortedOrder = [...baseOrder].sort((aId, bId) => {
-    const aObj = doc.objects[aId];
-    const bObj = doc.objects[bId];
-    const aBase = orderIndices.get(aId) ?? 0;
-    const bBase = orderIndices.get(bId) ?? 0;
-
-    const getEffectiveKey = (obj, baseIdx) => {
-      if (!obj || obj.type !== 'connector') return baseIdx * 10;
-      if (obj.stacking === 'back') return -1000 + baseIdx;
-      if (obj.stacking === 'front') return 1000000 + baseIdx;
-
-      // Natural visual level: if connected to objects, sit at or above max connected object
-      const fromIdx = obj.from?.id ? orderIndices.get(obj.from.id) : undefined;
-      const toIdx = obj.to?.id ? orderIndices.get(obj.to.id) : undefined;
-      if (fromIdx !== undefined || toIdx !== undefined) {
-        const maxConnected = Math.max(fromIdx ?? -1, toIdx ?? -1);
-        const naturalIdx = Math.max(baseIdx, maxConnected);
-        return naturalIdx * 10 + 1;
-      }
-      return baseIdx * 10;
-    };
-
-    return getEffectiveKey(aObj, aBase) - getEffectiveKey(bObj, bBase);
-  });
+  // Paint order is shared with hit testing (see paintOrder in geometry.js).
+  const sortedOrder = paintOrder(doc);
 
   // Render objects according to sorted order
   const selected = new Set(selectedIds);
