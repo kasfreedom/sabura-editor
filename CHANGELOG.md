@@ -4,6 +4,30 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-23
+
+### Added
+
+- Layout warnings from `sabura-board`. `new` and `edit` report labels that don't fit their shape
+  (with a size that fits) and labelled shapes or text that overlap. They don't stop the file being
+  written; the Claude skill fixes them before handing a board over.
+- The plugin has a README (what it does, example prompts, what it runs and sends), an icon, and an
+  eval suite (`plugin/evals`, run with `claude plugin eval`). The release zip is now the whole
+  plugin, so claude.ai shows Sabura's own name, description and version.
+
+### Changed
+
+- The editor code in every board file is printed one statement per line instead of as one long
+  minified line, so it can be read and reviewed. Board files are about 42 KB larger.
+
+### Fixed
+
+- A board that opens in a frame that is still tiny (a chat preview, a pane that is opening, an
+  embed) fits itself again once the frame has its real size, instead of staying at 20% zoom. It
+  stops refitting as soon as anyone moves the view.
+- The skill's fallback for when Node isn't available gave the wrong escape for `<`, so a label
+  containing `</script>` could break the board file.
+
 ## [1.1.0] - 2026-11-23
 
 ### Added
@@ -104,5 +128,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
+[1.2.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0
