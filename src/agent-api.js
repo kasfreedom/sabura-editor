@@ -348,7 +348,12 @@ export const AGENT_PUBLIC_COMMAND_SCHEMAS = Object.freeze({
     id: ID_SCHEMA,
     newType: { type: 'string', enum: ['rectangle', 'ellipse', 'diamond', 'triangle', 'text'] }
   }, ['id', 'newType']),
-  group_objects: commandSchema('group_objects', { ids: IDS_SCHEMA, groupId: ID_SCHEMA, name: { type: 'string' } }, ['ids', 'groupId']),
+  group_objects: commandSchema('group_objects', {
+    ids: IDS_SCHEMA,
+    groupId: ID_SCHEMA,
+    name: { type: 'string' },
+    frame: { type: 'boolean', description: 'Draw a visible frame with the group name around the members. Without it a group is invisible: it only keeps the members together.' }
+  }, ['ids', 'groupId']),
   ungroup_objects: commandSchema('ungroup_objects', { groupIds: IDS_SCHEMA }, ['groupIds']),
   lock_objects: commandSchema('lock_objects', { ids: IDS_SCHEMA, locked: { type: 'boolean' } }, ['ids', 'locked']),
   reorder_objects: commandSchema('reorder_objects', {

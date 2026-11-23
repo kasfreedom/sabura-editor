@@ -129,6 +129,7 @@ export function joinSceneParts(parts, extraOverlay = '') {
     `<defs id="canvas-defs">${parts.defs}</defs>`,
     parts.backdrop,
     `<g id="world-layer" transform="${parts.worldTransform}">`,
+    `<g id="frames-layer">${parts.frames}</g>`,
     `<g id="objects-layer">${parts.objects.map((o) => o.markup).join('\n')}</g>`,
     `<g id="overlay-layer">${parts.overlay}${extraOverlay}</g>`,
     '</g>',
@@ -143,6 +144,7 @@ export function joinSceneParts(parts, extraOverlay = '') {
  * - `defs`: camera-dependent grid patterns
  * - `backdrop`: background, paper texture and grid rectangles
  * - `worldTransform`: the camera transform of the world layer
+ * - `frames`: labelled frames of groups marked `frame: true`, drawn under the objects
  * - `objects`: one `{id, markup}` per object, in paint order; each markup is one element
  * - `overlay`: drafts, guides, selection and marquee drawn above the objects
  */
@@ -278,9 +280,39 @@ export function renderSceneParts(doc, runtime) {
     defs: defs.join('\n'),
     backdrop: backdropMarkup,
     worldTransform: `translate(${camera.x}, ${camera.y}) scale(${camera.zoom})`,
+    frames: renderGroupFrames(doc),
     objects,
     overlay: overlay.join('\n')
   };
+}
+
+const FRAME_PAD = 20;
+const FRAME_LABEL_SPACE = 30;
+
+/**
+ * Frames for groups marked `frame: true`: a soft rounded box around the
+ * members' bounds with the group name at its top left, drawn under the shapes.
+ */
+export function renderGroupFrames(doc) {
+  const frames = [];
+  const theme = doc.theme || {};
+  const ink = resolveContrastColor(theme.defaultStroke || '#1e1e1e', theme.background || '#ffffff', '#ffffff', '#1e1e1e');
+  for (const [groupId, group] of Object.entries(doc.groups || {})) {
+    if (!group || group.frame !== true) continue;
+    const members = Object.values(doc.objects || {}).filter((o) => o && o.groupId === groupId);
+    if (members.length === 0) continue;
+    const box = getUnionBoundingBox(members, doc);
+    if (!box) continue;
+    const x = box.x - FRAME_PAD;
+    const y = box.y - FRAME_PAD - FRAME_LABEL_SPACE;
+    const width = box.width + FRAME_PAD * 2;
+    const height = box.height + FRAME_PAD * 2 + FRAME_LABEL_SPACE;
+    const label = typeof group.name === 'string' && group.name.trim()
+      ? `<text x="${x + 14}" y="${y + 24}" font-size="16" font-weight="bold" font-family="${escapeXml(FONT_FAMILIES.sans)}" fill="${escapeXml(ink)}" opacity="0.75" style="user-select: none;">${escapeXml(group.name)}</text>`
+      : '';
+    frames.push(`<g class="group-frame" data-group-id="${escapeXml(groupId)}" pointer-events="none"><rect class="group-frame-box" x="${x}" y="${y}" width="${width}" height="${height}" rx="12" fill="${escapeXml(ink)}" fill-opacity="0.035" stroke="${escapeXml(ink)}" stroke-opacity="0.35" stroke-width="1.5" stroke-dasharray="7,5" />${label}</g>`);
+  }
+  return frames.join('\n');
 }
 
 /**

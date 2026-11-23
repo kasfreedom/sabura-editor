@@ -43,7 +43,7 @@ test('first render and backdrop changes need a full render', () => {
 test('an identical frame changes nothing', () => {
   const doc = board();
   const plan = planScenePatch(parts(doc), parts(doc));
-  assert.deepEqual(plan, { full: false, defs: false, transform: false, overlay: false, objects: { rebuild: false, replace: [] } });
+  assert.deepEqual(plan, { full: false, defs: false, transform: false, frames: false, overlay: false, objects: { rebuild: false, replace: [] } });
 });
 
 test('panning and zooming touch only the transform and grid, never objects', () => {

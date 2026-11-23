@@ -502,3 +502,15 @@ To support distinguishable saved copies and lineage tracking across offline hand
 - Strictly excludes non-persisted application state: camera zoom/pan, UI interface theme, current selection, active tool, presentation mode, or filesystem filenames.
 - **Backward compatibility:** Documents without `ext:sabura:revision` (undefined) remain fully valid. On the first "Save Copy", a root revision is bootstrapped (`parentId: null`) while preserving the document ID. An explicitly present `null` or malformed value is invalid.
 - **Stale detection:** If a document includes `ext:sabura:revision`, but `contentDigest` does not match the actual canonical document contents (e.g. edited by an older tool or tampered), validation fails and the editor enters safe failure mode.
+
+## Visible group frames
+
+A group record may carry `"frame": true`. The editor then draws a soft, labelled frame around
+the group's members (using the group `name` as the label), under the shapes. Without it a group
+is invisible and only keeps its members together. `frame` must be a boolean.
+
+```json
+"groups": {
+  "backend": { "id": "backend", "name": "Backend services", "frame": true }
+}
+```

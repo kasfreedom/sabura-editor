@@ -241,7 +241,8 @@ export const THEME_ALLOWED_FIELDS = new Set([
 export const GROUP_ALLOWED_FIELDS = new Set([
   'id',
   'name',
-  'collapsed'
+  'collapsed',
+  'frame'
 ]);
 
 export const ASSET_ALLOWED_FIELDS = new Set([
@@ -715,6 +716,9 @@ export function validateDocument(doc, options = {}) {
       }
       if (group.collapsed !== undefined && typeof group.collapsed !== 'boolean') {
         errors.push(`Group "${groupId}" collapsed must be a boolean`);
+      }
+      if (group.frame !== undefined && typeof group.frame !== 'boolean') {
+        errors.push(`Group "${groupId}" frame must be a boolean`);
       }
     }
   }

@@ -94,6 +94,9 @@ objects (`set_text`, `move_objects`, `set_style`, `delete_objects` and the
 rest): naming an object that doesn't exist at that point in the batch is
 refused with `INVALID_COMMAND`, and the message names the missing ID.
 
+Groups are invisible by default. Pass `frame: true` to `group_objects` to draw a visible,
+labelled frame around the members, for requests like "group each team".
+
 To label an arrow, pass `text` (and optionally `textStyle`) to `connect_objects`, or set it
 later with `set_text` on the connector's ID. The label is drawn at the middle of the arrow.
 

@@ -8,6 +8,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Visible group frames. `group_objects` accepts `frame: true`, and such groups are drawn with a
+  soft, labelled frame around their members. Plain groups stay invisible, so existing boards look
+  the same.
 - Arrow labels. A connector's `text` is drawn at the middle of the arrow, over a patch of board
   colour so the line doesn't run through it. Agents can pass `text` to `connect_objects` or change
   it with `set_text`. Before, connector text was stored and reported but never drawn.

@@ -16,7 +16,7 @@
  *
  * @param {object|null} prev parts currently on screen, or null before the first render
  * @param {object} next parts to show; `overlay` already includes any workspace drafts
- * @returns {{full: true} | {full: false, defs: boolean, transform: boolean, overlay: boolean,
+ * @returns {{full: true} | {full: false, defs: boolean, transform: boolean, frames: boolean, overlay: boolean,
  *   objects: {rebuild: true} | {rebuild: false, replace: number[]}}}
  *   `replace` lists indexes into `next.objects` whose element must be replaced.
  */
@@ -27,6 +27,7 @@ export function planScenePatch(prev, next) {
     full: false,
     defs: prev.defs !== next.defs,
     transform: prev.worldTransform !== next.worldTransform,
+    frames: prev.frames !== next.frames,
     overlay: prev.overlay !== next.overlay,
     objects: { rebuild: false, replace: [] }
   };
@@ -78,9 +79,10 @@ export function applyScenePatch(container, plan, next, renderFull) {
   const svg = container.firstElementChild;
   const defs = svg?.querySelector(':scope > #canvas-defs');
   const world = svg?.querySelector(':scope > #world-layer');
+  const framesLayer = world?.querySelector(':scope > #frames-layer');
   const objectsLayer = world?.querySelector(':scope > #objects-layer');
   const overlayLayer = world?.querySelector(':scope > #overlay-layer');
-  if (!defs || !world || !objectsLayer || !overlayLayer) return full();
+  if (!defs || !world || !framesLayer || !objectsLayer || !overlayLayer) return full();
 
   if (plan.defs) defs.innerHTML = next.defs;
   if (plan.transform) world.setAttribute('transform', next.worldTransform);
@@ -102,5 +104,6 @@ export function applyScenePatch(container, plan, next, renderFull) {
     }
   }
 
+  if (plan.frames) framesLayer.innerHTML = next.frames;
   if (plan.overlay) overlayLayer.innerHTML = next.overlay;
 }

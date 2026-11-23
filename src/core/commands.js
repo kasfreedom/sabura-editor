@@ -1234,6 +1234,7 @@ export function applyCommand(doc, cmd) {
         newDoc.objects[id].groupId = groupId;
       }
       newDoc.groups[groupId] = { id: groupId, name: cmd.name || 'Group' };
+      if (cmd.frame === true) newDoc.groups[groupId].frame = true;
 
       const inverseCmd = {
         type: 'restore_groups',
