@@ -5,7 +5,7 @@
  * computation (SHA-256), and safe revision transitions.
  */
 
-export const REVISION_EXTENSION_KEY = 'ext:sabura:revision';
+export const REVISION_EXTENSION_FIELD = 'ext:sabura:revision';
 export const REVISION_ALLOWED_FIELDS = new Set([
   'version',
   'revisionId',
@@ -162,7 +162,7 @@ export function computeContentDigest(doc, canonicalJsonFn, normalizeFn = default
   // Shallow copy top-level keys to exclude the revision extension without mutating doc
   const copy = {};
   for (const [k, v] of Object.entries(doc)) {
-    if (k !== REVISION_EXTENSION_KEY) {
+    if (k !== REVISION_EXTENSION_FIELD) {
       copy[k] = v;
     }
   }
@@ -190,40 +190,40 @@ export function validateRevisionMetadata(doc, canonicalJsonFn = null, normalizeF
   }
 
   // Absent metadata is valid legacy document
-  if (doc[REVISION_EXTENSION_KEY] === undefined) {
+  if (doc[REVISION_EXTENSION_FIELD] === undefined) {
     return { valid: true, errors: [] };
   }
 
-  const rev = doc[REVISION_EXTENSION_KEY];
+  const rev = doc[REVISION_EXTENSION_FIELD];
   // Present but null or non-object is malformed
   if (rev === null || typeof rev !== 'object' || Array.isArray(rev)) {
-    return { valid: false, errors: [`"${REVISION_EXTENSION_KEY}" must be an object`] };
+    return { valid: false, errors: [`"${REVISION_EXTENSION_FIELD}" must be an object`] };
   }
 
   for (const key of Object.keys(rev)) {
     if (!REVISION_ALLOWED_FIELDS.has(key)) {
-      errors.push(`Unknown property "${key}" in "${REVISION_EXTENSION_KEY}"`);
+      errors.push(`Unknown property "${key}" in "${REVISION_EXTENSION_FIELD}"`);
     }
   }
 
   if (rev.version !== 1) {
-    errors.push(`"${REVISION_EXTENSION_KEY}".version must be 1`);
+    errors.push(`"${REVISION_EXTENSION_FIELD}".version must be 1`);
   }
 
   if (typeof rev.revisionId !== 'string' || !REVISION_HEX_REGEX.test(rev.revisionId)) {
-    errors.push(`"${REVISION_EXTENSION_KEY}".revisionId must be a lowercase hex string of at least 12 characters`);
+    errors.push(`"${REVISION_EXTENSION_FIELD}".revisionId must be a lowercase hex string of at least 12 characters`);
   }
 
   if (rev.parentId !== null) {
     if (typeof rev.parentId !== 'string' || !REVISION_HEX_REGEX.test(rev.parentId)) {
-      errors.push(`"${REVISION_EXTENSION_KEY}".parentId must be null or a lowercase hex string of at least 12 characters`);
+      errors.push(`"${REVISION_EXTENSION_FIELD}".parentId must be null or a lowercase hex string of at least 12 characters`);
     } else if (rev.parentId === rev.revisionId) {
-      errors.push(`"${REVISION_EXTENSION_KEY}".parentId cannot be identical to revisionId (revision cannot be its own parent)`);
+      errors.push(`"${REVISION_EXTENSION_FIELD}".parentId cannot be identical to revisionId (revision cannot be its own parent)`);
     }
   }
 
   if (typeof rev.contentDigest !== 'string' || !CONTENT_DIGEST_REGEX.test(rev.contentDigest)) {
-    errors.push(`"${REVISION_EXTENSION_KEY}".contentDigest must be in the format "sha256:<64-hex-chars>"`);
+    errors.push(`"${REVISION_EXTENSION_FIELD}".contentDigest must be in the format "sha256:<64-hex-chars>"`);
   }
 
   if (errors.length === 0 && typeof canonicalJsonFn === 'function') {

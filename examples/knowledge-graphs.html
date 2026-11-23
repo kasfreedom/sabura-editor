@@ -32396,7 +32396,7 @@ setDHold(held) {
 this.isDHeld = Boolean(held);
 }
 }
-const AGENT_PUBLIC_COMMAND_TYPES = Object.freeze([ "create_object", "create_image", "delete_objects", "move_objects", "resize_object", "set_style", "set_image_fit", "set_image_opacity", "set_typography", "set_text", "change_shape", "group_objects", "ungroup_objects", "lock_objects", "reorder_objects", "align_objects", "distribute_objects", "connect_objects", "reconnect_connector", "configure_connector", "set_board_theme", "set_title", "update_path_points", "rotate_objects" ]), PUBLIC_COMMAND_SET = new Set(AGENT_PUBLIC_COMMAND_TYPES), AGENT_EDIT_TOKEN_SCHEMA = Object.freeze({
+const AGENT_PUBLIC_COMMAND_TYPES = Object.freeze([ "create_object", "create_image", "delete_objects", "move_objects", "resize_object", "set_style", "set_image_fit", "set_image_opacity", "set_typography", "set_text", "change_shape", "group_objects", "ungroup_objects", "lock_objects", "reorder_objects", "align_objects", "distribute_objects", "connect_objects", "reconnect_connector", "configure_connector", "set_board_theme", "set_title", "update_path_points", "rotate_objects" ]), PUBLIC_COMMAND_SET = new Set(AGENT_PUBLIC_COMMAND_TYPES), AGENT_EDIT_VERSION_SCHEMA = Object.freeze({
 type: "object",
 properties: {
 sessionId: {
@@ -32991,7 +32991,7 @@ type: "string",
 minLength: 1,
 maxLength: 200
 },
-expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA,
+expectedEditToken: AGENT_EDIT_VERSION_SCHEMA,
 commands: {
 type: "array",
 minItems: 1,
@@ -33008,7 +33008,7 @@ type: "string",
 minLength: 1,
 maxLength: 200
 },
-expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA
+expectedEditToken: AGENT_EDIT_VERSION_SCHEMA
 },
 required: [ "requestId", "expectedEditToken" ],
 additionalProperties: !1
@@ -33696,7 +33696,7 @@ runtimeJs: runtimeJs
 for (const [name, value] of Object.entries(required)) if ("string" != typeof value || 0 === value.length) throw new Error(`Cannot construct canonical Sabura shell: missing ${name}`);
 if (!aiContractComment.includes("SABURA AI CONTRACT")) throw new Error("Cannot construct canonical Sabura shell: invalid AI contract");
 if (!visualSystemSprite.includes('id="sabura-vs-sprite"')) throw new Error("Cannot construct canonical Sabura shell: invalid visual-system sprite");
-return `<!DOCTYPE html>\n<html lang="en" data-ui-theme="system">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">\n  <title>Sabura - AI-First Offline Whiteboard</title>\n\n${aiContractComment}\n\n  <script type="application/json" id="sabura-document">\n${documentJson}\n  <\/script>\n\n  \x3c!-- Sabura editor code (open source: https://github.com/sabura-app/sabura-editor). Not needed to edit the board above; keep it unchanged. --\x3e\n  <style id="sabura-runtime-style">${runtimeCss}</style>\n</head>\n<body>\n  ${visualSystemSprite}\n  <div id="app"></div>\n  <script id="sabura-runtime-script">${runtimeJs}<\/script>\n</body>\n</html>`;
+return `<!DOCTYPE html>\n<html lang="en" data-ui-theme="system">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">\n  <title>Sabura - AI-First Offline Whiteboard</title>\n\n${aiContractComment}\n\n  <script type="application/json" id="sabura-document">\n${documentJson}\n  <\/script>\n\n  \x3c!-- Sabura editor code (open source: sabura-app/sabura-editor on GitHub). Not needed to edit the board above; keep it unchanged. --\x3e\n  <style id="sabura-runtime-style">${runtimeCss}</style>\n</head>\n<body>\n  ${visualSystemSprite}\n  <div id="app"></div>\n  <script id="sabura-runtime-script">${runtimeJs}<\/script>\n</body>\n</html>`;
 }({
 documentJson: canonicalJson(this.doc),
 aiContractComment: contractNode ? `\x3c!--${contractNode.textContent}--\x3e` : "",

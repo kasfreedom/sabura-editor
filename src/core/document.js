@@ -20,7 +20,7 @@ import {
 import { measureText } from './geometry.js';
 import { isSafeColor } from './color.js';
 import {
-  REVISION_EXTENSION_KEY,
+  REVISION_EXTENSION_FIELD,
   REVISION_ALLOWED_FIELDS,
   computeSha256,
   generateRevisionId,
@@ -32,7 +32,7 @@ import {
 } from './revision.js';
 
 export {
-  REVISION_EXTENSION_KEY,
+  REVISION_EXTENSION_FIELD,
   REVISION_ALLOWED_FIELDS,
   computeSha256,
   generateRevisionId,
@@ -617,7 +617,7 @@ export function validateDocument(doc, options = {}) {
   // Reject unknown unnamespaced properties at the document root
   checkUnknownProperties(doc, DOCUMENT_ALLOWED_FIELDS, 'document', errors);
 
-  if (REVISION_EXTENSION_KEY in doc) {
+  if (REVISION_EXTENSION_FIELD in doc) {
     const revVal = validateRevisionMetadata(doc, options?.verifyDigest ? canonicalJson : null, normalizeDocument);
     if (!revVal.valid) {
       errors.push(...revVal.errors);

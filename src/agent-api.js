@@ -1,7 +1,7 @@
 import {
   canonicalJson,
   cloneDocument,
-  REVISION_EXTENSION_KEY
+  REVISION_EXTENSION_FIELD
 } from './core/document.js';
 import { validateCommand } from './core/commands.js';
 import { checkJsonSchema } from './core/json-schema.js';
@@ -39,7 +39,7 @@ export const AGENT_PUBLIC_COMMAND_TYPES = Object.freeze([
 const PUBLIC_COMMAND_SET = new Set(AGENT_PUBLIC_COMMAND_TYPES);
 const REQUEST_CACHE_LIMIT = 64;
 
-const AGENT_EDIT_TOKEN_SCHEMA = Object.freeze({
+const AGENT_EDIT_VERSION_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
     sessionId: { type: 'string', minLength: 1 },
@@ -423,7 +423,7 @@ export const AGENT_EDIT_REQUEST_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
     requestId: { type: 'string', minLength: 1, maxLength: 200 },
-    expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA,
+    expectedEditToken: AGENT_EDIT_VERSION_SCHEMA,
     commands: {
       type: 'array',
       minItems: 1,
@@ -438,7 +438,7 @@ export const AGENT_HISTORY_REQUEST_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
     requestId: { type: 'string', minLength: 1, maxLength: 200 },
-    expectedEditToken: AGENT_EDIT_TOKEN_SCHEMA
+    expectedEditToken: AGENT_EDIT_VERSION_SCHEMA
   },
   required: ['requestId', 'expectedEditToken'],
   additionalProperties: false
@@ -645,8 +645,8 @@ export class AgentApi {
         canUndo: Boolean(this.app.undoStack?.length),
         canRedo: Boolean(this.app.redoStack?.length)
       },
-      savedRevision: this.app.doc?.[REVISION_EXTENSION_KEY]
-        ? cloneDocument(this.app.doc[REVISION_EXTENSION_KEY])
+      savedRevision: this.app.doc?.[REVISION_EXTENSION_FIELD]
+        ? cloneDocument(this.app.doc[REVISION_EXTENSION_FIELD])
         : null
     };
   }

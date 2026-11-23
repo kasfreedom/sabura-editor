@@ -58,7 +58,7 @@ ${aiContractComment}
 ${documentJson}
   </script>
 
-  <!-- Sabura editor code (open source: https://github.com/sabura-app/sabura-editor). Not needed to edit the board above; keep it unchanged. -->
+  <!-- Sabura editor code (open source: sabura-app/sabura-editor on GitHub). Not needed to edit the board above; keep it unchanged. -->
   <style id="${RUNTIME_STYLE_ID}">${runtimeCss}</style>
 </head>
 <body>

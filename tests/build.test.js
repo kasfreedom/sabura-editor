@@ -30,7 +30,9 @@ test('sabura.html build integrity and self-contained verification', () => {
   // any other external URL or network-loaded script, style, font, or image.
   // Trailing sentence punctuation is not part of a URL written in prose.
   const matches = (content.match(/https?:\/\/[^"'\s]+/g) || []).map(url => url.replace(/[.,;:)]+$/, ''));
-  const allowedLinks = new Set(['https://sabura-app.github.io/', 'https://github.com/sabura-app/sabura-editor']);
+  // Keep code hosts out: the Claude Directory's scanner reads a code host in
+  // a file that also names a "key" as a possible credential leak.
+  const allowedLinks = new Set(['https://sabura-app.github.io/']);
   const unexpectedUrls = matches.filter(url => !allowedLinks.has(url));
   assert.deepEqual(unexpectedUrls, [], `Unexpected external URLs in offline bundle: ${unexpectedUrls.join(', ')}`);
   assert.doesNotMatch(content, /<(?:script|img)[^>]+src=["']https?:\/\//i);

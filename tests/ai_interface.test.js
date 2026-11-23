@@ -122,7 +122,7 @@ test('6. Contract says agents edit only the document and keep the editor code un
   const contract = html.slice(contractStart, contractEnd);
   assert.ok(contract.includes('everything an agent changes'), 'Contract must say agents change only the document');
   assert.ok(contract.includes('Leave the editor code as it is'), 'Contract must ask agents to keep the editor code unchanged');
-  assert.ok(contract.includes('https://github.com/sabura-app/sabura-editor'), 'Contract must name where the editor code comes from');
+  assert.ok(contract.includes('sabura-app/sabura-editor'), 'Contract must name where the editor code comes from');
   // The code is readable and public, so nothing may tell agents not to read it.
   assert.doesNotMatch(contract, /opaque|black box|do not read/i);
 });

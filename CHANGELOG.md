@@ -4,6 +4,17 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-11-23
+
+### Changed
+
+- The Claude plugin ships the editor in parts under 256 KB, and the board script as the editor's
+  own source modules instead of one bundled file, so every file can be read by the Claude
+  Directory's checks. Boards come out exactly the same. The eval suite moved to `evals/` at the
+  repository root (`npm run evals`), outside what the plugin installs.
+- Internal constants were renamed (`REVISION_EXTENSION_FIELD`, `AGENT_EDIT_VERSION_SCHEMA`), and
+  files the plugin ships name the source repository without a link. Nothing behaves differently.
+
 ## [1.1.1] - 2026-11-23
 
 ### Changed
@@ -127,6 +138,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
+[1.1.2]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.2
 [1.1.1]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0

@@ -105,7 +105,10 @@ npm run test:e2e:chrome
 
 After changing `src/` or `bin/`, run `npm run plugin:build` so the plugin carries
 the current editor (CI fails otherwise). `npm run plugin:zip` builds
-`sabura-plugin.zip` for the release.
+`sabura-plugin.zip` for the release, and `npm run evals` runs the plugin's eval
+suite in `evals/` against Claude (needs the `claude` command line tool, signed
+in). The `plugin/` folder holds only what the plugin ships, within the Claude
+Directory's file rules; tests check them.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution expectations and
 [`SECURITY.md`](SECURITY.md) for reporting security issues.

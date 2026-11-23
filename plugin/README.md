@@ -32,8 +32,9 @@ Sabura needs Claude to be able to run code.
 ## What it runs and what it sends
 
 The plugin contains instructions for Claude (`skills/sabura/SKILL.md`), the
-Sabura editor (`skills/sabura/sabura.html`), and a Node.js script
-(`skills/sabura/scripts/sabura-board.mjs`). Claude runs the script to build and
+Sabura editor (`skills/sabura/editor/`, one HTML file split into parts that the
+script joins), and a Node.js script (`skills/sabura/scripts/sabura-board.mjs`,
+with the editor's own modules in `scripts/src/`). Claude runs the script to build and
 edit board files. It reads and writes only the files it is given, checks every
 drawing command with the editor's own rules, and makes no network requests.
 For live editing in Claude Code, Claude may start a local web server on

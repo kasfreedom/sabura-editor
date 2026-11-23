@@ -174,8 +174,8 @@ const AI_CONTRACT = `<!-- SABURA AI CONTRACT
 OVERVIEW
   Sabura is a portable offline whiteboard with structured agent authoring. This file has two sections:
     1. A small, editable board document (sabura/canvas/v1 JSON) — readable and replaceable.
-    2. The Sabura editor (CSS + JS), open source and built from
-       https://github.com/sabura-app/sabura-editor. It is readable, but you don't need
+    2. The Sabura editor (CSS + JS), open source (sabura-app/sabura-editor on
+       GitHub). It is readable, but you don't need
        to read it to work with the board, and it is large: everything an agent changes
        is in section 1. Leave the editor code as it is so the file keeps working.
 

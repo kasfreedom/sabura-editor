@@ -15,7 +15,7 @@ import {
   generateId,
   generateSeed,
   validateRasterDataUrl,
-  REVISION_EXTENSION_KEY,
+  REVISION_EXTENSION_FIELD,
   computeContentDigest,
   getShortRevisionId,
   transitionRevision
@@ -114,8 +114,8 @@ export class SaburaApp {
           console.error('Fatal shell error:', err);
           return;
         }
-        if (this.doc[REVISION_EXTENSION_KEY]) {
-          this.exportBaseline = { ...this.doc[REVISION_EXTENSION_KEY] };
+        if (this.doc[REVISION_EXTENSION_FIELD]) {
+          this.exportBaseline = { ...this.doc[REVISION_EXTENSION_FIELD] };
         } else {
           this.exportBaseline = null;
         }
@@ -1396,7 +1396,7 @@ export class SaburaApp {
 
       const transition = transitionRevision(this.doc, this.exportBaseline, canonicalJson);
       const exportDoc = cloneDocument(this.doc);
-      exportDoc[REVISION_EXTENSION_KEY] = { ...transition.revisionRecord };
+      exportDoc[REVISION_EXTENSION_FIELD] = { ...transition.revisionRecord };
 
       const cleanShell = this.getCleanHtmlShell();
       const packResult = packageHtmlWithDocument(cleanShell, exportDoc);
@@ -1417,7 +1417,7 @@ export class SaburaApp {
       const byteLength = triggerFileDownload(filename, packResult.html);
 
       this.exportBaseline = { ...transition.revisionRecord };
-      this.doc[REVISION_EXTENSION_KEY] = { ...transition.revisionRecord };
+      this.doc[REVISION_EXTENSION_FIELD] = { ...transition.revisionRecord };
 
       this.status = 'Copy requested';
       this.updateUI();
@@ -1521,9 +1521,9 @@ export class SaburaApp {
 
           // 3. Ensure valid revision snapshot for the board file
           const exportDoc = cloneDocument(doc);
-          if (!exportDoc[REVISION_EXTENSION_KEY]) {
+          if (!exportDoc[REVISION_EXTENSION_FIELD]) {
             const transition = transitionRevision(exportDoc, null, canonicalJson);
-            exportDoc[REVISION_EXTENSION_KEY] = transition.revisionRecord;
+            exportDoc[REVISION_EXTENSION_FIELD] = transition.revisionRecord;
           }
 
           // 4. Replace only the sabura-document seam
@@ -1533,7 +1533,7 @@ export class SaburaApp {
           }
 
           // 5. Filename from supplied title (sanitized first, then fallback to 'board')
-          const shortRev = getShortRevisionId(exportDoc[REVISION_EXTENSION_KEY].revisionId);
+          const shortRev = getShortRevisionId(exportDoc[REVISION_EXTENSION_FIELD].revisionId);
           const safeTitle = sanitizeFilenameTitle(exportDoc?.title, 'board');
           const filename = `sabura-${safeTitle}-r${shortRev}.html`;
 
@@ -1541,7 +1541,7 @@ export class SaburaApp {
           //    The HTML string is never returned through this API.
           const byteLength = triggerFileDownload(filename, packResult.html);
 
-          return { success: true, filename, byteLength, revisionId: exportDoc[REVISION_EXTENSION_KEY].revisionId };
+          return { success: true, filename, byteLength, revisionId: exportDoc[REVISION_EXTENSION_FIELD].revisionId };
         } catch (err) {
           const rawMsg = err && err.message ? String(err.message) : 'Operational failure during board generation';
           // Sanitize error message to ensure no HTML or runtime source is exposed

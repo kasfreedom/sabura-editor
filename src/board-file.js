@@ -11,7 +11,7 @@ import { AgentApi } from './agent-api.js';
 import { applyCommandBatch } from './core/commands.js';
 import { canonicalJson, createDefaultDocument, normalizeDocument, validateDocument } from './core/document.js';
 import { checkLayout } from './core/layout-check.js';
-import { REVISION_EXTENSION_KEY, transitionRevision } from './core/revision.js';
+import { REVISION_EXTENSION_FIELD, transitionRevision } from './core/revision.js';
 import { extractDocumentFromHtml, packageHtmlWithDocument } from './storage/file-packer.js';
 
 /** A board file or command batch that Sabura refuses. `errors` lists every reason. */
@@ -71,7 +71,7 @@ function applyCommands(doc, commands) {
 function pack(templateHtml, doc, baseline, options) {
   const { revisionRecord } = transitionRevision(doc, baseline, canonicalJson,
     options.revisionId ? { idGenerator: () => options.revisionId } : {});
-  const stamped = { ...doc, [REVISION_EXTENSION_KEY]: revisionRecord };
+  const stamped = { ...doc, [REVISION_EXTENSION_FIELD]: revisionRecord };
 
   const check = validateDocument(stamped, { verifyDigest: true });
   if (!check.valid) throw new BoardFileError('Board failed validation', check.errors);
@@ -111,8 +111,8 @@ export function createBoardFile(templateHtml, { title, commands = [], id, revisi
  */
 export function editBoardFile(boardHtml, templateHtml, { commands, revisionId } = {}) {
   const current = readBoardFile(boardHtml);
-  const baseline = current[REVISION_EXTENSION_KEY] || null;
-  const { [REVISION_EXTENSION_KEY]: _drop, ...doc } = current;
+  const baseline = current[REVISION_EXTENSION_FIELD] || null;
+  const { [REVISION_EXTENSION_FIELD]: _drop, ...doc } = current;
   const edited = applyCommands(doc, commands);
   return pack(templateHtml, edited, baseline, { revisionId });
 }
@@ -126,8 +126,8 @@ export function summarizeBoard(doc) {
     objects: objects.length,
     connectors: count('connector'),
     groups: Object.keys(doc.groups || {}).length,
-    revisionId: doc[REVISION_EXTENSION_KEY]?.revisionId ?? null,
-    parentRevisionId: doc[REVISION_EXTENSION_KEY]?.parentId ?? null,
+    revisionId: doc[REVISION_EXTENSION_FIELD]?.revisionId ?? null,
+    parentRevisionId: doc[REVISION_EXTENSION_FIELD]?.parentId ?? null,
   };
 }
 

@@ -14,7 +14,8 @@ This skill folder contains:
 
 - `scripts/sabura-board.mjs`: builds and edits board files with the editor's own
   command checks. Needs Node 18 or newer; no network and no packages.
-- `sabura.html`: the editor the script packs boards into.
+- `editor/sabura.part1.html`, `part2`, ...: the editor the script packs boards
+  into, split into pieces. Joined in order they make one `sabura.html`.
 - `references/`: the command sheet, visual style, and live-browser guides.
 
 Run the script from this skill's folder. In Claude Code it is
@@ -118,8 +119,10 @@ UI-only tasks (image import, manual drawing) are covered in
 
 ## If the script can't run
 
-Without Node, write the board into a copy of `sabura.html` with a short Python
-(or other) script, never by retyping the file:
+Without Node, use a short Python (or other) script, never retyping the files.
+First join `editor/sabura.part1.html`, `part2`, ... in number order into one
+`sabura.html` (plain concatenation, no separators). Then write the board into
+it:
 
 1. Read the JSON between `<script type="application/json" id="sabura-document">`
    and the next `</script>`. Keep its `schemaVersion`, `theme` and `assets`.

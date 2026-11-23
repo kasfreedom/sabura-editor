@@ -9,7 +9,7 @@ import {
   validateDocument,
   normalizeDocument,
   cloneDocument,
-  REVISION_EXTENSION_KEY,
+  REVISION_EXTENSION_FIELD,
   computeSha256,
   generateRevisionId,
   getShortRevisionId,
@@ -226,7 +226,7 @@ test('2. computeContentDigest includes all persisted fields and excludes ext:sab
 
   // Adding ext:sabura:revision does NOT change content digest
   const docWithRev = cloneDocument(doc);
-  docWithRev[REVISION_EXTENSION_KEY] = {
+  docWithRev[REVISION_EXTENSION_FIELD] = {
     version: 1,
     revisionId: generateRevisionId(),
     parentId: null,
@@ -249,7 +249,7 @@ test('3. F-04: Strict revision metadata validation and self-parenting prohibitio
   const revId = '4a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d';
 
   // Valid revision metadata
-  doc[REVISION_EXTENSION_KEY] = {
+  doc[REVISION_EXTENSION_FIELD] = {
     version: 1,
     revisionId: revId,
     parentId: null,
@@ -262,7 +262,7 @@ test('3. F-04: Strict revision metadata validation and self-parenting prohibitio
 
   // 1. Explicit null metadata is malformed, NOT treated as legacy
   const nullMetaDoc = cloneDocument(doc);
-  nullMetaDoc[REVISION_EXTENSION_KEY] = null;
+  nullMetaDoc[REVISION_EXTENSION_FIELD] = null;
   const nullRes = validateRevisionMetadata(nullMetaDoc, canonicalJson);
   assert.equal(nullRes.valid, false, 'Explicit null metadata must be rejected');
   assert.ok(nullRes.errors.some(e => e.includes('must be an object')));
@@ -271,28 +271,28 @@ test('3. F-04: Strict revision metadata validation and self-parenting prohibitio
 
   // 2. Non-hex revisionId rejected
   const nonHexDoc = cloneDocument(doc);
-  nonHexDoc[REVISION_EXTENSION_KEY].revisionId = 'not-hex-revision-id';
+  nonHexDoc[REVISION_EXTENSION_FIELD].revisionId = 'not-hex-revision-id';
   const nonHexRes = validateRevisionMetadata(nonHexDoc, canonicalJson);
   assert.equal(nonHexRes.valid, false);
   assert.ok(nonHexRes.errors.some(e => e.includes('lowercase hex')));
 
   // 3. Short revisionId (<12 hex chars) rejected
   const shortDoc = cloneDocument(doc);
-  shortDoc[REVISION_EXTENSION_KEY].revisionId = 'abcdef12345'; // 11 chars
+  shortDoc[REVISION_EXTENSION_FIELD].revisionId = 'abcdef12345'; // 11 chars
   const shortRes = validateRevisionMetadata(shortDoc, canonicalJson);
   assert.equal(shortRes.valid, false);
   assert.ok(shortRes.errors.some(e => e.includes('at least 12')));
 
   // 4. Self-parented revision rejected
   const selfParentDoc = cloneDocument(doc);
-  selfParentDoc[REVISION_EXTENSION_KEY].parentId = selfParentDoc[REVISION_EXTENSION_KEY].revisionId;
+  selfParentDoc[REVISION_EXTENSION_FIELD].parentId = selfParentDoc[REVISION_EXTENSION_FIELD].revisionId;
   const selfParentRes = validateRevisionMetadata(selfParentDoc, canonicalJson);
   assert.equal(selfParentRes.valid, false);
   assert.ok(selfParentRes.errors.some(e => e.includes('cannot be its own parent')));
 
   // 5. Non-hex parentId rejected
   const nonHexParentDoc = cloneDocument(doc);
-  nonHexParentDoc[REVISION_EXTENSION_KEY].parentId = 'invalid-parent-id';
+  nonHexParentDoc[REVISION_EXTENSION_FIELD].parentId = 'invalid-parent-id';
   const nonHexParentRes = validateRevisionMetadata(nonHexParentDoc, canonicalJson);
   assert.equal(nonHexParentRes.valid, false);
   assert.ok(nonHexParentRes.errors.some(e => e.includes('parentId must be null or a lowercase hex string')));
@@ -333,7 +333,7 @@ test('4. F-03: Minimal-field document normalization round-trip preserves revisio
 
   // Stamp with initial revision
   const transition = transitionRevision(minimalDoc, null, canonicalJson);
-  minimalDoc[REVISION_EXTENSION_KEY] = transition.revisionRecord;
+  minimalDoc[REVISION_EXTENSION_FIELD] = transition.revisionRecord;
 
   // Package into HTML shell
   const shell = '<!DOCTYPE html><html><head><script type="application/json" id="sabura-document">\n</script></head><body></body></html>';
@@ -350,7 +350,7 @@ test('4. F-03: Minimal-field document normalization round-trip preserves revisio
   assert.equal(validation.valid, true, `Loaded document must be valid with matching digest: ${validation.errors?.join(', ')}`);
 
   // An unchanged save of the loaded document must retain the existing revision without creating a new one
-  const unchangedTransition = transitionRevision(loadedDoc, loadedDoc[REVISION_EXTENSION_KEY], canonicalJson);
+  const unchangedTransition = transitionRevision(loadedDoc, loadedDoc[REVISION_EXTENSION_FIELD], canonicalJson);
   assert.equal(unchangedTransition.changed, false, 'Unchanged loaded document must not register as changed');
   assert.equal(unchangedTransition.revisionRecord.revisionId, transition.revisionRecord.revisionId);
   assert.equal(unchangedTransition.revisionRecord.parentId, transition.revisionRecord.parentId);
@@ -396,7 +396,7 @@ test('6. Complete lineage (A -> B -> B_unchanged -> C) and two independent recip
   assert.equal(transA.changed, true);
   assert.equal(transA.revisionRecord.parentId, null);
   const revA = transA.revisionRecord;
-  docA[REVISION_EXTENSION_KEY] = revA;
+  docA[REVISION_EXTENSION_FIELD] = revA;
 
   // Edit A to produce B
   const docB = cloneDocument(docA);
@@ -405,7 +405,7 @@ test('6. Complete lineage (A -> B -> B_unchanged -> C) and two independent recip
   assert.equal(transB.changed, true);
   assert.equal(transB.revisionRecord.parentId, revA.revisionId);
   const revB = transB.revisionRecord;
-  docB[REVISION_EXTENSION_KEY] = revB;
+  docB[REVISION_EXTENSION_FIELD] = revB;
 
   // Unchanged save of B retains B
   const transBUnchanged = transitionRevision(docB, revB, canonicalJson);
@@ -660,14 +660,14 @@ test('10. Initial mode determination: empty document boots to editing, populated
 test('11. extractDocumentFromHtml and packageHtmlWithDocument validation guards', () => {
   const doc = createDefaultDocument({ title: 'Extraction Security' });
   const trans = transitionRevision(doc, null, canonicalJson);
-  doc[REVISION_EXTENSION_KEY] = trans.revisionRecord;
+  doc[REVISION_EXTENSION_FIELD] = trans.revisionRecord;
 
   const validHtml = '<!DOCTYPE html><html><head><script type="application/json" id="sabura-document">\n' +
     canonicalJson(doc) + '\n</script></head><body></body></html>';
 
   const validRes = extractDocumentFromHtml(validHtml);
   assert.equal(validRes.valid, true);
-  assert.ok(validRes.document[REVISION_EXTENSION_KEY]);
+  assert.ok(validRes.document[REVISION_EXTENSION_FIELD]);
 
   // Tampered title without digest update fails
   const tamperedDoc = cloneDocument(doc);
@@ -680,7 +680,7 @@ test('11. extractDocumentFromHtml and packageHtmlWithDocument validation guards'
 
   // Malformed non-object revision metadata in HTML seam fails
   const malformedDoc = cloneDocument(doc);
-  malformedDoc[REVISION_EXTENSION_KEY] = 'not-an-object';
+  malformedDoc[REVISION_EXTENSION_FIELD] = 'not-an-object';
   const malformedHtml = '<!DOCTYPE html><html><head><script type="application/json" id="sabura-document">\n' +
     canonicalJson(malformedDoc) + '\n</script></head><body></body></html>';
   const malformedRes = extractDocumentFromHtml(malformedHtml);
@@ -702,7 +702,7 @@ test('12. Save Copy failure preserves export baseline and undo history, and rema
   // Initial baseline
   const transA = transitionRevision(app.doc, null, canonicalJson);
   app.exportBaseline = { ...transA.revisionRecord };
-  app.doc[REVISION_EXTENSION_KEY] = { ...transA.revisionRecord };
+  app.doc[REVISION_EXTENSION_FIELD] = { ...transA.revisionRecord };
 
   // Make an edit
   app.dispatchCommand({ type: 'move_objects', ids: ['r1'], dx: 25, dy: 0 });
@@ -778,7 +778,7 @@ test('14. F-07: Incomplete resize cancellation restores persisted bounds and tex
 
   // Stamp initial baseline
   const baseline = transitionRevision(app.doc, null, canonicalJson);
-  app.doc[REVISION_EXTENSION_KEY] = { ...baseline.revisionRecord };
+  app.doc[REVISION_EXTENSION_FIELD] = { ...baseline.revisionRecord };
   app.exportBaseline = { ...baseline.revisionRecord };
   const baselineDigest = baseline.revisionRecord.contentDigest;
   const baselineRevId = baseline.revisionRecord.revisionId;
@@ -881,14 +881,14 @@ test('14. F-07: Incomplete resize cancellation restores persisted bounds and tex
   assert.equal(saveRes.success, true);
   assert.equal(saveRes.changed, false, 'Uncommitted gesture must not trigger changed: true');
   assert.equal(saveRes.revisionId, baselineRevId, 'Save Copy must retain baseline revision ID');
-  assert.equal(app.doc[REVISION_EXTENSION_KEY].revisionId, baselineRevId, 'Document revision ID must remain unchanged');
+  assert.equal(app.doc[REVISION_EXTENSION_FIELD].revisionId, baselineRevId, 'Document revision ID must remain unchanged');
   assert.equal(rect.width, 100, 'Width must be restored on Save Copy');
   assert.equal(rect.textStyle.resolvedSize, 20, 'resolvedSize must be restored on Save Copy');
 
   // Case D: Shape WITHOUT resolvedSize initially present in textStyle
   delete rect.textStyle.resolvedSize;
   const noSizeBaseline = transitionRevision(app.doc, null, canonicalJson);
-  app.doc[REVISION_EXTENSION_KEY] = { ...noSizeBaseline.revisionRecord };
+  app.doc[REVISION_EXTENSION_FIELD] = { ...noSizeBaseline.revisionRecord };
   app.exportBaseline = { ...noSizeBaseline.revisionRecord };
 
   ws.selectedIds = ['r_text'];

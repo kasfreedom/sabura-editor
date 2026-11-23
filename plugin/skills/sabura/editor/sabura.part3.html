@@ -1,0 +1,1381 @@
+if (missing.length > 0) return failure("OBJECT_NOT_FOUND", `Unknown object IDs: ${missing.join(", ")}`, {
+missingIds: missing
+});
+const padding = options && Number.isFinite(options.padding) ? Math.max(0, Math.min(400, options.padding)) : 60;
+return this.app.workspace?.focusObjects?.(ids, padding) ? {
+success: !0,
+changed: !1,
+editToken: this.editToken(),
+focusedIds: [ ...ids ],
+viewport: this.viewportSnapshot()
+} : failure("VIEWPORT_UNAVAILABLE", "Objects do not have focusable geometry");
+}
+saveCopy() {
+const busy = this.busyState();
+if (busy.busy) return failure("EDITOR_BUSY", `Cannot save while the editor is in ${busy.reason}`);
+const result = this.app.saveCopy();
+return result?.success ? {
+success: !0,
+exportPrepared: !0,
+downloadRequested: !0,
+deliveryConfirmed: !1,
+filename: result.filename,
+byteLength: result.byteLength,
+revisionId: result.revisionId,
+parentId: result.parentId || null,
+changed: result.changed
+} : failure("EXPORT_FAILED", result?.error || "Save Copy failed");
+}
+subscribe(listener) {
+if ("function" != typeof listener) throw new TypeError("Agent subscriber must be a function");
+const wrapped = () => listener(this.read());
+return this.app.subscribers.add(wrapped), () => this.app.subscribers.delete(wrapped);
+}
+publicApi() {
+return Object.freeze({
+describe: () => this.describe(),
+read: () => this.read(),
+apply: request => this.apply(request),
+undo: request => this.historyOperation("undo", request),
+redo: request => this.historyOperation("redo", request),
+fitBoard: () => this.fitBoard(),
+focusObjects: (ids, options) => this.focusObjects(ids, options),
+saveCopy: () => this.saveCopy(),
+subscribe: listener => this.subscribe(listener)
+});
+}
+}
+Object.freeze([ "sabura_read_board", "sabura_edit_board", "sabura_undo", "sabura_redo", "sabura_focus_objects", "sabura_fit_board", "sabura_save_copy" ]);
+const EMPTY_INPUT_SCHEMA = Object.freeze({
+type: "object",
+properties: {},
+additionalProperties: !1
+}), FOCUS_INPUT_SCHEMA = Object.freeze({
+type: "object",
+properties: {
+ids: {
+type: "array",
+minItems: 1,
+uniqueItems: !0,
+items: {
+type: "string",
+minLength: 1
+}
+},
+padding: {
+type: "number",
+minimum: 0,
+maximum: 400
+}
+},
+required: [ "ids" ],
+additionalProperties: !1
+}), READ_ANNOTATIONS = Object.freeze({
+readOnlyHint: !0,
+untrustedContentHint: !0,
+consequentialHint: !1
+}), MUTATION_ANNOTATIONS = Object.freeze({
+readOnlyHint: !1,
+untrustedContentHint: !0,
+consequentialHint: !1
+}), SAVE_ANNOTATIONS = Object.freeze({
+readOnlyHint: !1,
+untrustedContentHint: !0,
+consequentialHint: !0
+});
+function executeSafely(operation) {
+return async (input = {}, options = {}) => {
+if (options?.signal?.aborted) return {
+success: !1,
+errors: [ {
+code: "CANCELLED",
+message: "The WebMCP tool call was cancelled before execution"
+} ]
+};
+try {
+return await operation(input);
+} catch (_) {
+return {
+success: !1,
+errors: [ {
+code: "TOOL_EXECUTION_FAILED",
+message: "The Sabura tool could not complete the request"
+} ]
+};
+}
+};
+}
+function createSaburaWebMcpTools(agent) {
+return [ {
+name: "sabura_read_board",
+title: "Read Sabura board",
+description: "Read a copied snapshot of the live Sabura document, selection, viewport, history, mode, and edit token. Embedded raster bytes are omitted; board text is user-authored and untrusted.",
+inputSchema: EMPTY_INPUT_SCHEMA,
+annotations: READ_ANNOTATIONS,
+execute: executeSafely(() => function(snapshot) {
+const documentCopy = snapshot?.document;
+if (!documentCopy?.assets || "object" != typeof documentCopy.assets) return snapshot;
+const omittedAssetData = [];
+for (const [assetId, asset] of Object.entries(documentCopy.assets)) asset && "object" == typeof asset && "string" == typeof asset.data && (omittedAssetData.push({
+id: assetId,
+mimeType: asset.mimeType || null,
+dataUrlCharacters: asset.data.length
+}), delete asset.data, asset.dataOmitted = !0);
+return omittedAssetData.length > 0 && (snapshot.rasterDataOmitted = !0, snapshot.omittedAssetData = omittedAssetData),
+snapshot;
+}(agent.read()))
+}, {
+name: "sabura_edit_board",
+title: "Edit Sabura board",
+description: "Apply one validated, atomic Sabura command batch in Editing mode. Use the edit token from sabura_read_board and a unique requestId; exact retries are idempotent.",
+inputSchema: AGENT_EDIT_REQUEST_SCHEMA,
+annotations: MUTATION_ANNOTATIONS,
+execute: executeSafely(input => agent.apply(input))
+}, {
+name: "sabura_undo",
+title: "Undo Sabura edit",
+description: "Undo one Sabura history entry using optimistic concurrency and an idempotent requestId.",
+inputSchema: AGENT_HISTORY_REQUEST_SCHEMA,
+annotations: MUTATION_ANNOTATIONS,
+execute: executeSafely(input => agent.undo(input))
+}, {
+name: "sabura_redo",
+title: "Redo Sabura edit",
+description: "Redo one Sabura history entry using optimistic concurrency and an idempotent requestId.",
+inputSchema: AGENT_HISTORY_REQUEST_SCHEMA,
+annotations: MUTATION_ANNOTATIONS,
+execute: executeSafely(input => agent.redo(input))
+}, {
+name: "sabura_focus_objects",
+title: "Focus Sabura objects",
+description: "Focus the live viewport on existing Sabura object IDs without changing the document or edit token.",
+inputSchema: FOCUS_INPUT_SCHEMA,
+annotations: MUTATION_ANNOTATIONS,
+execute: executeSafely(input => agent.focusObjects(input.ids, {
+padding: input.padding
+}))
+}, {
+name: "sabura_fit_board",
+title: "Fit Sabura board",
+description: "Fit all board content in the live viewport without changing the document or edit token.",
+inputSchema: EMPTY_INPUT_SCHEMA,
+annotations: MUTATION_ANNOTATIONS,
+execute: executeSafely(() => agent.fitBoard())
+}, {
+name: "sabura_save_copy",
+title: "Save Sabura copy",
+description: "Prepare a self-contained Sabura HTML copy and request a browser download. The result never independently confirms file delivery.",
+inputSchema: EMPTY_INPUT_SCHEMA,
+annotations: SAVE_ANNOTATIONS,
+execute: executeSafely(() => agent.saveCopy())
+} ];
+}
+class SaburaWebMcpBridge {
+constructor(agent, modelContext = globalThis.document?.modelContext) {
+this.agent = agent, this.modelContext = modelContext, this.controller = null, this.registration = null;
+}
+register() {
+return this.registration ? this.registration : this.modelContext && "function" == typeof this.modelContext.registerTool ? (this.controller = new AbortController,
+this.registration = this.registerTools(), this.registration) : (this.registration = Promise.resolve({
+supported: !1,
+registered: []
+}), this.registration);
+}
+async registerTools() {
+const registered = [];
+try {
+for (const tool of createSaburaWebMcpTools(this.agent)) await this.modelContext.registerTool(tool, {
+signal: this.controller.signal
+}), registered.push(tool.name);
+return {
+supported: !0,
+registered: registered
+};
+} catch (_) {
+return this.controller.abort(), {
+supported: !0,
+registered: [],
+failed: !0
+};
+}
+}
+dispose() {
+this.controller?.abort();
+}
+}
+class SaburaApp {
+constructor() {
+if (this.doc = null, this.status = "Clean", this.mode = "reading", this.exportBaseline = null,
+this.isSaving = !1, this.prePresentationMode = "reading", this.interfaceTheme = function(getStorage = browserStorage) {
+try {
+const saved = getStorage()?.getItem("sabura_ui_theme");
+return UI_THEMES.has(saved) ? saved : "system";
+} catch (_) {
+return "system";
+}
+}(), this.undoStack = [], this.redoStack = [], this.subscribers = new Set, this.inPresentation = !1,
+this.clipboard = null, this.clipboardAssets = {}, this.clipboardGroups = {}, this.clipboardConnectorEnds = {},
+this.pasteCount = 0, this.imageImportToken = 0, this.pendingImageReader = null,
+this.pendingImageDecode = null, this.originalHtml = "", this.isCorrupted = !1, this.loadErrors = [],
+this.agentApi = new AgentApi(this), this.initDocument(), this.isCorrupted) return this.renderCorruptedState(),
+void this.exposeApi();
+this.initDOM(), this.initServices(), this.applyInterfaceTheme(this.interfaceTheme),
+this.exposeApi();
+}
+initDocument() {
+const seamScript = "undefined" != typeof document ? document.getElementById("sabura-document") : null;
+if (!seamScript) return this.isCorrupted = !0, this.loadErrors = [ 'Missing required <script id="sabura-document"> seam in HTML file' ],
+void console.error("Fatal document error: missing #sabura-document seam");
+const seamContent = seamScript.textContent ? seamScript.textContent.trim() : "";
+if (!seamContent) return this.isCorrupted = !0, this.loadErrors = [ 'Embedded <script id="sabura-document"> seam is empty' ],
+void console.error("Fatal document error: empty #sabura-document seam");
+try {
+const parsed = JSON.parse(seamContent), val = validateDocument(parsed, {
+verifyDigest: !0
+});
+if (val.valid) {
+this.doc = normalizeDocument(parsed);
+try {
+this.originalHtml = this.captureCanonicalHtmlShell();
+} catch (err) {
+return this.isCorrupted = !0, this.loadErrors = [ err?.message || "Canonical Sabura shell is unavailable" ],
+void console.error("Fatal shell error:", err);
+}
+this.doc["ext:sabura:revision"] ? this.exportBaseline = {
+...this.doc["ext:sabura:revision"]
+} : this.exportBaseline = null;
+const objCount = Object.keys(this.doc.objects || {}).length;
+return void (this.mode = 0 === objCount ? "editing" : "reading");
+}
+return this.isCorrupted = !0, this.loadErrors = val.errors, void console.warn("Embedded document validation failed:", val.errors);
+} catch (err) {
+return this.isCorrupted = !0, this.loadErrors = [ `JSON parse error in document seam: ${err.message}` ],
+void console.error("Failed to parse embedded document seam:", err);
+}
+}
+captureCanonicalHtmlShell() {
+if ("undefined" == typeof document) throw new Error("Cannot construct canonical Sabura shell outside a browser document");
+const contractNode = Array.from(document.head?.childNodes || []).find(node => 8 === node.nodeType && "string" == typeof node.textContent && node.textContent.includes("SABURA AI CONTRACT")), runtimeStyle = document.getElementById("sabura-runtime-style"), runtimeScript = document.getElementById("sabura-runtime-script"), visualSprite = document.getElementById("sabura-vs-sprite");
+return function(fragments) {
+const {documentJson: documentJson, aiContractComment: aiContractComment, runtimeCss: runtimeCss, visualSystemSprite: visualSystemSprite, runtimeJs: runtimeJs} = fragments || {}, required = {
+documentJson: documentJson,
+aiContractComment: aiContractComment,
+runtimeCss: runtimeCss,
+visualSystemSprite: visualSystemSprite,
+runtimeJs: runtimeJs
+};
+for (const [name, value] of Object.entries(required)) if ("string" != typeof value || 0 === value.length) throw new Error(`Cannot construct canonical Sabura shell: missing ${name}`);
+if (!aiContractComment.includes("SABURA AI CONTRACT")) throw new Error("Cannot construct canonical Sabura shell: invalid AI contract");
+if (!visualSystemSprite.includes('id="sabura-vs-sprite"')) throw new Error("Cannot construct canonical Sabura shell: invalid visual-system sprite");
+return `<!DOCTYPE html>\n<html lang="en" data-ui-theme="system">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">\n  <title>Sabura - AI-First Offline Whiteboard</title>\n\n${aiContractComment}\n\n  <script type="application/json" id="sabura-document">\n${documentJson}\n  <\/script>\n\n  \x3c!-- Sabura editor code (open source: sabura-app/sabura-editor on GitHub). Not needed to edit the board above; keep it unchanged. --\x3e\n  <style id="sabura-runtime-style">${runtimeCss}</style>\n</head>\n<body>\n  ${visualSystemSprite}\n  <div id="app"></div>\n  <script id="sabura-runtime-script">${runtimeJs}<\/script>\n</body>\n</html>`;
+}({
+documentJson: canonicalJson(this.doc),
+aiContractComment: contractNode ? `\x3c!--${contractNode.textContent}--\x3e` : "",
+runtimeCss: runtimeStyle?.textContent || "",
+visualSystemSprite: visualSprite?.outerHTML || "",
+runtimeJs: runtimeScript?.textContent || ""
+});
+}
+renderCorruptedState() {
+if ("undefined" == typeof document) return;
+const app = document.getElementById("app");
+if (!app) return;
+const errorsList = this.loadErrors.map(e => {
+return `<li style="margin-bottom: 4px;">${str = e, String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</li>`;
+var str;
+}).join("");
+app.innerHTML = `\n      <div class="sabura-corrupted-overlay" style="display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; background: #18181b; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; box-sizing: border-box;">\n        <div class="sabura-error-panel" style="max-width: 680px; width: 100%; background: #27272a; border: 1px solid #ef4444; border-radius: 8px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">\n          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">\n            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">\n              <circle cx="12" cy="12" r="10"></circle>\n              <line x1="12" y1="8" x2="12" y2="12"></line>\n              <line x1="12" y1="16" x2="12.01" y2="16"></line>\n            </svg>\n            <h2 style="margin: 0; font-size: 18px; font-weight: 600; color: #fca5a5;">Document Validation Error</h2>\n          </div>\n          <p style="margin: 0 0 14px 0; font-size: 14px; line-height: 1.5; color: #d4d4d8;">\n            The embedded document in this file is corrupted or contains invalid data. To protect the integrity of your board, the canvas visual editor was not initialized and <strong>Save Copy</strong> has been disabled.\n          </p>\n          <div style="max-height: 260px; overflow-y: auto; background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; padding: 14px; margin-bottom: 14px;">\n            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #f87171; line-height: 1.6; font-family: 'SF Mono', Menlo, monospace;">\n              ${errorsList}\n            </ul>\n          </div>\n          <p style="margin: 0; font-size: 12px; color: #a1a1aa;">\n            The original file content has been preserved unmodified in memory.\n          </p>\n        </div>\n      </div>\n    `;
+}
+initDOM() {
+const app = document.getElementById("app");
+this.appElement = app, app.setAttribute("data-sabura-vs-board-theme", this.doc?.theme?.id || "custom"),
+app.innerHTML = `\n      <div id="canvas-container"></div>\n      <canvas id="laser-canvas"></canvas>\n      <button class="wheel-trigger-fab" id="btn-wheel-fab" title="Open Tool Wheel (Shortcut: Q or Right-Click)">\n        ${renderSaburaIcon("wheel")}<span>Wheel</span>\n        <span class="fab-key">Q</span>\n      </button>\n      <input id="image-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>\n    `,
+this.canvasContainer = document.getElementById("canvas-container"), this.laserCanvas = document.getElementById("laser-canvas"),
+this.wheelFab = document.getElementById("btn-wheel-fab"), this.imageFileInput = document.getElementById("image-file-input");
+}
+initServices() {
+this.laser = new LaserPointer(this.laserCanvas), this.workspace = new Workspace(this.canvasContainer, {
+getDocument: () => this.doc,
+onCommand: cmd => this.dispatchCommand(cmd),
+onCommandBatch: cmds => this.dispatchCommandBatch(cmds),
+onOpenWheel: (x, y, context, selectedObj) => {
+if ("reading" === this.mode) return;
+this.imageImportPoint = this.workspace.screenToWorld(x, y);
+const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+this.wheel.open(x, y, context, selectedObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
+},
+onDoubleClickedObject: obj => {
+"reading" !== this.mode && (obj.locked || "connector" === obj.type || "image" === obj.type || this.textEditor.open(obj, this.workspace.camera, this.doc.theme));
+},
+onZoomChange: zoom => {
+this.zoomToolbar?.setZoom(zoom);
+},
+onCameraRendered: camera => {
+this.textEditor?.followCamera(camera);
+}
+}), this.workspace.setMode(this.mode), this.textEditor = new TextEditor(document.getElementById("app"), (objId, newText) => {
+const obj = this.doc.objects[objId];
+if ((!newText || !newText.trim()) && obj && "text" === obj.type) return this.dispatchCommand({
+type: "delete_objects",
+ids: [ objId ]
+}), this.workspace.selectedIds = [], void this.workspace.render();
+this.dispatchCommand({
+type: "set_text",
+id: objId,
+text: newText
+});
+}), this.wheel = new ToolWheel(document.getElementById("app"), (actionId, payload) => {
+this.handleWheelAction(actionId, payload);
+}), this.imageFileInput?.addEventListener("change", () => {
+const file = this.imageFileInput.files?.[0] || null;
+this.imageFileInput.value = "", file && this.importImageFile(file, this.imageImportPoint);
+}), this.appElement.addEventListener("dragover", event => this.handleImageDragOver(event)),
+this.appElement.addEventListener("dragleave", event => this.handleImageDragLeave(event)),
+this.appElement.addEventListener("drop", event => this.handleImageDrop(event)),
+this.topbar = new TopBar(document.getElementById("app"), {
+onSetMode: mode => this.setMode(mode),
+onSetBoardTheme: themeId => this.setBoardTheme(themeId),
+onSetInterfaceTheme: uiTheme => this.setInterfaceTheme(uiTheme),
+onToggleGridVisible: () => this.toggleGridVisible(),
+onToggleGridSnap: () => this.toggleGridSnap(),
+onToggleFullscreen: () => this.toggleFullscreen(),
+onPresent: () => this.enterPresentation(),
+onUndo: () => this.runUserAction("Undo", () => this.undo()),
+onRedo: () => this.runUserAction("Redo", () => this.redo()),
+onSaveCopy: () => this.saveCopy()
+}), this.helpModal = new HelpModal(document.getElementById("app")), this.zoomToolbar = new ZoomToolbar(document.getElementById("app"), {
+onZoomOut: () => this.workspace.zoomOut(),
+onZoomIn: () => this.workspace.zoomIn(),
+onResetZoom: () => this.workspace.resetZoom(),
+onFit: () => this.workspace.fitToContent(60),
+onOpenHelp: () => this.helpModal.toggle()
+}), this.shortcuts = new ShortcutsCoordinator({
+isReadingMode: () => "reading" === this.mode || Boolean(this.inPresentation),
+isTextEditing: () => Boolean(null !== this.textEditor?.targetObject || "block" === this.textEditor?.textarea?.style.display),
+isOverlayOpen: () => Boolean(this.helpModal?.isOpen || this.wheel?.isOpen),
+isInteracting: () => Boolean(this.workspace?.hasActiveInteraction?.()),
+onTriggerWheel: (x, y) => {
+if (this.wheel.isOpen) return void this.wheel.close();
+let hit = null, context = "canvas";
+if (1 === this.workspace.selectedIds.length) hit = this.doc.objects[this.workspace.selectedIds[0]],
+context = "object"; else if (this.workspace.selectedIds.length > 1) context = "multi"; else {
+const worldPt = this.workspace.screenToWorld(x, y);
+hit = this.workspace.findObjectAt(worldPt), hit && (this.workspace.selectedIds = [ hit.id ],
+this.workspace.render(), context = "object");
+}
+const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean);
+this.imageImportPoint = this.workspace.screenToWorld(x, y), this.wheel.open(x, y, context, hit, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
+},
+onSelectTool: tool => this.workspace.setTool(tool),
+onImportImage: (x, y) => {
+this.imageImportPoint = this.workspace.screenToWorld(x, y), this.imageFileInput?.click();
+},
+onSpaceHold: held => {
+this.workspace.spaceHeld = held, this.workspace.updateCursor();
+},
+onEditText: () => {
+if (1 === this.workspace.selectedIds.length) {
+const obj = this.doc.objects[this.workspace.selectedIds[0]];
+obj && !obj.locked && "connector" !== obj.type && "image" !== obj.type && this.textEditor.open(obj, this.workspace.camera, this.doc.theme);
+}
+},
+onDHold: held => {
+this.workspace.setDHold(held);
+},
+onUndo: () => this.runUserAction("Undo", () => this.undo()),
+onRedo: () => this.runUserAction("Redo", () => this.redo()),
+onDuplicate: () => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "duplicate_objects",
+ids: this.workspace.selectedIds
+});
+},
+onDelete: () => {
+this.workspace.selectedIds.length > 0 && (this.dispatchCommand({
+type: "delete_objects",
+ids: this.workspace.selectedIds
+}), this.workspace.selectedIds = []);
+},
+onCopy: () => this.copy(),
+onCut: () => this.cut(),
+onPaste: () => this.runUserAction("Paste", () => this.paste()),
+onFlipCurve: () => {
+for (const id of this.workspace.selectedIds) {
+const conn = this.doc.objects[id];
+if (conn && "connector" === conn.type) if ("curved" === conn.routing) {
+const curSide = void 0 !== conn.curveSide ? conn.curveSide : 1;
+this.dispatchCommand({
+type: "configure_connector",
+id: id,
+curveSide: -1 === curSide ? 1 : -1
+});
+} else "elbow" === conn.routing && (void 0 !== conn.elbowOffset && null !== conn.elbowOffset ? this.dispatchCommand({
+type: "configure_connector",
+id: id,
+elbowOffset: -conn.elbowOffset
+}) : this.dispatchCommand({
+type: "configure_connector",
+id: id,
+elbowOffset: 80
+}));
+}
+},
+onEqualSides: () => {
+const shapeTypes = [ "rectangle", "ellipse", "diamond", "triangle" ], targetIds = this.workspace.selectedIds.filter(id => {
+const obj = this.doc.objects[id];
+return obj && shapeTypes.includes(obj.type) && !obj.locked;
+});
+if (0 === targetIds.length) return !1;
+const commands = targetIds.map(id => {
+const obj = this.doc.objects[id], maxDim = Math.max(obj.width, obj.height);
+return {
+type: "resize_object",
+id: id,
+bounds: {
+x: obj.x,
+y: obj.y,
+width: maxDim,
+height: maxDim
+}
+};
+});
+return 1 === commands.length ? this.dispatchCommand(commands[0]) : commands.length > 1 && this.dispatchCommandBatch(commands),
+!0;
+},
+onGroup: () => {
+this.workspace.selectedIds.length > 1 && this.dispatchCommand({
+type: "group_objects",
+ids: this.workspace.selectedIds
+});
+},
+onUngroup: () => {
+const groupIds = Array.from(new Set(this.workspace.selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
+groupIds.length > 0 && this.dispatchCommand({
+type: "ungroup_objects",
+groupIds: groupIds
+});
+},
+onBringForward: () => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "reorder_objects",
+ids: this.workspace.selectedIds,
+action: "forward"
+});
+},
+onBringToFront: () => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "reorder_objects",
+ids: this.workspace.selectedIds,
+action: "front"
+});
+},
+onSendBackward: () => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "reorder_objects",
+ids: this.workspace.selectedIds,
+action: "backward"
+});
+},
+onSendToBack: () => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "reorder_objects",
+ids: this.workspace.selectedIds,
+action: "back"
+});
+},
+onSelectAll: () => {
+this.workspace.activeGroupId = null, this.workspace.selectedIds = Object.values(this.doc.objects).filter(o => !o.locked).map(o => o.id),
+this.workspace.render();
+},
+onNudge: (dx, dy) => {
+this.workspace.selectedIds.length > 0 && this.dispatchCommand({
+type: "move_objects",
+ids: this.workspace.selectedIds,
+dx: dx,
+dy: dy
+});
+},
+onZoomIn: () => this.workspace.zoomIn(),
+onZoomOut: () => this.workspace.zoomOut(),
+onResetZoom: () => this.workspace.resetZoom(),
+onFitContent: () => this.workspace.fitToContent(60),
+onToggleHelp: () => this.helpModal.toggle(),
+onEnter: () => {
+this.workspace.isDrawingLine && this.workspace.finishLine(!1);
+},
+onEscape: () => {
+if (this.workspace.isDrawingLine) this.workspace.cancelLine(); else if (this.helpModal?.isOpen) this.helpModal.close(); else if (this.inPresentation) this.exitPresentation(); else if (this.wheel.isOpen) this.wheel.close(); else if (this.textEditor?.activeEditor) this.textEditor.close(!0); else if (this.workspace.isDraggingSelection || this.workspace.isResizing || this.workspace.isRotating || this.workspace.isReconnecting || this.workspace.isCreating || this.workspace.isDraggingVertex) this.workspace.cancelGesture(); else if (this.workspace.activeGroupId) {
+const gId = this.workspace.activeGroupId, groupMembers = Object.values(this.doc.objects).filter(o => o.groupId === gId && !o.locked).map(o => o.id);
+this.workspace.activeGroupId = null, this.workspace.selectedIds = groupMembers,
+this.workspace.render();
+} else this.workspace.selectedIds.length > 0 ? (this.workspace.selectedIds = [],
+this.workspace.render()) : "hand" !== this.workspace.activeTool && this.workspace.setTool("hand");
+}
+}), this.wheelFab.addEventListener("click", e => {
+e.stopPropagation();
+const selectedObjects = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(Boolean), context = this.workspace.selectedIds.length > 0 ? "object" : "canvas", firstObj = selectedObjects[0] || null;
+this.imageImportPoint = this.workspace.screenToWorld(window.innerWidth / 2, window.innerHeight / 2),
+this.wheel.open(window.innerWidth / 2, window.innerHeight / 2, context, firstObj, this.doc.theme.palette, this.workspace.selectedIds.length, selectedObjects);
+}), window.addEventListener("pointermove", e => {
+this.inPresentation && this.laser.addPoint(e.clientX, e.clientY);
+}), document.addEventListener("fullscreenchange", () => {
+!document.fullscreenElement && this.inPresentation ? this.exitPresentation() : this.inPresentation && (this.laser.resize(),
+this.workspace.fitToContent(80));
+}), window.addEventListener("beforeunload", e => {
+if ("Changed" === this.status) return e.preventDefault(), e.returnValue = "You have unsaved whiteboard changes. Download a copy to save them.",
+e.returnValue;
+}), this.updateUI(), "reading" === this.mode && this.wheelFab && (this.wheelFab.style.display = "none");
+Object.keys(this.doc?.objects || {}).length > 0 && (this.workspace.fitToContent(60),
+this.refitUntilViewTouched());
+}
+refitUntilViewTouched() {
+const touchEvents = [ "pointerdown", "wheel", "keydown" ], snapshot = () => ({
+...this.workspace.camera
+});
+let fitted = snapshot();
+const onResize = () => {
+const now = this.workspace.camera;
+now.x === fitted.x && now.y === fitted.y && now.zoom === fitted.zoom ? window.innerWidth > 0 && window.innerHeight > 0 && (this.workspace.fitToContent(60),
+fitted = snapshot()) : stop();
+}, stop = () => {
+window.removeEventListener("resize", onResize);
+for (const type of touchEvents) window.removeEventListener(type, stop, !0);
+};
+window.addEventListener("resize", onResize);
+for (const type of touchEvents) window.addEventListener(type, stop, !0);
+}
+setMode(mode) {
+const targetMode = "editing" === mode ? "editing" : "reading";
+this.mode !== targetMode && (this.cancelPendingImageImport(), "reading" === targetMode ? (this.textEditor && this.textEditor.close(!0),
+this.workspace.cancelGesture(), this.workspace.selectedIds = [], this.wheel.close(),
+this.helpModal?.close(), this.wheelFab && (this.wheelFab.style.display = "none"),
+this.mode = "reading", this.workspace.setMode("reading")) : (this.mode = "editing",
+this.workspace.setMode("editing"), this.wheelFab && (this.wheelFab.style.display = "")),
+this.updateUI());
+}
+updateDocumentStatus() {
+const currentDigest = computeContentDigest(this.doc, canonicalJson);
+this.exportBaseline && this.exportBaseline.contentDigest === currentDigest ? this.status = "Copy requested" : this.exportBaseline || 0 !== this.undoStack.length ? this.status = "Changed" : this.status = "Clean";
+}
+documentStateChanged(previousDoc, nextDoc) {
+return canonicalJson(previousDoc) !== canonicalJson(nextDoc);
+}
+commitCommandResult(previousDoc, result) {
+return !!this.documentStateChanged(previousDoc, result.doc) && (this.doc = result.doc,
+result.inverseCmd && "noop" !== result.inverseCmd.type && this.undoStack.push(result.inverseCmd),
+this.redoStack = [], this.agentApi?.recordDocumentChange(), this.status = "Changed",
+this.updateUI(), this.notifySubscribers(), !0);
+}
+dispatchCommand(cmd) {
+const previousDoc = this.doc, result = applyCommand(previousDoc, cmd);
+return this.commitCommandResult(previousDoc, result);
+}
+dispatchCommandBatch(cmds) {
+const previousDoc = this.doc, result = applyCommandBatch(previousDoc, cmds);
+return this.commitCommandResult(previousDoc, result);
+}
+undo() {
+if (0 === this.undoStack.length) return !1;
+const inv = this.undoStack[this.undoStack.length - 1], previousDoc = this.doc, {doc: newDoc, inverseCmd: redoCmd} = applyCommand(previousDoc, inv);
+return this.undoStack.pop(), this.documentStateChanged(previousDoc, newDoc) ? (this.doc = newDoc,
+redoCmd && "noop" !== redoCmd.type && this.redoStack.push(redoCmd), this.agentApi?.recordDocumentChange(),
+this.updateDocumentStatus(), this.updateUI(), this.notifySubscribers(), !0) : (this.updateDocumentStatus(),
+!1);
+}
+redo() {
+if (0 === this.redoStack.length) return !1;
+const redoCmd = this.redoStack[this.redoStack.length - 1], previousDoc = this.doc, {doc: newDoc, inverseCmd: undoCmd} = applyCommand(previousDoc, redoCmd);
+return this.redoStack.pop(), this.documentStateChanged(previousDoc, newDoc) ? (this.doc = newDoc,
+undoCmd && "noop" !== undoCmd.type && this.undoStack.push(undoCmd), this.agentApi?.recordDocumentChange(),
+this.updateDocumentStatus(), this.updateUI(), this.notifySubscribers(), !0) : (this.updateDocumentStatus(),
+!1);
+}
+runUserAction(label, action) {
+try {
+return action();
+} catch (error) {
+return console.error(`Sabura: ${label} failed`, error), this.reportActionError(label, error),
+!1;
+}
+}
+reportActionError(label, error) {
+const detail = String(error?.message || error || "Unknown error").replace(/[\r\n]+/g, " ").slice(0, 180);
+if ("function" == typeof alert) try {
+alert(`${label} failed: ${detail}`);
+} catch (_) {}
+}
+reportImageImportError(message) {
+const safe = String(message || "Unable to import image").replace(/[\r\n]+/g, " ").slice(0, 180);
+if ("function" == typeof alert) try {
+alert(`Image import failed: ${safe}`);
+} catch (_) {}
+}
+isFileDrag(dataTransfer) {
+return Array.from(dataTransfer?.items || []).some(item => "file" === item.kind) || Boolean(dataTransfer?.files?.length);
+}
+setImageDropActive(active) {
+this.canvasContainer?.classList?.toggle?.("image-drop-active", Boolean(active));
+}
+handleImageDragOver(event) {
+if (!this.isFileDrag(event.dataTransfer)) return;
+event.preventDefault();
+const fileItems = Array.from(event.dataTransfer?.items || []).filter(item => "file" === item.kind), compatible = "editing" === this.mode && !this.inPresentation && 1 === fileItems.length && RASTER_MIME_TYPES.includes(fileItems[0].type);
+event.dataTransfer && (event.dataTransfer.dropEffect = compatible ? "copy" : "none"),
+this.setImageDropActive(compatible);
+}
+handleImageDragLeave(event) {
+event.relatedTarget && this.appElement?.contains(event.relatedTarget) || this.setImageDropActive(!1);
+}
+handleImageDrop(event) {
+if (!this.isFileDrag(event.dataTransfer)) return;
+if (event.preventDefault(), event.stopPropagation(), this.setImageDropActive(!1),
+"editing" !== this.mode || this.inPresentation) return;
+const files = Array.from(event.dataTransfer?.files || []);
+1 === files.length ? this.importImageFile(files[0], this.workspace.screenToWorld(event.clientX, event.clientY)) : files.length > 1 && this.reportImageImportError("Drop one image at a time.");
+}
+cancelPendingImageImport() {
+this.setImageDropActive(!1), this.imageImportToken++;
+try {
+this.pendingImageReader?.abort();
+} catch (_) {}
+this.pendingImageReader = null, this.pendingImageDecode = null;
+}
+isImageImportActive(token) {
+return token === this.imageImportToken && "editing" === this.mode && !this.isSaving;
+}
+importImageFile(file, invocationPoint = null) {
+if ("editing" !== this.mode || !file) return;
+const token = ++this.imageImportToken;
+if (!RASTER_MIME_TYPES.includes(file.type)) return void this.reportImageImportError("Choose a PNG, JPEG, or WebP image.");
+if ("number" == typeof file.size && file.size > 10485760) return void this.reportImageImportError("The image is larger than 10 MiB.");
+const reader = new FileReader;
+this.pendingImageReader = reader, reader.onerror = () => {
+this.pendingImageReader === reader && (this.pendingImageReader = null), this.isImageImportActive(token) && this.reportImageImportError("The image could not be read.");
+}, reader.onload = () => {
+if (this.pendingImageReader === reader && (this.pendingImageReader = null), !this.isImageImportActive(token)) return;
+const data = "string" == typeof reader.result ? reader.result : "", parsed = validateRasterDataUrl(data, file.type);
+if (!parsed.valid) return void this.reportImageImportError(parsed.errors[0] || "The image data is invalid.");
+const image = new Image;
+this.pendingImageDecode = image, image.onerror = () => {
+this.pendingImageDecode === image && (this.pendingImageDecode = null), this.isImageImportActive(token) && this.reportImageImportError("The image data could not be decoded.");
+}, image.onload = () => {
+if (this.pendingImageDecode === image && (this.pendingImageDecode = null), !this.isImageImportActive(token)) return;
+const width = image.naturalWidth || image.width, height = image.naturalHeight || image.height;
+if (void 0 !== parsed.encodedWidth && (parsed.encodedWidth !== width || parsed.encodedHeight !== height)) return void this.reportImageImportError("The encoded image dimensions do not match the decoded image.");
+if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 16384 || height > 16384 || width * height > 4e7) return void this.reportImageImportError("Image dimensions exceed the 16384px axis or 40000000 pixel limit.");
+const scale = Math.min(1, 480 / width, 360 / height), displayWidth = width * scale, displayHeight = height * scale, point = invocationPoint || this.workspace.screenToWorld(window.innerWidth / 2, window.innerHeight / 2), assetId = generateId("asset"), objectId = generateId("image"), asset = {
+id: assetId,
+type: "raster",
+data: data,
+mimeType: file.type,
+width: width,
+height: height
+}, object = createDefaultObject("image", {
+id: objectId,
+assetId: assetId,
+x: point.x - displayWidth / 2,
+y: point.y - displayHeight / 2,
+width: displayWidth,
+height: displayHeight,
+fit: "contain"
+}, this.doc.theme);
+try {
+if (!this.isImageImportActive(token)) return;
+this.dispatchCommand({
+type: "create_image",
+asset: asset,
+object: object
+}), this.workspace.selectedIds = [ objectId ], this.workspace.setTool("select"),
+this.workspace.render();
+} catch (err) {
+this.reportImageImportError("The image could not be added to this document.");
+}
+}, image.src = data;
+}, reader.readAsDataURL(file);
+}
+handleWheelAction(actionId, payload) {
+const selectedIds = this.workspace.selectedIds;
+if ("tool_select" === actionId) this.workspace.setTool("select"); else if ("tool_hand" === actionId) this.workspace.setTool("hand"); else if ("tool_line" === actionId) this.workspace.setTool("line"); else if ("tool_text" === actionId) this.workspace.setTool("text"); else if ("image_import" === actionId) "editing" === this.mode && this.imageFileInput?.click(); else if (actionId.startsWith("shape_")) {
+const type = actionId.replace("shape_", "");
+this.workspace.setTool(type);
+} else if ("conn_straight" === actionId) this.workspace.setConnectorRouting("straight"),
+this.workspace.setTool("connector"); else if ("conn_elbow" === actionId) this.workspace.setConnectorRouting("elbow"),
+this.workspace.setTool("connector"); else if ("conn_curved" === actionId) this.workspace.setConnectorRouting("curved"),
+this.workspace.setTool("connector"); else if ("action_undo" === actionId) this.runUserAction("Undo", () => this.undo()); else if ("action_redo" === actionId) this.runUserAction("Redo", () => this.redo()); else if ("action_delete" === actionId) selectedIds.length > 0 && (this.dispatchCommand({
+type: "delete_objects",
+ids: selectedIds
+}), this.workspace.selectedIds = []); else if ("action_duplicate" === actionId) selectedIds.length > 0 && this.dispatchCommand({
+type: "duplicate_objects",
+ids: selectedIds
+}); else if ("image_fit_contain" === actionId || "image_fit_cover" === actionId) {
+const fit = actionId.endsWith("cover") ? "cover" : "contain", imageIds = selectedIds.filter(id => "image" === this.doc.objects[id]?.type && !this.doc.objects[id]?.locked);
+1 === imageIds.length ? this.dispatchCommand({
+type: "set_image_fit",
+id: imageIds[0],
+fit: fit
+}) : imageIds.length > 1 && this.dispatchCommandBatch(imageIds.map(id => ({
+type: "set_image_fit",
+id: id,
+fit: fit
+})));
+} else if ("action_lock" === actionId || "action_unlock" === actionId) {
+const lock = "action_lock" === actionId;
+this.dispatchCommand({
+type: "lock_objects",
+ids: selectedIds,
+locked: lock
+});
+} else if ("action_group" === actionId) selectedIds.length > 1 && this.dispatchCommand({
+type: "group_objects",
+ids: selectedIds
+}); else if ("action_ungroup" === actionId) {
+const groupIds = Array.from(new Set(selectedIds.map(id => this.doc.objects[id]?.groupId).filter(Boolean)));
+groupIds.length > 0 && (this.dispatchCommand({
+type: "ungroup_objects",
+groupIds: groupIds
+}), this.workspace.activeGroupId = null);
+} else if ("action_enter_group" === actionId) {
+if (selectedIds.length > 0) {
+const first = this.doc.objects[selectedIds[0]];
+first?.groupId && (this.workspace.activeGroupId = first.groupId, this.workspace.selectedIds = [ first.id ],
+this.workspace.render());
+}
+} else if ("action_select_group" === actionId) {
+if (selectedIds.length > 0) {
+const first = this.doc.objects[selectedIds[0]];
+first?.groupId && (this.workspace.activeGroupId = null, this.workspace.selectedIds = Object.values(this.doc.objects).filter(o => o.groupId === first.groupId && !o.locked).map(o => o.id),
+this.workspace.render());
+}
+} else if ("action_connect" === actionId) this.workspace.setTool("connector"); else if (actionId.startsWith("order_")) {
+const action = actionId.replace("order_", "");
+this.dispatchCommand({
+type: "reorder_objects",
+ids: selectedIds,
+action: action
+});
+} else if (actionId.startsWith("fill_")) {
+const col = payload.color;
+this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+fill: col
+}
+});
+} else if (actionId.startsWith("ink_")) {
+const col = payload.color;
+this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+stroke: col
+}
+});
+} else if (actionId.startsWith("opacity_")) {
+const val = payload.value, imageIds = selectedIds.filter(id => "image" === this.doc.objects[id]?.type && !this.doc.objects[id]?.locked);
+imageIds.length > 0 && imageIds.length === selectedIds.length ? this.dispatchCommandBatch(imageIds.map(id => ({
+type: "set_image_opacity",
+id: id,
+opacity: val
+}))) : this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+opacity: val
+}
+});
+} else if (actionId.startsWith("width_")) {
+const val = payload.value;
+this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+strokeWidth: val
+}
+});
+} else if (actionId.startsWith("type_")) {
+if (payload.size) this.dispatchCommand({
+type: "set_typography",
+ids: selectedIds,
+updates: {
+size: payload.size
+}
+}); else if (payload.toggleBold) {
+const anyBold = selectedIds.some(id => this.doc.objects[id]?.textStyle?.bold);
+this.dispatchCommand({
+type: "set_typography",
+ids: selectedIds,
+updates: {
+bold: !anyBold
+}
+});
+} else if (payload.cycleAlign) {
+const firstAlign = this.doc.objects[selectedIds[0]]?.textStyle?.align || "center", nextAlign = "left" === firstAlign ? "center" : "center" === firstAlign ? "right" : "left";
+this.dispatchCommand({
+type: "set_typography",
+ids: selectedIds,
+updates: {
+align: nextAlign
+}
+});
+}
+} else if (actionId.startsWith("font_")) {
+const family = payload.fontFamily || actionId.replace("font_", "");
+this.dispatchCommand({
+type: "set_typography",
+ids: selectedIds,
+updates: {
+fontFamily: family
+}
+});
+} else if (actionId.startsWith("conn_route_")) {
+const routing = payload.routing || actionId.replace("conn_route_", ""), commands = selectedIds.filter(id => "connector" === this.doc.objects[id]?.type && !this.doc.objects[id]?.locked).map(id => ({
+type: "configure_connector",
+id: id,
+routing: routing
+}));
+1 === commands.length ? this.dispatchCommand(commands[0]) : commands.length > 1 && this.dispatchCommandBatch(commands);
+} else if ("conn_curve_flip" === actionId) for (const id of selectedIds) {
+const conn = this.doc.objects[id];
+if (conn && "connector" === conn.type) {
+const curSide = void 0 !== conn.curveSide ? conn.curveSide : 1;
+this.dispatchCommand({
+type: "configure_connector",
+id: id,
+curveSide: -1 === curSide ? 1 : -1
+});
+}
+} else if ("conn_curve_auto" === actionId) for (const id of selectedIds) this.dispatchCommand({
+type: "configure_connector",
+id: id,
+curveDistance: null
+}); else if ("conn_elbow_bypass" === actionId) for (const id of selectedIds) this.dispatchCommand({
+type: "configure_connector",
+id: id,
+elbowOffset: 80
+}); else if ("conn_elbow_flip" === actionId) for (const id of selectedIds) {
+const conn = this.doc.objects[id];
+conn && "connector" === conn.type && void 0 !== conn.elbowOffset && this.dispatchCommand({
+type: "configure_connector",
+id: id,
+elbowOffset: -conn.elbowOffset
+});
+} else if ("conn_elbow_auto" === actionId) for (const id of selectedIds) this.dispatchCommand({
+type: "configure_connector",
+id: id,
+elbowOffset: null
+}); else if (actionId.startsWith("conn_arrows_")) {
+const commands = selectedIds.filter(id => "connector" === this.doc.objects[id]?.type && !this.doc.objects[id]?.locked).map(id => ({
+type: "configure_connector",
+id: id,
+startArrow: payload.startArrow,
+endArrow: payload.endArrow
+}));
+1 === commands.length ? this.dispatchCommand(commands[0]) : commands.length > 1 && this.dispatchCommandBatch(commands);
+} else if ("conn_points_auto" === actionId) {
+const cmds = [];
+for (const id of selectedIds) {
+const conn = this.doc.objects[id];
+conn && "connector" === conn.type && (conn.from?.id && conn.from.anchor && cmds.push({
+type: "reconnect_connector",
+id: id,
+endpoint: "from",
+target: {
+id: conn.from.id
+}
+}), conn.to?.id && conn.to.anchor && cmds.push({
+type: "reconnect_connector",
+id: id,
+endpoint: "to",
+target: {
+id: conn.to.id
+}
+}));
+}
+cmds.length > 0 && this.dispatchCommandBatch(cmds);
+} else if ("conn_points_auto_from" === actionId) {
+const cmds = [];
+for (const id of selectedIds) {
+const conn = this.doc.objects[id];
+conn && "connector" === conn.type && conn.from?.id && conn.from.anchor && cmds.push({
+type: "reconnect_connector",
+id: id,
+endpoint: "from",
+target: {
+id: conn.from.id
+}
+});
+}
+cmds.length > 0 && this.dispatchCommandBatch(cmds);
+} else if ("conn_points_auto_to" === actionId) {
+const cmds = [];
+for (const id of selectedIds) {
+const conn = this.doc.objects[id];
+conn && "connector" === conn.type && conn.to?.id && conn.to.anchor && cmds.push({
+type: "reconnect_connector",
+id: id,
+endpoint: "to",
+target: {
+id: conn.to.id
+}
+});
+}
+cmds.length > 0 && this.dispatchCommandBatch(cmds);
+} else if ("action_reconnect" === actionId) 1 === selectedIds.length && "connector" === this.doc.objects[selectedIds[0]]?.type && this.workspace.render(); else if ("path_curve_sharp" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+curveStyle: "sharp"
+}
+}); else if ("path_curve_curved" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+curveStyle: "curved"
+}
+}); else if ("path_toggle_close" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+closed: !0
+}
+}); else if ("path_toggle_open" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+closed: !1
+}
+}); else if (actionId.startsWith("path_arrows_")) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+startArrow: payload.startArrow,
+endArrow: payload.endArrow
+}
+}); else if (actionId.startsWith("to_")) if ("to_equal_sides" === actionId) {
+const shapeTypes = [ "rectangle", "ellipse", "diamond", "triangle" ], targetIds = selectedIds.filter(id => {
+const obj = this.doc.objects[id];
+return obj && shapeTypes.includes(obj.type) && !obj.locked;
+});
+if (targetIds.length > 0) {
+const commands = targetIds.map(id => {
+const obj = this.doc.objects[id], maxDim = Math.max(obj.width, obj.height);
+return {
+type: "resize_object",
+id: id,
+bounds: {
+x: obj.x,
+y: obj.y,
+width: maxDim,
+height: maxDim
+}
+};
+});
+1 === commands.length ? this.dispatchCommand(commands[0]) : this.dispatchCommandBatch(commands);
+}
+} else {
+const newType = actionId.replace("to_", "");
+for (const id of selectedIds) this.dispatchCommand({
+type: "change_shape",
+id: id,
+newType: newType
+});
+} else if ("style_sketch" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+roughness: 1
+}
+}); else if ("style_clean" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+roughness: 0
+}
+}); else if ("stroke_solid" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+strokeStyle: "solid"
+}
+}); else if ("stroke_dashed" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+strokeStyle: "dashed"
+}
+}); else if ("stroke_dotted" === actionId) this.dispatchCommand({
+type: "set_style",
+ids: selectedIds,
+updates: {
+strokeStyle: "dotted"
+}
+}); else if (actionId.startsWith("align_")) {
+const alignment = actionId.replace("align_", "");
+this.dispatchCommand({
+type: "align_objects",
+ids: selectedIds,
+alignment: alignment
+});
+} else "dist_h" === actionId ? this.dispatchCommand({
+type: "distribute_objects",
+ids: selectedIds,
+direction: "horizontal"
+}) : "dist_v" === actionId && this.dispatchCommand({
+type: "distribute_objects",
+ids: selectedIds,
+direction: "vertical"
+});
+}
+setBoardTheme(themeId) {
+if (!THEME_PRESETS[themeId]) return;
+const preset = THEME_PRESETS[themeId];
+this.dispatchCommand({
+type: "set_board_theme",
+theme: {
+id: preset.id,
+background: preset.background,
+gridColor: preset.gridColor,
+palette: [ ...preset.palette ],
+defaultFill: preset.defaultFill,
+defaultStroke: preset.defaultStroke,
+defaultStrokeWidth: preset.defaultStrokeWidth,
+defaultOpacity: preset.defaultOpacity,
+defaultRoughness: preset.defaultRoughness,
+defaultFontFamily: preset.defaultFontFamily,
+defaultFontSize: preset.defaultFontSize
+}
+});
+}
+copy() {
+const selected = this.workspace.selectedIds.map(id => this.doc.objects[id]).filter(o => o && !o.locked);
+if (0 !== selected.length) {
+this.clipboard = cloneDocument(selected), this.clipboardGroups = {}, this.clipboardConnectorEnds = {};
+for (const object of selected) if (object.groupId && this.doc.groups?.[object.groupId] && (this.clipboardGroups[object.groupId] = cloneDocument(this.doc.groups[object.groupId])),
+"connector" === object.type) {
+const resolved = resolveConnectorGeometry(this.doc, object);
+resolved?.start && resolved?.end && (this.clipboardConnectorEnds[object.id] = {
+start: {
+x: resolved.start.x,
+y: resolved.start.y
+},
+end: {
+x: resolved.end.x,
+y: resolved.end.y
+}
+});
+}
+this.clipboardAssets = {};
+for (const object of selected) "image" === object.type && object.assetId && this.doc.assets?.[object.assetId] && (this.clipboardAssets[object.assetId] = cloneDocument(this.doc.assets[object.assetId]));
+this.pasteCount = 0;
+}
+}
+cut() {
+this.copy();
+const ids = this.workspace.selectedIds.filter(id => this.doc.objects[id] && !this.doc.objects[id].locked);
+ids.length > 0 && (this.dispatchCommand({
+type: "delete_objects",
+ids: ids
+}), this.workspace.selectedIds = [], this.workspace.activeGroupId = null, this.workspace.render());
+}
+paste() {
+if (!this.clipboard || 0 === this.clipboard.length) return;
+this.pasteCount++;
+const offset_x = 24 * this.pasteCount, offset_y = 24 * this.pasteCount, idMap = {}, groupMap = {}, newObjects = [], cmds = [];
+for (const [assetId, asset] of Object.entries(this.clipboardAssets || {})) this.doc.assets?.[assetId] || cmds.push({
+type: "create_asset",
+asset: asset
+});
+const newGroups = {};
+for (const source of this.clipboard) {
+const newId = generateId(source.type || "obj");
+idMap[source.id] = newId;
+const dup = cloneDocument(source);
+if (dup.id = newId, "number" == typeof dup.x && (dup.x += offset_x), "number" == typeof dup.y && (dup.y += offset_y),
+dup.seed = generateSeed(), dup.locked = !1, dup.groupId) {
+if (!groupMap[dup.groupId]) {
+const newGid = generateId("grp");
+groupMap[dup.groupId] = newGid;
+const origGroup = this.clipboardGroups?.[dup.groupId] || this.doc.groups?.[dup.groupId];
+newGroups[newGid] = {
+id: newGid,
+name: origGroup?.name || "Group"
+};
+}
+dup.groupId = groupMap[dup.groupId];
+}
+newObjects.push(dup);
+}
+Object.keys(newGroups).length > 0 && cmds.push({
+type: "restore_ungroup",
+groups: newGroups,
+members: {}
+});
+const freeEnd = (dup, which) => {
+const sourceId = this.clipboard.find(c => idMap[c.id] === dup.id)?.id, ends = this.clipboardConnectorEnds?.[sourceId], point = ends ? "from" === which ? ends.start : ends.end : null;
+if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) throw new Error(`Cannot paste connector "${sourceId}": its ${which} endpoint position is unknown`);
+return {
+point: {
+x: point.x + offset_x,
+y: point.y + offset_y
+}
+};
+};
+for (const dup of newObjects) {
+if ("connector" === dup.type) for (const which of [ "from", "to" ]) {
+const end = dup[which];
+end && (end.id && idMap[end.id] ? end.id = idMap[end.id] : end.id ? dup[which] = freeEnd(dup, which) : end.point && (end.point.x += offset_x,
+end.point.y += offset_y));
+}
+cmds.push({
+type: "create_object",
+object: dup
+});
+}
+cmds.length > 0 && (this.dispatchCommandBatch(cmds), this.workspace.selectedIds = newObjects.map(o => o.id),
+this.workspace.activeGroupId = null, this.workspace.render());
+}
+setInterfaceTheme(theme) {
+this.interfaceTheme = theme, function(getStorage, theme) {
+try {
+const storage = getStorage();
+return !!storage && (storage.setItem("sabura_ui_theme", theme), !0);
+} catch (_) {
+return !1;
+}
+}(browserStorage, theme), this.applyInterfaceTheme(theme), this.updateUI();
+}
+applyInterfaceTheme(theme) {
+document.documentElement.setAttribute("data-ui-theme", theme);
+}
+toggleGridVisible() {
+this.workspace.setShowGrid(!this.workspace.showGrid), this.updateUI();
+}
+toggleGridSnap() {
+this.workspace.setSnapGrid(!this.workspace.snapGrid), this.updateUI();
+}
+toggleFullscreen() {
+if (document.fullscreenElement) try {
+document.exitFullscreen && document.exitFullscreen().catch(() => {});
+} catch (_) {} else try {
+document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
+} catch (_) {}
+}
+enterPresentation() {
+this.cancelPendingImageImport(), this.prePresentationCamera = {
+...this.workspace.camera
+}, this.prePresentationMode = this.mode, this.textEditor && this.textEditor.close(!0),
+this.workspace.cancelGesture(), this.workspace.selectedIds = [], this.wheel?.close(),
+this.helpModal?.close(), this.wheelFab && (this.wheelFab.style.display = "none"),
+this.inPresentation = !0, this.workspace.setMode("reading"), document.body.classList.add("in-presentation"),
+this.workspace.fitToContent(80), this.laser.start();
+try {
+document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().then(() => {
+this.inPresentation && (this.laser.resize(), this.workspace.fitToContent(80));
+}).catch(() => {});
+} catch (_) {}
+setTimeout(() => {
+this.inPresentation && this.laser.resize();
+}, 120);
+}
+exitPresentation() {
+this.inPresentation = !1, document.body.classList.remove("in-presentation"), this.laser.stop(),
+document.fullscreenElement && document.exitFullscreen?.().catch(() => {}), this.prePresentationCamera && (this.workspace.camera = {
+...this.prePresentationCamera
+}, this.prePresentationCamera = null);
+const prevMode = this.prePresentationMode || "reading";
+this.prePresentationMode = null, this.mode = null, this.setMode(prevMode), this.workspace.render(),
+this.updateUI();
+}
+getCleanHtmlShell() {
+if (!this.originalHtml) throw new Error("Canonical Sabura shell is unavailable");
+return this.originalHtml;
+}
+saveCopy() {
+if (this.isCorrupted) return console.error("Cannot save copy: document is corrupted or invalid."),
+{
+success: !1,
+error: "Document is corrupted or in safe failure mode"
+};
+if (this.isSaving) return {
+success: !1,
+error: "Save in progress"
+};
+this.cancelPendingImageImport(), this.isSaving = !0;
+try {
+this.textEditor && this.textEditor.close(!0), this.workspace.cancelGesture(), this.status = "Preparing copy",
+this.updateUI();
+const transition = transitionRevision(this.doc, this.exportBaseline, canonicalJson), exportDoc = cloneDocument(this.doc);
+exportDoc["ext:sabura:revision"] = {
+...transition.revisionRecord
+};
+const packResult = packageHtmlWithDocument(this.getCleanHtmlShell(), exportDoc);
+if (!packResult.success) {
+if ("function" == typeof alert) try {
+alert("Failed to package document: " + packResult.error);
+} catch (_) {}
+return this.status = "Error", this.updateUI(), {
+success: !1,
+error: packResult.error
+};
+}
+const shortRev = getShortRevisionId(transition.revisionRecord.revisionId), filename = `sabura-${sanitizeFilenameTitle(exportDoc.title, "document")}-r${shortRev}.html`, byteLength = triggerFileDownload(filename, packResult.html);
+return this.exportBaseline = {
+...transition.revisionRecord
+}, this.doc["ext:sabura:revision"] = {
+...transition.revisionRecord
+}, this.status = "Copy requested", this.updateUI(), {
+success: !0,
+changed: transition.changed,
+filename: filename,
+byteLength: byteLength,
+revisionId: transition.revisionRecord.revisionId,
+parentId: transition.revisionRecord.parentId
+};
+} catch (err) {
+return console.error("Save Copy failed:", err), this.status = "Error", this.updateUI(),
+{
+success: !1,
+error: err?.message || "Save copy failed"
+};
+} finally {
+this.isSaving = !1;
+}
+}
+updateUI() {
+this.appElement?.setAttribute("data-sabura-vs-board-theme", this.doc?.theme?.id || "custom"),
+this.topbar.update(this.doc, this.status, this.interfaceTheme, this.workspace.snapGrid, this.workspace.showGrid, this.mode),
+this.workspace.render();
+}
+notifySubscribers() {
+for (const sub of this.subscribers) try {
+sub(cloneDocument(this.doc), this.status);
+} catch (err) {
+console.error("Subscriber error:", err);
+}
+}
+exposeApi() {
+this.agentApi || (this.agentApi = new AgentApi(this));
+const agent = this.agentApi.publicApi();
+window.sabura = {
+isCorrupted: () => this.isCorrupted,
+getLoadErrors: () => [ ...this.loadErrors ],
+getOriginalHtml: () => this.originalHtml,
+getDocument: () => this.doc ? cloneDocument(this.doc) : null,
+getMode: () => this.mode,
+setMode: mode => this.setMode(mode),
+getExportBaseline: () => this.exportBaseline ? {
+...this.exportBaseline
+} : null,
+saveCopy: () => this.saveCopy(),
+readAiContract: () => {
+if ("undefined" != typeof document && document.head) for (const node of document.head.childNodes) if (8 === node.nodeType && node.textContent.includes("SABURA AI CONTRACT")) return {
+found: !0,
+contract: node.textContent.trim()
+};
+const m = ("undefined" != typeof document ? document.documentElement.outerHTML : "").match(/<!--([\s\S]*?SABURA AI CONTRACT[\s\S]*?)-->/);
+return m ? {
+found: !0,
+contract: m[1].trim()
+} : {
+found: !1,
+contract: ""
+};
+},
+validateDocument: doc => {
+const result = validateDocument(doc);
+return {
+valid: result.valid,
+errors: [ ...result.errors ]
+};
+},
+generateBoardFile: doc => {
+try {
+const validation = validateDocument(doc, {
+verifyDigest: !0
+});
+if (!validation.valid) return {
+success: !1,
+errors: [ ...validation.errors ]
+};
+const shell = this.getCleanHtmlShell(), exportDoc = cloneDocument(doc);
+if (!exportDoc["ext:sabura:revision"]) {
+const transition = transitionRevision(exportDoc, null, canonicalJson);
+exportDoc["ext:sabura:revision"] = transition.revisionRecord;
+}
+const packResult = packageHtmlWithDocument(shell, exportDoc);
+if (!packResult.success) return {
+success: !1,
+errors: [ packResult.error || "Failed to package document" ]
+};
+const shortRev = getShortRevisionId(exportDoc["ext:sabura:revision"].revisionId), filename = `sabura-${sanitizeFilenameTitle(exportDoc?.title, "board")}-r${shortRev}.html`;
+return {
+success: !0,
+filename: filename,
+byteLength: triggerFileDownload(filename, packResult.html),
+revisionId: exportDoc["ext:sabura:revision"].revisionId
+};
+} catch (err) {
+const cleanMsg = (err && err.message ? String(err.message) : "Operational failure during board generation").replace(/<[^>]*>[\s\S]*?<\/[^>]*>/gi, "").replace(/<[^>]*>/g, "").trim() || "Operational failure during board generation";
+return {
+success: !1,
+errors: [ cleanMsg.length > 200 ? cleanMsg.slice(0, 200) + "..." : cleanMsg ]
+};
+}
+},
+applyCommands: commands => {
+if (this.isCorrupted) return {
+success: !1,
+errors: [ "Document is corrupted and in safe failure mode" ]
+};
+if (!Array.isArray(commands)) return {
+success: !1,
+errors: [ "Commands must be an array" ]
+};
+const validationErrors = [];
+for (let i = 0; i < commands.length; i++) {
+const val = validateCommand(commands[i]);
+val.valid || validationErrors.push(`Command [${i}] (${commands[i]?.type || "unknown"}): ${val.errors.join(", ")}`);
+}
+if (validationErrors.length > 0) return {
+success: !1,
+errors: validationErrors
+};
+try {
+const result = applyCommandBatch(cloneDocument(this.doc), commands);
+return this.commitCommandResult(this.doc, result), {
+success: !0,
+document: cloneDocument(this.doc)
+};
+} catch (err) {
+return {
+success: !1,
+errors: [ err.message ]
+};
+}
+},
+exportCanonicalJson: () => this.doc ? canonicalJson(this.doc) : "",
+undo: () => this.undo(),
+redo: () => this.redo(),
+subscribe: listener => (this.subscribers.add(listener), () => this.subscribers.delete(listener)),
+agent: agent
+}, this.webMcpBridge?.dispose(), this.webMcpBridge = function(agent, modelContext = globalThis.document?.modelContext) {
+const bridge = new SaburaWebMcpBridge(agent, modelContext);
+return bridge.register(), bridge;
+}(agent);
+}
+}
+if ("undefined" != typeof window && "undefined" != typeof document) {
+const startApp = () => {
+if (!window.saburaApp) try {
+window.saburaApp = new SaburaApp;
+} catch (err) {
+console.error("Fatal startup error in SaburaApp:", err), document.body.innerHTML = '<div style="color: #c92a2a; font-family: monospace; font-size: 16px; padding: 24px; background: #fff5f5; border: 2px solid #ffc9c9; margin: 20px; border-radius: 8px;"><strong>Fatal Sabura Startup Error:</strong><pre style="white-space: pre-wrap; margin-top: 12px;">' + (err.stack || err.message || err) + "</pre></div>";
+}
+};
+"loading" === document.readyState ? window.addEventListener("DOMContentLoaded", startApp) : startApp();
+}
+})();
+  </script>
+</body>
+</html>

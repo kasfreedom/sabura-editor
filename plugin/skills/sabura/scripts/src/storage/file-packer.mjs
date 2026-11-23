@@ -1,0 +1,189 @@
+// Copied from src/storage/file-packer.js by scripts/build-plugin.js (sabura-app/sabura-editor, MIT). Do not edit.
+/**
+ * Sabura File Packer: Single-file HTML packaging, canonical seam embedding, and save/download coordinator.
+ */
+
+import { canonicalJson, validateDocument, normalizeDocument, cloneDocument } from '../core/document.mjs';
+
+export const DOCUMENT_SEAM_ID = 'sabura-document';
+export const RUNTIME_STYLE_ID = 'sabura-runtime-style';
+export const RUNTIME_SCRIPT_ID = 'sabura-runtime-script';
+export const VISUAL_SPRITE_ID = 'sabura-vs-sprite';
+export const DOCUMENT_SCRIPT_REGEX = /<script\s+(?:type=["']application\/json["']\s+id=["']sabura-document["']|id=["']sabura-document["']\s+type=["']application\/json["'])>([\s\S]*?)<\/script>/i;
+
+/**
+ * Constructs the canonical self-contained Sabura shell from explicitly owned
+ * build/runtime fragments. Runtime UI DOM is deliberately not an input.
+ *
+ * @param {{
+ *   documentJson: string,
+ *   aiContractComment: string,
+ *   runtimeCss: string,
+ *   visualSystemSprite: string,
+ *   runtimeJs: string
+ * }} fragments
+ * @returns {string}
+ */
+export function createCanonicalHtmlShell(fragments) {
+  const {
+    documentJson,
+    aiContractComment,
+    runtimeCss,
+    visualSystemSprite,
+    runtimeJs
+  } = fragments || {};
+
+  const required = { documentJson, aiContractComment, runtimeCss, visualSystemSprite, runtimeJs };
+  for (const [name, value] of Object.entries(required)) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error(`Cannot construct canonical Sabura shell: missing ${name}`);
+    }
+  }
+  if (!aiContractComment.includes('SABURA AI CONTRACT')) {
+    throw new Error('Cannot construct canonical Sabura shell: invalid AI contract');
+  }
+  if (!visualSystemSprite.includes(`id="${VISUAL_SPRITE_ID}"`)) {
+    throw new Error('Cannot construct canonical Sabura shell: invalid visual-system sprite');
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en" data-ui-theme="system">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sabura - AI-First Offline Whiteboard</title>
+
+${aiContractComment}
+
+  <script type="application/json" id="${DOCUMENT_SEAM_ID}">
+${documentJson}
+  </script>
+
+  <!-- Sabura editor code (open source: sabura-app/sabura-editor on GitHub). Not needed to edit the board above; keep it unchanged. -->
+  <style id="${RUNTIME_STYLE_ID}">${runtimeCss}</style>
+</head>
+<body>
+  ${visualSystemSprite}
+  <div id="app"></div>
+  <script id="${RUNTIME_SCRIPT_ID}">${runtimeJs}</script>
+</body>
+</html>`;
+}
+
+/**
+ * Extracts and validates the embedded Sabura document from an HTML string.
+ * @param {string} htmlContent
+ * @returns {{ valid: boolean, document: Object | null, errors: string[] }}
+ */
+export function extractDocumentFromHtml(htmlContent) {
+  if (typeof htmlContent !== 'string') {
+    return { valid: false, document: null, errors: ['HTML content must be a string'] };
+  }
+
+  const match = htmlContent.match(DOCUMENT_SCRIPT_REGEX);
+  if (!match) {
+    return { valid: false, document: null, errors: ['No <script id="sabura-document"> tag found in HTML'] };
+  }
+
+  const rawContent = match[1].trim();
+  if (!rawContent) {
+    return { valid: false, document: null, errors: ['Embedded <script id="sabura-document"> seam is empty'] };
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch (err) {
+    return { valid: false, document: null, errors: [`JSON parse error in document seam: ${err.message}`] };
+  }
+
+  const validation = validateDocument(parsed, { verifyDigest: true });
+  if (!validation.valid) {
+    return { valid: false, document: parsed, errors: validation.errors };
+  }
+
+  return { valid: true, document: normalizeDocument(parsed), errors: [] };
+}
+
+/**
+ * Packages a document into an HTML shell by replacing ONLY the canonical document seam.
+ *
+ * @param {string} htmlShell - The full HTML template or current document HTML
+ * @param {Object} doc - The validated Sabura document
+ * @returns {{ success: boolean, html: string, error?: string }}
+ */
+export function packageHtmlWithDocument(htmlShell, doc) {
+  const validation = validateDocument(doc, { verifyDigest: true });
+  if (!validation.valid) {
+    return {
+      success: false,
+      html: '',
+      error: `Cannot package invalid document: ${validation.errors.join(', ')}`
+    };
+  }
+
+  const normalizedDoc = normalizeDocument(cloneDocument(doc));
+  const serialized = canonicalJson(normalizedDoc);
+  const seamReplacement = '<script type="application/json" id="' + DOCUMENT_SEAM_ID + '">\n' + serialized + '\n<' + '/script>';
+
+  if (!DOCUMENT_SCRIPT_REGEX.test(htmlShell)) {
+    return {
+      success: false,
+      html: '',
+      error: 'Base HTML template missing sabura-document seam'
+    };
+  }
+
+  // A replacer function keeps `$&`, `$'`, `` $` `` and `$$` in document text literal;
+  // a replacement string would expand them as substitution patterns.
+  const updatedHtml = htmlShell.replace(DOCUMENT_SCRIPT_REGEX, () => seamReplacement);
+  return {
+    success: true,
+    html: updatedHtml
+  };
+}
+
+/**
+ * Initiates a browser download for a self-contained HTML file.
+ *
+ * @param {string} filename
+ * @param {string} htmlContent
+ * @returns {number} The actual UTF-8 byte size of the downloaded file (Blob.size).
+ */
+export function triggerFileDownload(filename, htmlContent) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('triggerFileDownload can only be called in a browser environment');
+  }
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const byteLength = blob.size; // accurate UTF-8 byte count
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  try {
+    a.click();
+  } finally {
+    if (a.parentNode) {
+      a.parentNode.removeChild(a);
+    }
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+  return byteLength;
+}
+
+/**
+ * Sanitizes a title string for use in filenames, falling back if non-Latin, empty, or only punctuation.
+ *
+ * @param {string} [title]
+ * @param {string} [fallback='board']
+ * @returns {string}
+ */
+export function sanitizeFilenameTitle(title, fallback = 'document') {
+  const rawTitle = typeof title === 'string' ? title : '';
+  const sanitized = rawTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return sanitized || fallback;
+}

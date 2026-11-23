@@ -3,16 +3,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { pluginFiles } from '../scripts/build-plugin.js';
+import { MAX_PLUGIN_FILE_BYTES, pluginFiles, splitAtLines } from '../scripts/build-plugin.js';
 import { readBoardFile } from '../src/board-file.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const skillDir = path.join(root, 'plugin', 'skills', 'sabura');
+const pluginDir = path.join(root, 'plugin');
+const skillDir = path.join(pluginDir, 'skills', 'sabura');
+const walk = (dir) => readdirSync(dir, { withFileTypes: true })
+  .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+const shipped = () => walk(pluginDir).map((file) => path.relative(pluginDir, file).split(path.sep).join('/'));
 
 test('committed plugin files match the sources (run npm run plugin:build)', () => {
   for (const [file, content] of Object.entries(pluginFiles())) {
@@ -54,4 +58,35 @@ test('the no-Node fallback in SKILL.md names the real escape for <', () => {
   const skill = readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
   const section = skill.slice(skill.indexOf("## If the script can't run"));
   assert.match(section, /with `\\u003C`/);
+});
+
+test('the editor parts join back into sabura.html exactly', () => {
+  const parts = readdirSync(path.join(skillDir, 'editor')).sort((a, b) => parseInt(a.match(/\d+/)) - parseInt(b.match(/\d+/)));
+  assert.ok(parts.length >= 2);
+  const joined = parts.map((name) => readFileSync(path.join(skillDir, 'editor', name), 'utf8')).join('');
+  assert.equal(joined, readFileSync(path.join(root, 'sabura.html'), 'utf8'));
+  assert.deepEqual(splitAtLines('a\nb\nc', 2), ['a\n', 'b\n', 'c'], 'split keeps every byte, at line ends');
+});
+
+// The Claude Directory's checks for plugins from organizations that aren't
+// Verified (as seen in its submission validator on 2026-11-23).
+test('the plugin folder passes the Claude Directory file rules', () => {
+  const files = shipped();
+  for (const rel of files) {
+    const full = path.join(pluginDir, rel);
+    assert.ok(statSync(full).size < MAX_PLUGIN_FILE_BYTES, `${rel} is too large for the Directory's scanner`);
+    assert.ok(!readFileSync(full, 'latin1').startsWith('#!'), `${rel} starts with #!`);
+    assert.doesNotMatch(path.basename(rel), /^(package(-lock)?\.json|pnpm-workspace\.yaml|requirements\.txt|claude(\.local)?\.md|agents\.md)$/i, rel);
+  }
+  // Outside skills/, only documents and the icon.
+  assert.deepEqual(files.filter((rel) => !rel.startsWith('skills/')).sort(),
+    ['.claude-plugin/plugin.json', 'README.md', 'logo.png']);
+  assert.deepEqual(files.filter((rel) => rel.endsWith('.svg')), [], 'an SVG other than the icon is refused');
+});
+
+test('shipped code names no code host, which the scanner reads as a possible credential leak', () => {
+  // Documentation (README, plugin.json's repository field) may link to GitHub.
+  for (const rel of shipped().filter((r) => /\.(mjs|html)$/.test(r))) {
+    assert.doesNotMatch(readFileSync(path.join(pluginDir, rel), 'utf8'), /https?:\/\/(www\.)?github\.com/, rel);
+  }
 });
