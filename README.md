@@ -58,7 +58,7 @@ When Claude Code has a browser available, Claude can also open the board and
 edit it live.
 
 The same skill works in claude.ai: download
-[`sabura-skill.zip`](https://github.com/sabura-app/sabura-editor/releases/latest/download/sabura-skill.zip)
+[`sabura-plugin.zip`](https://github.com/sabura-app/sabura-editor/releases/latest/download/sabura-plugin.zip)
 from the latest release, then in claude.ai open Plugins, choose Add, then
 Upload plugin, and pick the zip. Ask for a board in any chat and Claude shares
 the `.html` file, which opens in the chat's preview as a working editor.
@@ -105,7 +105,7 @@ npm run test:e2e:chrome
 
 After changing `src/` or `bin/`, run `npm run plugin:build` so the plugin carries
 the current editor (CI fails otherwise). `npm run plugin:zip` builds
-`sabura-skill.zip` for the release.
+`sabura-plugin.zip` for the release.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution expectations and
 [`SECURITY.md`](SECURITY.md) for reporting security issues.

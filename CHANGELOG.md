@@ -10,7 +10,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 - A Claude plugin and skill. The repository is a Claude Code plugin marketplace
   (`/plugin marketplace add sabura-app/sabura-editor`, then `/plugin install sabura@sabura`),
-  and `sabura-skill.zip`, attached to each release, uploads to claude.ai under Plugins.
+  and `sabura-plugin.zip`, attached to each release, uploads to claude.ai under Plugins.
   Claude makes and edits board files itself, with no server. This replaces the Sabura MCP
   connector, which is retired.
 - `sabura-board`, a command-line tool (`bin/sabura-board.js`) that creates, edits and reads
