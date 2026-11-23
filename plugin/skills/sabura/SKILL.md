@@ -118,8 +118,20 @@ UI-only tasks (image import, manual drawing) are covered in
 
 ## If the script can't run
 
-If Node isn't available, follow the "FILE-TOOL WORKFLOW" in the comment at the
-top of `sabura.html`: replace only the JSON inside
-`<script type="application/json" id="sabura-document">`, encode every `<` as
-`<`, and copy the rest of the file unchanged. This skips command checks, so
-say that the board is unverified until it is opened.
+Without Node, write the board into a copy of `sabura.html` with a short Python
+(or other) script, never by retyping the file:
+
+1. Read the JSON between `<script type="application/json" id="sabura-document">`
+   and the next `</script>`. Keep its `schemaVersion`, `theme` and `assets`.
+2. Set `id` and `title`, and replace `objects` (a map from ID to object, each
+   with a matching `id`), `order` (every object ID, bottom to top) and `groups`.
+   Delete `ext:sabura:revision` if present. Objects use the document format in
+   the comment at the top of `sabura.html`: connectors are
+   `{"type":"connector","from":{"id":"a"},"to":{"id":"b"},"text":"label"}`, and
+   grouped objects set `groupId` to a key of `groups` (`{"id","name","frame"}`).
+3. Serialize the JSON, replace every `<` in it with `\u003C`, put it back
+   between the same two markers, and leave every other byte of the file as it
+   was.
+
+This skips the command checks and the layout warnings, so tell the user the
+board hasn't been checked, and open it in a browser if you can.

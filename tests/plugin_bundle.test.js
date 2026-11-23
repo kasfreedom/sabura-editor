@@ -47,3 +47,11 @@ test('SKILL.md frontmatter uses only fields claude.ai uploads accept', () => {
   assert.match(front, /^name: sabura$/m, 'name must match the folder name');
   assert.ok(front.match(/^description: (.*)$/m)[1].length <= 1024);
 });
+
+test('the no-Node fallback in SKILL.md names the real escape for <', () => {
+  // A lost backslash once turned this into "replace < with <", which would let
+  // a label like </script> end the board's data block early.
+  const skill = readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
+  const section = skill.slice(skill.indexOf("## If the script can't run"));
+  assert.match(section, /with `\\u003C`/);
+});
