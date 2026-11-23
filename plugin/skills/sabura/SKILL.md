@@ -35,11 +35,17 @@ file is in.
    node scripts/sabura-board.mjs new --title "Checkout flow" --commands commands.json --out checkout-flow.html
    ```
 
-4. On success the script prints `{"ok":true, "file", "objects", "connectors", "groups", ...}`.
+4. On success the script prints `{"ok":true, "file", "objects", "connectors", "groups", "warnings", ...}`.
    Check the counts match your plan. On refusal it exits 1 and prints
    `{"ok":false,"errors":[...]}` with every problem (up to 10) and the field path.
    Nothing is written. Fix all listed errors and run it again.
-5. Give the user the file. Say it opens in any browser, starts in Reading mode,
+5. Fix every entry in `warnings` before handing the file over. `TEXT_OVERFLOW`
+   means a label doesn't fit its shape and gives a size that fits; `OVERLAP`
+   names two shapes on top of each other. Change your commands (wider shapes,
+   shorter labels, more spacing) and build again until `warnings` is empty.
+   Ellipses, diamonds and triangles hold less text than rectangles of the same
+   size.
+6. Give the user the file. Say it opens in any browser, starts in Reading mode,
    and has an **Edit** button; **Save Copy** keeps their changes.
 
 A minimal batch:
@@ -87,8 +93,10 @@ framed groups as chapters. Style guidance:
 [references/visual-style.md](references/visual-style.md). Zoomable tutorial
 layouts: [references/illustrated-learning-journey.md](references/illustrated-learning-journey.md).
 
-The script checks structure, not looks. If you can open the file in a browser
-(see below), look at it and fix overlaps and long labels before handing it over.
+The script's warnings catch labels that don't fit and shapes on top of each
+other, but it estimates from text length and doesn't see arrows or overall
+balance. If you can open the file in a browser (see below), look at it before
+handing it over.
 
 ## Live editing in a browser (Claude Code)
 

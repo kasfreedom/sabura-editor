@@ -128,6 +128,14 @@ test('CLI: new, edit and read round-trip through files and stdin', (t) => {
   const made = runCli(['new', '--title', 'Stack', '--commands', cmds, '--out', a]);
   assert.equal(made.status, 0, made.stderr);
   assert.equal(JSON.parse(made.stdout).objects, 3);
+  assert.deepEqual(JSON.parse(made.stdout).warnings, []);
+
+  const crowded = path.join(dir, 'crowded.html');
+  const tight = runCli(['new', '--title', 'T', '--commands', '-', '--out', crowded],
+    JSON.stringify([rect('a', 0, 'Customer places a new order today'), rect('b', 100, 'B')]));
+  assert.equal(tight.status, 0, 'warnings do not stop the board being written');
+  assert.deepEqual(JSON.parse(tight.stdout).warnings.map((w) => w.split(' ')[0]), ['TEXT_OVERFLOW', 'OVERLAP']);
+  assert.equal(readBoardFile(readFileSync(crowded, 'utf8')).objects.a.text, 'Customer places a new order today');
 
   const edited = runCli(['edit', a, '--commands', '-', '--out', b], JSON.stringify([{ type: 'set_text', id: 'db', text: 'PG' }]));
   assert.equal(edited.status, 0, edited.stderr);

@@ -27,6 +27,7 @@ const MODULES = [
   'src/core/document.js',
   'src/core/commands.js',
   'src/core/json-schema.js',
+  'src/core/layout-check.js',
   'src/storage/file-packer.js',
   'src/agent-api.js',
   'src/board-file.js',

@@ -10,6 +10,7 @@
 import { AgentApi } from './agent-api.js';
 import { applyCommandBatch } from './core/commands.js';
 import { canonicalJson, createDefaultDocument, normalizeDocument, validateDocument } from './core/document.js';
+import { checkLayout } from './core/layout-check.js';
 import { REVISION_EXTENSION_KEY, transitionRevision } from './core/revision.js';
 import { extractDocumentFromHtml, packageHtmlWithDocument } from './storage/file-packer.js';
 
@@ -127,5 +128,20 @@ export function summarizeBoard(doc) {
     groups: Object.keys(doc.groups || {}).length,
     revisionId: doc[REVISION_EXTENSION_KEY]?.revisionId ?? null,
     parentRevisionId: doc[REVISION_EXTENSION_KEY]?.parentId ?? null,
+  };
+}
+
+const MAX_REPORTED_WARNINGS = 20;
+
+/**
+ * Layout warnings for tool output: labels that don't fit their shape and
+ * overlapping shapes, as messages (the first 20) plus the total count. An
+ * estimate from text length, so the board is still written; see layout-check.js.
+ */
+export function layoutReport(doc) {
+  const warnings = checkLayout(doc);
+  return {
+    warnings: warnings.slice(0, MAX_REPORTED_WARNINGS).map((w) => `${w.code} ${w.message}`),
+    warningsTotal: warnings.length,
   };
 }

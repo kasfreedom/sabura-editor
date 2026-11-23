@@ -10,7 +10,8 @@
  *
  * Commands are a JSON array of sabura/commands/v1 agent commands, the same
  * ones window.sabura.agent.apply accepts. Results go to stdout as one JSON
- * object; refusals go to stderr as {"ok":false,"errors":[...]} with exit 1.
+ * object, with layout warnings (labels that don't fit, overlapping shapes) that
+ * don't stop the file being written; refusals go to stderr as {"ok":false,"errors":[...]} with exit 1.
  * Usage mistakes exit 2. The editor runtime comes from ../sabura.html next to
  * this script unless --editor names another board file.
  */
@@ -20,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { AGENT_COMMAND_INPUT_SCHEMA } from '../src/agent-api.js';
 import { canonicalJson } from '../src/core/document.js';
-import { BoardFileError, createBoardFile, editBoardFile, readBoardFile, summarizeBoard } from '../src/board-file.js';
+import { BoardFileError, createBoardFile, editBoardFile, layoutReport, readBoardFile, summarizeBoard } from '../src/board-file.js';
 
 const USAGE = `Usage:
   sabura-board new  --title <title> --commands <file|-> --out <board.html>
@@ -70,7 +71,7 @@ function run(argv) {
       const commands = readCommands(values.commands);
       const result = createBoardFile(readFileSync(editorPath, 'utf8'), { title: values.title, commands });
       writeFileSync(out, result.html);
-      return { ok: true, file: out, bytes: Buffer.byteLength(result.html), ...summarizeBoard(result.document) };
+      return { ok: true, file: out, bytes: Buffer.byteLength(result.html), ...summarizeBoard(result.document), ...layoutReport(result.document) };
     }
     case 'edit': {
       if (!file) throw new UsageError('edit needs a board file');
@@ -78,7 +79,7 @@ function run(argv) {
       const commands = readCommands(values.commands);
       const result = editBoardFile(readFileSync(file, 'utf8'), readFileSync(editorPath, 'utf8'), { commands });
       writeFileSync(out, result.html);
-      return { ok: true, file: out, bytes: Buffer.byteLength(result.html), ...summarizeBoard(result.document) };
+      return { ok: true, file: out, bytes: Buffer.byteLength(result.html), ...summarizeBoard(result.document), ...layoutReport(result.document) };
     }
     case 'read': {
       if (!file) throw new UsageError('read needs a board file');

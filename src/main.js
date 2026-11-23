@@ -549,7 +549,38 @@ export class SaburaApp {
     const objCount = Object.keys(this.doc?.objects || {}).length;
     if (objCount > 0) {
       this.workspace.fitToContent(60);
+      this.refitUntilViewTouched();
     }
+  }
+
+  /**
+   * The first fit runs at boot, when an embedding frame (a chat preview, an
+   * iframe, a pane that is still opening) may not have its final size yet.
+   * Fit again on each window resize until the person first points, scrolls or
+   * types, or anything else (an agent, the zoom buttons) moves the view, so a
+   * late layout still shows the whole board but nobody's view is taken away.
+   */
+  refitUntilViewTouched() {
+    const touchEvents = ['pointerdown', 'wheel', 'keydown'];
+    const snapshot = () => ({ ...this.workspace.camera });
+    let fitted = snapshot();
+    const onResize = () => {
+      const now = this.workspace.camera;
+      if (now.x !== fitted.x || now.y !== fitted.y || now.zoom !== fitted.zoom) {
+        stop();
+        return;
+      }
+      if (window.innerWidth > 0 && window.innerHeight > 0) {
+        this.workspace.fitToContent(60);
+        fitted = snapshot();
+      }
+    };
+    const stop = () => {
+      window.removeEventListener('resize', onResize);
+      for (const type of touchEvents) window.removeEventListener(type, stop, true);
+    };
+    window.addEventListener('resize', onResize);
+    for (const type of touchEvents) window.addEventListener(type, stop, true);
   }
 
   setMode(mode) {

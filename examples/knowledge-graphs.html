@@ -33957,7 +33957,24 @@ this.workspace.fitToContent(80));
 if ("Changed" === this.status) return e.preventDefault(), e.returnValue = "You have unsaved whiteboard changes. Download a copy to save them.",
 e.returnValue;
 }), this.updateUI(), "reading" === this.mode && this.wheelFab && (this.wheelFab.style.display = "none");
-Object.keys(this.doc?.objects || {}).length > 0 && this.workspace.fitToContent(60);
+Object.keys(this.doc?.objects || {}).length > 0 && (this.workspace.fitToContent(60),
+this.refitUntilViewTouched());
+}
+refitUntilViewTouched() {
+const touchEvents = [ "pointerdown", "wheel", "keydown" ], snapshot = () => ({
+...this.workspace.camera
+});
+let fitted = snapshot();
+const onResize = () => {
+const now = this.workspace.camera;
+now.x === fitted.x && now.y === fitted.y && now.zoom === fitted.zoom ? window.innerWidth > 0 && window.innerHeight > 0 && (this.workspace.fitToContent(60),
+fitted = snapshot()) : stop();
+}, stop = () => {
+window.removeEventListener("resize", onResize);
+for (const type of touchEvents) window.removeEventListener(type, stop, !0);
+};
+window.addEventListener("resize", onResize);
+for (const type of touchEvents) window.addEventListener(type, stop, !0);
 }
 setMode(mode) {
 const targetMode = "editing" === mode ? "editing" : "reading";

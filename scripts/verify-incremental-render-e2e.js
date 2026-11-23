@@ -29,6 +29,20 @@ const server = http.createServer((request, response) => {
     response.end(fs.readFileSync(boardPath));
     return;
   }
+  // A board in a frame that starts almost without size, as in a chat preview
+  // or a pane that is still opening.
+  if (request.url === '/embed.html') {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end('<!doctype html><body style="margin:0"><iframe id="f" src="/small.html" style="width:2px;height:2px;border:0"></iframe>');
+    return;
+  }
+  // The editor's small sample board: unlike the large example, its real fit is
+  // well above the minimum zoom, so a missed refit is visible.
+  if (request.url === '/small.html') {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end(fs.readFileSync(path.resolve('sabura.html')));
+    return;
+  }
   response.writeHead(404);
   response.end();
 });
@@ -268,6 +282,36 @@ async function main() {
   const startsOk = started && storageBlocked === true && browserErrors.length === errorsBefore;
   results.push({ step: 'starts with storage blocked', ok: startsOk, detail: '' });
   console.log(`${startsOk ? '✓' : '✗'} starts with storage blocked (started ${started}, storage blocked ${storageBlocked})`);
+
+  // Late layout: the board boots in a 2x2 frame that then grows. It must end up
+  // fitted to the real size, not stuck at the zoom it computed for 2x2. Once
+  // the person scrolls, a later resize must leave their view alone.
+  await send('Page.navigate', { url: `http://127.0.0.1:${serverPort}/embed.html` });
+  const inFrame = (code) => evaluate(`(() => { const w = document.getElementById('f')?.contentWindow; return ${code}; })()`);
+  let embedded = false;
+  for (let attempt = 0; attempt < 50 && !embedded; attempt++) {
+    await sleep(100);
+    embedded = await inFrame('Boolean(w && w.sabura?.agent && w.document.getElementById("canvas-svg"))').catch(() => false);
+  }
+  const viewOf = `JSON.stringify(w.sabura.agent.read().viewport.camera)`;
+  await evaluate(`document.getElementById('f').style.cssText = 'width:900px;height:600px;border:0'`);
+  await sleep(300);
+  const afterGrow = await inFrame(viewOf);
+  await inFrame('w.sabura.agent.fitBoard()');
+  const freshFit = await inFrame(viewOf);
+  const refitOk = embedded && afterGrow === freshFit && JSON.parse(afterGrow).zoom > 0.2;
+  results.push({ step: 'fits again when a tiny frame grows', ok: refitOk, detail: '' });
+  console.log(`${refitOk ? '✓' : '✗'} fits again when a tiny frame grows (after grow ${afterGrow}, fresh fit ${freshFit})`);
+
+  await inFrame(`w.document.getElementById('canvas-svg').dispatchEvent(new w.WheelEvent('wheel', { deltaY: 120, clientX: 300, clientY: 200, bubbles: true, cancelable: true }))`);
+  await sleep(100);
+  const touched = await inFrame(viewOf);
+  await evaluate(`document.getElementById('f').style.cssText = 'width:700px;height:500px;border:0'`);
+  await sleep(300);
+  const afterSecondResize = await inFrame(viewOf);
+  const keepsViewOk = touched !== freshFit && afterSecondResize === touched;
+  results.push({ step: 'keeps the view after the person moves it', ok: keepsViewOk, detail: '' });
+  console.log(`${keepsViewOk ? '✓' : '✗'} keeps the view after the person moves it (touched ${touched}, after resize ${afterSecondResize})`);
 
   const failed = results.filter((r) => !r.ok);
   if (browserErrors.length) console.log(`Browser errors:\n  ${browserErrors.join('\n  ')}`);
