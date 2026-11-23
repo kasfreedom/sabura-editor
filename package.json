@@ -17,7 +17,7 @@
     "perf:render": "node scripts/measure-render.js",
     "plugin:build": "node scripts/build-plugin.js",
     "plugin:check": "node scripts/build-plugin.js --check",
-    "plugin:zip": "npm run plugin:check && rm -f sabura-plugin.zip && cd plugin && zip -qrX ../sabura-plugin.zip .claude-plugin logo.png logo.svg skills -x \"*.DS_Store\""
+    "plugin:zip": "npm run plugin:check && rm -f sabura-plugin.zip && cd plugin && zip -qrX ../sabura-plugin.zip README.md .claude-plugin logo.png logo.svg skills -x \"*.DS_Store\""
   },
   "keywords": [
     "whiteboard",

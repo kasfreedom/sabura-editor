@@ -47,7 +47,7 @@ const moduleFiles = [
 ];
 
 export async function minifyJs(code) {
-  const result = await minify(code, {
+  const compressed = await minify(code, {
     // Keep names stable for readable stack traces and the opaque runtime
     // contract, while enabling safe AST compression to preserve the runtime
     // budget as native features are added.
@@ -57,7 +57,19 @@ export async function minifyJs(code) {
       comments: false
     }
   });
-  return result.code;
+  // Print one statement per line, unindented. Saved boards then carry code a
+  // person (or a plugin directory's security review) can read and diff, for
+  // about 12% more bytes than a single minified line.
+  const printed = await minify(compressed.code, {
+    compress: false,
+    mangle: false,
+    format: {
+      beautify: true,
+      indent_level: 0,
+      comments: false
+    }
+  });
+  return printed.code;
 }
 
 export async function bundleModules() {
@@ -84,9 +96,8 @@ export async function bundleModules() {
 
   const rawBundle = `(() => {\n'use strict';\n\n${codeBlocks.join('\n\n')}\n})();`;
 
-  // Syntax-safe minification using proven AST-based parser (Terser).
-  // Retains original variable and function names (mangle: false) and no compression (compress: false)
-  // while safely stripping comments and unnecessary whitespace without regex or heuristic pitfalls.
+  // AST-based compression with Terser (see minifyJs): original names are kept,
+  // comments are dropped, and the output is printed one statement per line.
   return await minifyJs(rawBundle);
 }
 
