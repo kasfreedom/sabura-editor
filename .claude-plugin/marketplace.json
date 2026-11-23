@@ -1,0 +1,17 @@
+{
+  "name": "sabura",
+  "description": "Sabura: offline, single-file HTML whiteboards that Claude can make and edit.",
+  "owner": {
+    "name": "Sabura",
+    "url": "https://sabura-app.github.io/"
+  },
+  "plugins": [
+    {
+      "name": "sabura",
+      "source": "./plugin",
+      "description": "Make and edit Sabura whiteboards: diagrams as single-file HTML boards that open offline in any browser and stay editable.",
+      "category": "productivity",
+      "tags": ["whiteboard", "diagrams", "offline", "html"]
+    }
+  ]
+}

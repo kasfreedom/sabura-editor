@@ -41,6 +41,36 @@ Google Chrome is the primary release target and the browser used by the complete
 release verification suite. Sabura may work in other modern desktop browsers,
 but they are not currently part of the release gate.
 
+## Use with Claude
+
+The Sabura plugin gives Claude a skill for making and editing boards as files,
+with no server. In Claude Code:
+
+```sh
+/plugin marketplace add sabura-app/sabura-editor
+/plugin install sabura@sabura
+```
+
+Then ask for a diagram, for example "Make a Sabura board of our release
+process". Claude writes the board's commands and builds the `.html` file with
+the editor's own checks, so refused commands come back with the field to fix.
+When Claude Code has a browser available, Claude can also open the board and
+edit it live.
+
+The same skill works in claude.ai, where skills need code execution turned on:
+zip the [`plugin/skills/sabura`](plugin/skills/sabura) folder (`zip -r
+sabura.zip sabura` from `plugin/skills`) and upload it under Customize, then
+Skills.
+
+Without Claude, the bundled command-line tool does the same:
+
+```sh
+node bin/sabura-board.js new --title "Release" --commands commands.json --out release.html
+node bin/sabura-board.js edit release.html --commands changes.json --out release-v2.html
+node bin/sabura-board.js read release.html
+node bin/sabura-board.js schema
+```
+
 ## Agent authoring
 
 Browser agents that can execute JavaScript in the loaded page can use the

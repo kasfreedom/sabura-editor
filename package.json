@@ -14,7 +14,9 @@
     "test:agent-browser": "node scripts/verify-agent-api-e2e.js",
     "test:e2e:chrome": "node scripts/verify-full-e2e.js --chrome-only",
     "test:e2e:render": "node scripts/verify-incremental-render-e2e.js",
-    "perf:render": "node scripts/measure-render.js"
+    "perf:render": "node scripts/measure-render.js",
+    "plugin:build": "node scripts/build-plugin.js",
+    "plugin:check": "node scripts/build-plugin.js --check"
   },
   "keywords": [
     "whiteboard",
@@ -37,5 +39,8 @@
   "homepage": "https://github.com/sabura-app/sabura-editor#readme",
   "devDependencies": {
     "terser": "^5.51.2"
+  },
+  "bin": {
+    "sabura-board": "bin/sabura-board.js"
   }
 }

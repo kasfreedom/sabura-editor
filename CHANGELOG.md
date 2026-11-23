@@ -8,6 +8,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A Claude plugin and skill. The repository is a Claude Code plugin marketplace
+  (`/plugin marketplace add sabura-app/sabura-editor`, then `/plugin install sabura@sabura`),
+  and `plugin/skills/sabura` can also be uploaded to claude.ai as a skill. Claude makes and
+  edits board files locally, with no server.
+- `sabura-board`, a command-line tool (`bin/sabura-board.js`) that creates, edits and reads
+  board files from agent commands, with the same checks as `window.sabura.agent`. Refused
+  batches list every problem and write nothing. Edits record the previous revision as parent.
 - Visible group frames. `group_objects` accepts `frame: true`, and such groups are drawn with a
   soft, labelled frame around their members. Plain groups stay invisible, so existing boards look
   the same.

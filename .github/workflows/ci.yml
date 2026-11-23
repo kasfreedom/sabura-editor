@@ -37,6 +37,9 @@ jobs:
       - name: Verify example boards carry the current runtime
         run: npm run examples:refresh && git diff --exit-code -- examples
 
+      - name: Verify the plugin skill carries the current editor and board script
+        run: npm run plugin:check
+
       - name: Browser checks (incremental render, text box, blocked storage)
         env:
           CHROME_PATH: /usr/bin/google-chrome
