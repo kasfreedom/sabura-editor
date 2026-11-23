@@ -4,30 +4,6 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [1.2.0] - 2026-11-23
-
-### Added
-
-- Layout warnings from `sabura-board`. `new` and `edit` report labels that don't fit their shape
-  (with a size that fits) and labelled shapes or text that overlap. They don't stop the file being
-  written; the Claude skill fixes them before handing a board over.
-- The plugin has a README (what it does, example prompts, what it runs and sends), an icon, and an
-  eval suite (`plugin/evals`, run with `claude plugin eval`). The release zip is now the whole
-  plugin, so claude.ai shows Sabura's own name, description and version.
-
-### Changed
-
-- The editor code in every board file is printed one statement per line instead of as one long
-  minified line, so it can be read and reviewed. Board files are about 42 KB larger.
-
-### Fixed
-
-- A board that opens in a frame that is still tiny (a chat preview, a pane that is opening, an
-  embed) fits itself again once the frame has its real size, instead of staying at 20% zoom. It
-  stops refitting as soon as anyone moves the view.
-- The skill's fallback for when Node isn't available gave the wrong escape for `<`, so a label
-  containing `</script>` could break the board file.
-
 ## [1.1.0] - 2026-11-23
 
 ### Added
@@ -36,10 +12,13 @@ This project follows [Semantic Versioning](https://semver.org/).
   (`/plugin marketplace add sabura-app/sabura-editor`, then `/plugin install sabura@sabura`),
   and `sabura-plugin.zip`, attached to each release, uploads to claude.ai under Plugins.
   Claude makes and edits board files itself, with no server. This replaces the Sabura MCP
-  connector, which is retired.
+  connector, which is retired. The plugin has a README, an icon and an eval suite
+  (`plugin/evals`, run with `claude plugin eval`).
 - `sabura-board`, a command-line tool (`bin/sabura-board.js`) that creates, edits and reads
   board files from agent commands, with the same checks as `window.sabura.agent`. Refused
   batches list every problem and write nothing. Edits record the previous revision as parent.
+  `new` and `edit` also report layout warnings: labels that don't fit their shape (with a size
+  that fits) and labelled shapes or text that overlap. Warnings don't stop the file being written.
 - Visible group frames. `group_objects` accepts `frame: true`, and such groups are drawn with a
   soft, labelled frame around their members. Plain groups stay invisible, so existing boards look
   the same.
@@ -57,6 +36,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The editor code in every board file is printed one statement per line instead of as one long
+  minified line, so it can be read and reviewed. Board files are about 42 KB larger.
 - The editor moved to the `sabura-app` GitHub organization. The hosted editor is now at
   https://sabura-app.github.io/sabura-editor/, and the Sabura icon in the top bar opens the
   Sabura website, https://sabura-app.github.io/. Boards saved before this change still
@@ -72,6 +53,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A board that opens in a frame that is still tiny (a chat preview, a pane that is opening, an
+  embed) fits itself again once the frame has its real size, instead of staying at 20% zoom. It
+  stops refitting as soon as anyone moves the view.
 - Text size, bold and other typography set through the agent API now apply to shapes that were
   created with plain `text`. Before, `set_typography` skipped them while reporting success, so
   "xl" text stayed at the default size.
@@ -128,6 +112,5 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
-[1.2.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0
