@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: edit-board
+description: Change an existing board and keep the rest of it.
+tags: [edit]
+execution:
+  max_turns: 30
+  timeout_seconds: 600
+  prompt: |
+    checkout.html is a Sabura board. Rename the Payment step to Billing and add
+    a Refunds step after Order confirmed, connected to it. Keep everything else
+    as it is, and save the result as checkout-v2.html.
+context:
+  scaffold_script: setup.sh

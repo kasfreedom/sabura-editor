@@ -2,3 +2,4 @@
 node_modules/
 artifacts/
 sabura-*.zip
+plugin/evals/results/
