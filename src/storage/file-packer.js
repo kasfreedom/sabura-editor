@@ -58,7 +58,7 @@ ${aiContractComment}
 ${documentJson}
   </script>
 
-  <!-- Opaque application runtime begins here. Do not read or modify. -->
+  <!-- Sabura editor code (open source: https://github.com/sabura-app/sabura-editor). Not needed to edit the board above; keep it unchanged. -->
   <style id="${RUNTIME_STYLE_ID}">${runtimeCss}</style>
 </head>
 <body>

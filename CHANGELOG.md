@@ -4,7 +4,13 @@ All notable changes to Sabura will be recorded here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.1] - 2026-11-23
+
+### Changed
+
+- The guide comment at the top of every board file no longer calls the editor code an "opaque
+  runtime" that agents must not read. It now says the code is open source and readable, that
+  agents only need the board document, and that the editor code should be kept unchanged.
 
 ### Fixed
 
@@ -121,5 +127,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Theme palette changes retain equivalent object colors where mappings exist.
 - Responsive editor controls preserve access to primary actions at compact widths.
 
+[1.1.1]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/sabura-app/sabura-editor/releases/tag/v1.0.0

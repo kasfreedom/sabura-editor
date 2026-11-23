@@ -1,6 +1,6 @@
 {
   "name": "sabura",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Make and edit Sabura whiteboards: diagrams as single-file HTML boards that open offline in any browser and stay editable.",
   "icon": "./logo.png",
   "author": {

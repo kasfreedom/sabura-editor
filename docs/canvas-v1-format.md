@@ -17,19 +17,20 @@ A Sabura HTML file is structured so that an AI can read the board document and t
   <!-- SABURA AI CONTRACT
        Human- and machine-readable operating guide.
        Describes the schema, both agent workflows, and the public API.
-       Stop reading at <style>. The runtime below is opaque.
+       Agents change only the document; the editor code below is open source,
+       not needed for editing, and kept unchanged.
   -->
 
   <script type="application/json" id="sabura-document">
     { ... board document ... }
   </script>
 
-  <!-- Opaque application runtime begins here. Do not read or modify. -->
-  <style>/* CSS — opaque */</style>
+  <!-- Sabura editor code (open source). Not needed to edit the board above; keep it unchanged. -->
+  <style>/* editor CSS */</style>
 </head>
 <body>
   <div id="app"></div>
-  <script>/* minified JS bundle — opaque */</script>
+  <script>/* editor JS, one statement per line */</script>
 </body>
 </html>
 ```
@@ -93,14 +94,14 @@ After `generateBoardFile`:
 ### Fallback (file tools, no browser)
 
 ```
-1. Read only the contract and the document seam. Stop before <style>.
+1. Read the contract and the document seam. The editor code after them isn't needed.
 2. Locate the seam:
      <script type="application/json" id="sabura-document">
      </script>
 3. Replace only the JSON between those markers.
 4. Encode every literal < as \u003C inside the JSON.
 5. Copy the rest of the file through your tools without loading it into context.
-6. Never inspect, reformat, or regenerate the runtime.
+6. Keep the editor code byte for byte: don't reformat or regenerate it.
 7. Return the resulting HTML file.
 ```
 

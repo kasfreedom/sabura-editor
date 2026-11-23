@@ -116,14 +116,15 @@ test('5. Contract documents both browser-agent and file-tool workflows', () => {
 
 // ── Test 6 ─────────────────────────────────────────────────────────────────────
 
-test('6. Contract explicitly labels the runtime as opaque', () => {
+test('6. Contract says agents edit only the document and keep the editor code unchanged', () => {
   const contractStart = html.indexOf('<!-- SABURA AI CONTRACT');
   const contractEnd = html.indexOf('-->', contractStart) + 3;
   const contract = html.slice(contractStart, contractEnd);
-  assert.ok(
-    contract.toLowerCase().includes('opaque'),
-    'Contract must use the word "opaque" to describe the runtime'
-  );
+  assert.ok(contract.includes('everything an agent changes'), 'Contract must say agents change only the document');
+  assert.ok(contract.includes('Leave the editor code as it is'), 'Contract must ask agents to keep the editor code unchanged');
+  assert.ok(contract.includes('https://github.com/sabura-app/sabura-editor'), 'Contract must name where the editor code comes from');
+  // The code is readable and public, so nothing may tell agents not to read it.
+  assert.doesNotMatch(contract, /opaque|black box|do not read/i);
 });
 
 // ── Test 7 ─────────────────────────────────────────────────────────────────────

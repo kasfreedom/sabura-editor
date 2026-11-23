@@ -174,8 +174,10 @@ const AI_CONTRACT = `<!-- SABURA AI CONTRACT
 OVERVIEW
   Sabura is a portable offline whiteboard with structured agent authoring. This file has two sections:
     1. A small, editable board document (sabura/canvas/v1 JSON) — readable and replaceable.
-    2. An opaque application runtime (CSS + JS) — treat as a sealed black box.
-  Stop reading at &lt;style&gt;. Do not read, reproduce, or modify anything from &lt;style&gt; onward.
+    2. The Sabura editor (CSS + JS), open source and built from
+       https://github.com/sabura-app/sabura-editor. It is readable, but you don't need
+       to read it to work with the board, and it is large: everything an agent changes
+       is in section 1. Leave the editor code as it is so the file keeps working.
 
 BROWSER-AGENT WORKFLOW  (preferred)
   1. Open sabura.html in a browser.
@@ -206,14 +208,16 @@ LIVE AGENT API  sabura/agent/v1
   Presentation mode, and active human edit/import/save interactions.
 
 FILE-TOOL WORKFLOW  (fallback — no browser)
-  1. Read only the contract and the document seam below. Stop before &lt;style&gt;.
+  1. Read the contract and the document seam below. The editor code after them
+     is not needed for this workflow.
   2. Locate the seam markers (angle brackets shown escaped for safety):
        &lt;script type="application/json" id="sabura-document"&gt;
        &lt;/script&gt;
   3. Replace only the JSON between those two markers with your new canonical JSON.
   4. Encode every literal < as \\u003C inside the JSON.
   5. Copy the remainder of the file through your tools without loading it into context.
-  6. Never inspect, reformat, or regenerate the runtime. Return the resulting HTML file.
+  6. Keep the editor code byte for byte: don't reformat or regenerate it. Return the
+     resulting HTML file.
 
 SCHEMA  sabura/canvas/v1
   Required top-level fields:
@@ -265,7 +269,7 @@ PUBLIC API  (window.sabura.*)
   undo() / redo()  /  subscribe(listener) -> unsubscribe fn
   agent                     -> versioned live-authoring facade documented above
 
-  generateBoardFile() never returns the HTML source. The runtime remains opaque.
+  generateBoardFile() returns file metadata, not the HTML source.
 -->`;
 
 function namespaceSvgAsset(source) {
