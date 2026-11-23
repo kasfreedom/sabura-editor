@@ -44,8 +44,8 @@ Sabura collects no data and sends nothing anywhere. Board files contain no
 tracking and make no network requests when opened. The script is built from the
 readable sources in this repository (`src/`, `bin/`) by `npm run plugin:build`.
 
-- Privacy policy: https://sabura-app.github.io/privacy/
-- Docs and troubleshooting: https://sabura-app.github.io/docs/
+- Privacy policy: https://sabura.enkitech.de/privacy/
+- Docs and troubleshooting: https://sabura.enkitech.de/docs/
 - Support: https://github.com/sabura-app/sabura-editor/issues
 
 ## License

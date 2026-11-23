@@ -3,7 +3,7 @@
   "description": "Sabura: offline, single-file HTML whiteboards that Claude can make and edit.",
   "owner": {
     "name": "Sabura",
-    "url": "https://sabura-app.github.io/"
+    "url": "https://sabura.enkitech.de/"
   },
   "plugins": [
     {

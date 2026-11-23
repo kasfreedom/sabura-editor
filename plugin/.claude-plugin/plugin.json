@@ -5,9 +5,9 @@
   "icon": "./logo.png",
   "author": {
     "name": "Sabura",
-    "url": "https://sabura-app.github.io/"
+    "url": "https://sabura.enkitech.de/"
   },
-  "homepage": "https://sabura-app.github.io/",
+  "homepage": "https://sabura.enkitech.de/",
   "repository": "https://github.com/sabura-app/sabura-editor",
   "license": "MIT",
   "keywords": [

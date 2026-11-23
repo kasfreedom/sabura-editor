@@ -9,7 +9,7 @@ network connection is required.
 
 ## Try it
 
-Use the [hosted editor](https://sabura-app.github.io/sabura-editor/), or download
+Use the [hosted editor](https://sabura.enkitech.de/sabura-editor/), or download
 [`sabura.html`](sabura.html) and open it in Google Chrome for fully offline use.
 
 Choose **Edit**, or press `Q` to open the circular ToolWheel. Use **Save Copy**
@@ -20,7 +20,7 @@ runtime. Your board stays local unless you choose to share the file.
 
 ## Example board
 
-Explore the [Knowledge Graphs example](https://sabura-app.github.io/sabura-editor/examples/knowledge-graphs.html)
+Explore the [Knowledge Graphs example](https://sabura.enkitech.de/sabura-editor/examples/knowledge-graphs.html)
 to see a larger connected visual story made with Sabura. You can also
 [download the self-contained HTML file](examples/knowledge-graphs.html) and open
 it fully offline.
